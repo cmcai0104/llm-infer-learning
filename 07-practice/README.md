@@ -4,6 +4,8 @@
 
 先决定要验证的问题、观察量和失败条件，再选实现及硬件。每个实验应能支持或推翻一个明确假设，而不只是证明服务启动成功。
 
+专家岗位的交付要求见[能力总纲](../08-career/expert-interview-guide.md)，联合链路的关键验证点见[LMCache + Mooncake](../04-storage/implementations/lmcache/mooncake-walkthrough.md)。每个结果注明推导、模拟或实测。
+
 ## 1. 按问题安排实验
 
 | 顺序 | 要验证的问题 | 最低环境 | 交付物 |

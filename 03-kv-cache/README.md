@@ -4,6 +4,8 @@
 
 本主题回答“什么能复用、怎样管理、何时有收益”。先建立缓存语义和生命周期，再看框架怎样用块、树、分层控制器或独立服务实现。
 
+重点深读：[KV 存储详细教材](../04-storage/kv-cache-storage.md)、[LMCache 与 Mooncake 联合链路](../04-storage/implementations/lmcache/mooncake-walkthrough.md)。数据映射和完成协议见[设计图册 D5–D6、D8–D9](../01-foundations/design-atlas.md)。
+
 ## 1. 四个问题决定一次复用是否成立
 
 1. **是不是同一份计算状态？** 核对 token 前缀、模型、位置及适用的命名空间信息。

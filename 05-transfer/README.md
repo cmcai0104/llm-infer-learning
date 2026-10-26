@@ -4,6 +4,8 @@
 
 传输层处理地址、长度、设备、连接和完成状态。它把字节送到目标，但不能独自证明这些字节属于正确模型、完整对象，或者已能被目标 GPU 安全消费。
 
+配套图示：[部署的数据/控制路径、对象完成协议、联合运行链](../01-foundations/design-atlas.md)。跨层所有权与 RDMA 前提见[联合实现](../04-storage/implementations/lmcache/mooncake-walkthrough.md)。
+
 ## 1. 先画真实路径
 
 ```text

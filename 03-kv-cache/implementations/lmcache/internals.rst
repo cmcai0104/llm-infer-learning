@@ -8,6 +8,10 @@ LMCache 架构与源码主线
 再读实现与测试。每条路径都追问三个问题：谁持有数据、谁宣布完成、谁负责释放。
 运行图见 `知识地图 <state-diagrams.rst>`__。
 
+直接可看的静态架构与运行图，以及 Mooncake 接入的逐步说明，见
+`联合链路 <../../../04-storage/implementations/lmcache/mooncake-walkthrough.md>`__。
+其中专门区分 native adapter 本地锁计数、Store 读租约和设备完成的保证范围。
+
 .. list-table::
    :header-rows: 1
    :widths: 23 43 34

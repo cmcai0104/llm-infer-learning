@@ -8,6 +8,8 @@
 
 共同概念以[公共基础](../01-foundations/concepts.md)作为首次阅读入口。出现框架差异时回到对应实现和源码，不把共同介绍当作统一 API 规范。
 
+设计与专家主线集中在[图册](../01-foundations/design-atlas.md)、[专家总纲](expert-interview-guide.md)、[KV 存储详解](../04-storage/kv-cache-storage.md)和[LMCache/Mooncake 联合实现](../04-storage/implementations/lmcache/mooncake-walkthrough.md)。完整性与未覆盖部分见[审阅报告](coverage-and-review.md)。
+
 ## 2. 按问题找一份主读材料
 
 | 你要解决的问题 | 主读材料 | 什么时候补另一份 |

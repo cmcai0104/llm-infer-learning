@@ -4,6 +4,13 @@
 
 推理缓存可以先当作一组不可变对象理解。存储系统负责对象身份、位置、空间、发布、读保护和回收；是否对应某个模型前缀，还要由上层缓存协议保证。
 
+## 重点教材与设计文档
+
+- [KV Cache 存储详解](kv-cache-storage.md)：从数据模型、读写协议到容量/网络预算、策略和故障验收。
+- [LMCache + Mooncake 联合实现](implementations/lmcache/mooncake-walkthrough.md)：把引擎、L1、native adapter、Store 与 TE 的两条数据链讲完整。
+- [设计图册](../01-foundations/design-atlas.md)：部署与故障域、对象协议、联合架构和运行图。
+- [专家面试总纲](../08-career/expert-interview-guide.md)：P7–P8 能力参考、十组深挖问题与系统设计。
+
 ## 1. 先区分目录和数据
 
 ```text

@@ -4,6 +4,10 @@
 
 面试准备先证明能分析一类系统问题，再用具体项目的源码和实验说明自己做到了什么。框架用法是证据的一部分；容量估算、正确性、并发与资源管理、失败处理和性能归因是更稳定的能力主线。
 
+**本库的面试主目标是 P7–P8 型推理 Infra 专家，重点 KV Cache 存储。** 先读[专家面试总纲](expert-interview-guide.md)，按能力矩阵、十组深挖问题、设计题和证据要求准备。下方的基础问答和专项题库用于补课与定位实现。
+
+配套：[设计图册](../01-foundations/design-atlas.md) · [KV 存储详解](../04-storage/kv-cache-storage.md) · [联合实现](../04-storage/implementations/lmcache/mooncake-walkthrough.md) · [覆盖范围审阅](coverage-and-review.md)。
+
 ## 1. 四个入口
 
 | 资料 | 使用方式 |

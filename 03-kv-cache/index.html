@@ -12,14 +12,6 @@
 <button id="search-open">搜索内容 <kbd>/</kbd></button></header>
 <aside id="sidebar"><nav aria-label="学习主题">
 <a href="../index.html">总目录</a>
-<div class="featured">
-<a href="../01-foundations/interactive.html">互动演示：算一算、点一点</a>
-<a href="../01-foundations/design-atlas.html">设计图册</a>
-<a href="../08-career/expert-interview-guide.html">P7–P8 专家面试</a>
-<a href="../08-career/expert-qa.html">KV 存储深挖问答</a>
-<a href="../04-storage/kv-cache-storage.html">KV 存储详解</a>
-<a href="../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake</a>
-</div>
 <details><summary>01 基础与设计图</summary>
 <a href="../01-foundations/index.html">01 基础与全景：先理解计算、资源和请求</a>
 <a href="../01-foundations/overview.html">全景导读：先把一次请求的整条链路想明白</a>
@@ -42,6 +34,7 @@
 <a href="index.html" aria-current="page">03 KV Cache 管理：让正确的状态在正确的时间可用</a>
 <a href="semantics-and-costs.html">KV Cache 原理：复用条件与容量推导</a>
 <a href="capacity-and-reuse.html">KV Cache 基础：容量与性能模型</a>
+<a href="model-variants.html">复杂模型与 KV 存储：MLA、滑窗、混合状态、MoE 与量化</a>
 <a href="implementations/vllm/integration.html">vLLM：外部 KV 接入（LMCache 与 Mooncake）</a>
 <a href="implementations/sglang/prefix-cache.html">SGLang：KV 原理、分页与前缀复用</a>
 <a href="implementations/sglang/tiered-cache.html">SGLang：HiCache 分层缓存与 PD 分离</a>
@@ -66,11 +59,13 @@
 <details><summary>06 Serving 与性能</summary>
 <a href="../06-serving/index.html">06 Serving 与性能：让整条链路满足服务目标</a>
 <a href="../06-serving/component-selection.html">组件选型：在同一技术问题下比较实现</a>
+<a href="../06-serving/gpu-kernel-basics.html">GPU 与 kernel 基础：带宽、异步拷贝与性能分析</a>
 <a href="../06-serving/implementations/vllm/performance-and-parallelism.html">vLLM：性能、分布式与服务工程</a>
 <a href="../06-serving/implementations/lmcache/observability.html">LMCache：优化、可观测与生产设计</a>
 </details>
 <details><summary>07 实验与验证</summary>
 <a href="../07-practice/index.html">07 实验与验证：用证据回答系统问题</a>
+<a href="../07-practice/measurement-and-drills.html">实测与故障演练：测什么、怎么测、怎样记录</a>
 <a href="../07-practice/implementations/vllm/walkthrough.html">vLLM：运行步骤、源码作业与参考答案</a>
 <a href="../07-practice/implementations/vllm/experiments.html">vLLM：实验与项目</a>
 <a href="../07-practice/implementations/sglang/labs.html">SGLang：从单机基线到共享缓存与 PD</a>
@@ -194,7 +189,16 @@
 </tbody>
 </table></div>
 <p>评价时同时记录请求/token 命中率、实际减少的计算、读取字节数、加载等待和最终延迟，不能只报告一个 hit rate。</p>
-<h2 id="5-在同一问题下比较具体实现">5. 在同一问题下比较具体实现</h2>
+<h2 id="5-共同原理怎么读">5. 共同原理怎么读</h2>
+<div class="table-scroll"><table>
+<thead><tr><th>想解决的问题</th><th>读哪篇</th></tr></thead>
+<tbody>
+<tr><td>什么时候能复用、各组件怎么分工</td><td><a href="semantics-and-costs.html">KV 原理：复用条件与容量推导</a></td></tr>
+<tr><td>值不值得复用：盈亏点、chunk、分层与预取</td><td><a href="capacity-and-reuse.html">KV 基础：容量与性能模型</a></td></tr>
+<tr><td>MLA、滑窗、混合状态、MoE、KV 量化、多模态</td><td><a href="model-variants.html">复杂模型与 KV 存储</a></td></tr>
+<tr><td>数据进入共享存储之后</td><td><a href="../04-storage/kv-cache-storage.html">KV Cache 存储详解</a></td></tr>
+</tbody></table></div>
+<h2 id="6-在同一问题下比较具体实现">6. 在同一问题下比较具体实现</h2>
 <div class="table-scroll"><table>
 <thead>
 <tr>
@@ -230,7 +234,7 @@
 </article>
 <footer><a href="../index.html">返回总目录</a>
 <p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
-<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-四个问题决定一次复用是否成立">1. 四个问题决定一次复用是否成立</a><a class="level-2" href="#2-分开理解三个层面">2. 分开理解三个层面</a><a class="level-2" href="#3-用生命周期理解异步加载">3. 用生命周期理解异步加载</a><a class="level-2" href="#4-缓存策略的取舍">4. 缓存策略的取舍</a><a class="level-2" href="#5-在同一问题下比较具体实现">5. 在同一问题下比较具体实现</a></aside>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-四个问题决定一次复用是否成立">1. 四个问题决定一次复用是否成立</a><a class="level-2" href="#2-分开理解三个层面">2. 分开理解三个层面</a><a class="level-2" href="#3-用生命周期理解异步加载">3. 用生命周期理解异步加载</a><a class="level-2" href="#4-缓存策略的取舍">4. 缓存策略的取舍</a><a class="level-2" href="#5-共同原理怎么读">5. 共同原理怎么读</a><a class="level-2" href="#6-在同一问题下比较具体实现">6. 在同一问题下比较具体实现</a></aside>
 <dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
 <button id="search-close" aria-label="关闭搜索">关闭</button></div>
 <input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">

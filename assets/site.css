@@ -37,8 +37,6 @@ nav a[aria-current] { color: #07575e; background: #dcefed; font-weight: 650; }
 nav details { margin: 9px 0; }
 nav summary { font-size: 14px; font-weight: 650; cursor: pointer; padding: 5px 8px; }
 nav details a { margin-left: 12px; border-left: 1px solid #ccd9e4; border-radius: 0; }
-.featured { padding: 10px 0; margin: 10px 0 14px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.featured a { color: #156c72; font-weight: 600; }
 main { margin: 64px 232px 0 274px; padding: 34px 46px 60px; max-width: 1120px; }
 .breadcrumbs { color: var(--muted); font-size: 13px; margin-bottom: 19px; }
 article h1 { font-size: clamp(25px, 2.6vw, 35px); line-height: 1.45; letter-spacing: -.02em; margin: 0 0 24px; }
@@ -133,3 +131,6 @@ dialog::backdrop { background: rgb(20 38 58 / .45); }
   .lab-row em { grid-column: 1 / -1; }
 }
 @media print { .lab-inputs { display: none; } }
+.note { margin: 18px 0 22px; padding: 14px 18px; border-left: 4px solid #3f8f95; background: #eef7f7; border-radius: 0 8px 8px 0; font-size: 14px; line-height: 1.8; }
+.note p { margin: 6px 0; }
+.note strong:first-child { color: #0d5f65; }

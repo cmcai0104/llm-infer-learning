@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>复杂模型与 KV 存储：MLA、滑窗、混合状态、MoE 与量化 · LLM Infra</title>
+<link rel="stylesheet" href="../assets/site.css">
+<script defer src="../assets/search-index.js"></script>
+<script defer src="../assets/site.js"></script></head>
+<body data-root="..">
+<a class="skip" href="#content">跳到正文</a>
+<header class="topbar"><button id="nav-toggle" aria-controls="sidebar" aria-expanded="false">目录</button>
+<a class="brand" href="../index.html">LLM Infra <span>学习资料库</span></a>
+<button id="search-open">搜索内容 <kbd>/</kbd></button></header>
+<aside id="sidebar"><nav aria-label="学习主题">
+<a href="../index.html">总目录</a>
+<details><summary>01 基础与设计图</summary>
+<a href="../01-foundations/index.html">01 基础与全景：先理解计算、资源和请求</a>
+<a href="../01-foundations/overview.html">全景导读：先把一次请求的整条链路想明白</a>
+<a href="../01-foundations/concepts.html">公共概念：推理、KV Cache、内存和性能指标</a>
+<a href="../01-foundations/attention-and-inference.html">推理基础：从 Transformer 到服务成本</a>
+<a href="../01-foundations/compute-and-memory.html">计算与显存：调度、GPU 优化与分布式基础</a>
+<a href="../01-foundations/design-atlas.html">设计图册：从请求执行到共享 KV 存储</a>
+<a href="../01-foundations/interactive.html">互动演示：容量、盈亏、命中折叠与超时</a>
+</details>
+<details><summary>02 推理运行时</summary>
+<a href="../02-runtime/index.html">02 推理运行时：把请求变成每一轮 GPU 工作</a>
+<a href="../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
+<a href="../02-runtime/implementations/vllm/architecture.html">vLLM：知识地图与设计图</a>
+<a href="../02-runtime/implementations/vllm/request-walkthrough.html">vLLM：跟踪一条请求的源码与资源</a>
+<a href="../02-runtime/implementations/sglang/overview.html">SGLang：请求调度、前缀复用与分层缓存</a>
+<a href="../02-runtime/implementations/sglang/knowledge-map.html">SGLang：学习大纲与知识地图</a>
+<a href="../02-runtime/implementations/sglang/runtime.html">SGLang：架构、运行图与源码路线</a>
+</details>
+<details open><summary>03 KV Cache 管理</summary>
+<a href="index.html">03 KV Cache 管理：让正确的状态在正确的时间可用</a>
+<a href="semantics-and-costs.html">KV Cache 原理：复用条件与容量推导</a>
+<a href="capacity-and-reuse.html">KV Cache 基础：容量与性能模型</a>
+<a href="model-variants.html" aria-current="page">复杂模型与 KV 存储：MLA、滑窗、混合状态、MoE 与量化</a>
+<a href="implementations/vllm/integration.html">vLLM：外部 KV 接入（LMCache 与 Mooncake）</a>
+<a href="implementations/sglang/prefix-cache.html">SGLang：KV 原理、分页与前缀复用</a>
+<a href="implementations/sglang/tiered-cache.html">SGLang：HiCache 分层缓存与 PD 分离</a>
+<a href="implementations/lmcache/overview.html">LMCache：把 KV 的保存、查找、加载和回收管起来</a>
+<a href="implementations/lmcache/state-diagrams.html">LMCache：知识地图、架构与时序图</a>
+<a href="implementations/lmcache/internals.html">LMCache：架构与源码主线</a>
+</details>
+<details><summary>04 分布式存储</summary>
+<a href="../04-storage/index.html">04 分布式存储：把可复用状态放进共享资源池</a>
+<a href="../04-storage/kv-cache-storage.html">KV Cache 存储详解：数据模型、协议、容量、性能与故障</a>
+<a href="../04-storage/implementations/mooncake/overview.html">Mooncake：KV 对象怎样共享、怎样安全地高速搬运</a>
+<a href="../04-storage/implementations/mooncake/architecture.html">Mooncake：知识地图与设计图</a>
+<a href="../04-storage/implementations/mooncake/internals.html">Mooncake：Store 内核与源码路线</a>
+<a href="../04-storage/implementations/mooncake/integrations.html">Mooncake：与 LMCache 和推理引擎集成</a>
+<a href="../04-storage/implementations/lmcache/backend-contracts.html">LMCache：存储后端契约与 Mooncake 接入</a>
+<a href="../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake：从一次保存到下一次恢复</a>
+</details>
+<details><summary>05 数据传输</summary>
+<a href="../05-transfer/index.html">05 数据传输：搬得动、搬得快，还要搬得安全</a>
+<a href="../05-transfer/implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine：字节移动的实现案例</a>
+</details>
+<details><summary>06 Serving 与性能</summary>
+<a href="../06-serving/index.html">06 Serving 与性能：让整条链路满足服务目标</a>
+<a href="../06-serving/component-selection.html">组件选型：在同一技术问题下比较实现</a>
+<a href="../06-serving/gpu-kernel-basics.html">GPU 与 kernel 基础：带宽、异步拷贝与性能分析</a>
+<a href="../06-serving/implementations/vllm/performance-and-parallelism.html">vLLM：性能、分布式与服务工程</a>
+<a href="../06-serving/implementations/lmcache/observability.html">LMCache：优化、可观测与生产设计</a>
+</details>
+<details><summary>07 实验与验证</summary>
+<a href="../07-practice/index.html">07 实验与验证：用证据回答系统问题</a>
+<a href="../07-practice/measurement-and-drills.html">实测与故障演练：测什么、怎么测、怎样记录</a>
+<a href="../07-practice/implementations/vllm/walkthrough.html">vLLM：运行步骤、源码作业与参考答案</a>
+<a href="../07-practice/implementations/vllm/experiments.html">vLLM：实验与项目</a>
+<a href="../07-practice/implementations/sglang/labs.html">SGLang：从单机基线到共享缓存与 PD</a>
+<a href="../07-practice/implementations/lmcache/labs.html">LMCache：实验、基准与验收</a>
+<a href="../07-practice/implementations/mooncake/labs.html">Mooncake：实验与性能诊断</a>
+</details>
+<details><summary>08 专家能力与面试</summary>
+<a href="../08-career/index.html">08 岗位、计划与面试：按能力组织成果</a>
+<a href="../08-career/expert-interview-guide.html">P7–P8 专家面试总纲：重点 KV Cache 存储</a>
+<a href="../08-career/expert-qa.html">P7–P8 KV Cache 存储深挖问答</a>
+<a href="../08-career/interview-and-design.html">基础面试与算例：能解释、能算账、能处理失败</a>
+<a href="../08-career/roles.html">岗位方向：什么必须熟练，什么可以后学</a>
+<a href="../08-career/study-plan.html">统一 28 天计划：基础只学一次，后面按岗位分流</a>
+<a href="../08-career/references.html">资料索引与版本基线</a>
+<a href="../08-career/coverage-and-review.html">资料结构与覆盖范围审阅</a>
+</details>
+<details><summary>专项题库与计划（按项目）</summary>
+<a href="../08-career/implementations/lmcache/questions.html">LMCache 专项：60 道面试题与参考回答</a>
+<a href="../08-career/implementations/lmcache/system-design.html">LMCache 专项：系统设计题与源码阅读</a>
+<a href="../08-career/implementations/lmcache/study-plan.html">LMCache 专项：28 天计划</a>
+<a href="../08-career/implementations/lmcache/index.html">LMCache 专项：学习指南目录</a>
+<a href="../08-career/implementations/mooncake/questions.html">Mooncake 专项：面试题与参考回答</a>
+<a href="../08-career/implementations/mooncake/system-design.html">Mooncake 专项：系统设计与毕业项目</a>
+<a href="../08-career/implementations/mooncake/study-plan.html">Mooncake 专项：28 天计划</a>
+<a href="../08-career/implementations/mooncake/index.html">Mooncake 专项：学习手册目录</a>
+<a href="../08-career/implementations/vllm/questions.html">vLLM 专项：60 道面试题与参考回答</a>
+<a href="../08-career/implementations/vllm/study-plan.html">vLLM 专项：28 天计划</a>
+<a href="../08-career/implementations/vllm/references.html">vLLM 专项：官方资料与版本说明</a>
+<a href="../08-career/implementations/sglang/questions.html">SGLang 专项：36 道面试题与系统设计</a>
+<a href="../08-career/implementations/sglang/study-plan.html">SGLang 专项：28 天计划</a>
+<a href="../08-career/implementations/sglang/assessment.html">SGLang 专项：参考资料与最终验收</a>
+</details>
+<a href="../tools/index.html">维护说明：怎样直接修改 HTML</a>
+</nav></aside>
+<main id="content"><div class="breadcrumbs">03 KV Cache 管理 · 专注 KV Cache 存储</div>
+<article><h1 id="page-title">复杂模型与 KV 存储：MLA、滑窗、混合状态、MoE 与量化</h1>
+<p><a href="index.html">KV 管理主题</a> · <a href="semantics-and-costs.html">KV 原理与容量推导</a> · <a href="../04-storage/kv-cache-storage.html">KV 存储详解</a> · <a href="../01-foundations/interactive.html">互动容量计算器</a></p>
+<p>前面的容量公式 <code>2 × 层数 × KV head 数 × head dim × 字节数</code> 只适用于普通 MHA/GQA。现在很多主流模型不是这样：DeepSeek 系列用 MLA，部分模型混用滑窗层和全局层，还有模型把注意力和 Mamba 类状态层混在一起。<strong>模型一变，“存什么、存多大、怎样才算命中”都会跟着变。</strong>这一页把这些差异讲清楚，KV 存储岗位面试经常追问。</p>
+<p><strong>一句话结论</strong>：先问清楚“这个模型每层到底缓存了什么状态”，再谈容量、切分、复用和存储格式。不要把普通 GQA 的公式套到所有模型上。</p>
+
+<h2 id="1-总览六类差异一张表">1. 总览：六类差异一张表</h2>
+<div class="table-scroll"><table>
+<thead><tr><th>模型特征</th><th>每层缓存什么</th><th>容量怎么算</th><th>TP 切分</th><th>前缀复用条件</th><th>对存储的影响</th></tr></thead>
+<tbody>
+<tr><td>MHA / GQA / MQA</td><td>每个 KV head 的 K 和 V</td><td>2 × KV head × head dim × 字节 × token</td><td>KV head 能整除 TP 时均分；不够分时常见实现会复制</td><td>完整连续前缀</td><td>标准情况，前面各章的算例都基于它</td></tr>
+<tr><td>MLA（如 DeepSeek-V2/V3）</td><td>一个压缩后的 latent 向量 + 一小段位置相关的 key</td><td>(latent 维度 + RoPE 维度) × 字节 × token，没有单独的 V</td><td>latent 被所有 head 共用，常见实现在每个 TP rank 各存一份完整副本</td><td>完整连续前缀</td><td>单 token 小很多；各 rank 的对象可能内容相同</td></tr>
+<tr><td>滑窗注意力（SWA）</td><td>只需最近 w 个 token 的 K、V</td><td>min(token 数, w) × 每 token 大小</td><td>同 GQA</td><td>只需前缀末尾的 w 个 token</td><td>长前缀下这些层几乎不占空间；命中规则与全局层不同</td></tr>
+<tr><td>混合状态（Mamba/SSM、线性注意力）</td><td>每条序列一个固定大小的状态，每步覆盖更新</td><td>状态大小，与 token 数无关</td><td>按实现切分</td><td>必须有恰好在前缀边界的状态快照</td><td>不能用分块拼接；只能存“检查点”</td></tr>
+<tr><td>MoE</td><td>注意力部分与对应的稠密模型相同</td><td>按注意力结构计算，专家数量不影响 KV</td><td>常与注意力 DP、专家 EP 组合</td><td>同注意力结构</td><td>KV 公式不变；部署方式改变 KV 落在哪个 rank</td></tr>
+<tr><td>KV 量化（FP8 等）</td><td>低精度 K/V + 缩放因子</td><td>元素字节减半（或更少）+ 缩放元数据</td><td>同原结构</td><td>同原结构，但格式必须一致</td><td>dtype 与缩放方案必须进格式身份</td></tr>
+</tbody></table></div>
+<p>多模态、LoRA、投机解码等不改变“每层存什么”，但会改变“什么情况下两段 KV 相同”，放在第 7 节单独讲。</p>
+
+<h2 id="2-mla缓存一个压缩向量">2. MLA：缓存一个压缩向量</h2>
+<h3 id="21-白话原理">2.1 白话原理</h3>
+<p>普通注意力为每个 head 分别缓存 K 和 V。MLA（Multi-head Latent Attention）的做法是：每个 token 只缓存一个低维的 latent 向量，计算时再从它“展开”出各个 head 需要的 K 和 V。为了让位置编码（RoPE）还能正常工作，另外单独缓存一小段带位置信息的 key。</p>
+<p>所以 MLA 的缓存是“一个共享 latent + 一段 RoPE key”，不再是“很多个 head 的 K 和 V”。</p>
+<h3 id="22-算一笔账">2.2 算一笔账</h3>
+<p>以 DeepSeek-V3 的公开配置为例：61 层，latent 维度（kv_lora_rank）512，RoPE key 维度 64，BF16 每个元素 2 字节。</p>
+<pre><code class="language-text">每层每 token = (512 + 64) × 2 B = 1,152 B
+每 token（61 层）= 1,152 × 61 = 70,272 B ≈ 68.6 KiB
+8K token 前缀 ≈ 68.6 KiB × 8192 ≈ 549 MiB</code></pre>
+<p>作为对比，如果同样的 128 个注意力头用普通 MHA 缓存（K 每头 192 维、V 每头 128 维），每层每 token 是 128 × (192 + 128) × 2 B = 81,920 B，约为 MLA 的 71 倍。这正是 MLA 能支持长上下文的关键原因之一。</p>
+<p><strong>注意</strong>：以上按 BF16 未量化计算；实际部署还可能用 FP8 KV，或有对齐填充。精确数字以所用引擎的 KV 规格为准。</p>
+<h3 id="23-tp-下的特殊之处">2.3 TP 下的特殊之处</h3>
+<p>latent 被所有 head 共用，无法像普通 KV head 那样按 head 切给不同 rank。以 vLLM 学习版本为例，使用 MLA 时每个 GPU 的“KV head 数”按 1 处理，也就是每个 TP rank 都保存完整的 latent。</p>
+<ul>
+<li><strong>容量</strong>：增加 TP 不会降低每个 rank 的 KV 占用，这和 GQA 不同。</li>
+<li><strong>存储</strong>：各 rank 的对象内容可能完全相同。理论上可以只存一份、多个 rank 共享读取，节省容量和写流量；是否这样做取决于具体缓存系统的 key 与布局设计，不能默认已经去重。</li>
+<li><strong>正确性</strong>：即使内容相同，布局、dtype 和填充也必须一致才能共享。</li>
+</ul>
+
+<h2 id="3-滑窗注意力只看最近一段">3. 滑窗注意力：只看最近一段</h2>
+<h3 id="31-白话原理">3.1 白话原理</h3>
+<p>滑窗层的每个 token 只关注最近 w 个 token。更早的 KV 对这一层已经没用，可以丢掉。不少模型把滑窗层和全局层交替排列：滑窗层省空间，少量全局层保留长距离信息。</p>
+<h3 id="32-算一笔账">3.2 算一笔账</h3>
+<p>假设一个 48 层模型中 8 层是全局层、40 层是滑窗层，窗口 w = 1024，前缀长 32K token。以“层 × token”作为 KV 占用的单位：</p>
+<pre><code class="language-text">全部按全局层算：48 × 32,768 = 1,572,864
+实际：8 × 32,768 + 40 × 1,024 = 262,144 + 40,960 = 303,104
+约为全局版本的 19%</code></pre>
+<h3 id="33-复用规则不同">3.3 复用规则不同</h3>
+<p>要从长度为 p 的缓存前缀继续计算：全局层需要 [0, p) 全部 token 的 KV；滑窗层只需要 [p − w, p) 这一段。因此：</p>
+<ul>
+<li>滑窗层的早期 chunk 缺失<strong>不一定</strong>影响复用，只要窗口内的 chunk 都在。</li>
+<li>全局层仍要求整段连续前缀。</li>
+<li>最终可跳过的范围，是各类层分别满足条件后的共同部分。LMCache 学习版本在分组 key 中为每个 group 记录了 <code>sliding_window_size</code>，按各自窗口折叠命中结果，正是为了处理这种情况。</li>
+</ul>
+
+<h2 id="4-混合状态模型只能存检查点">4. 混合状态模型：只能存检查点</h2>
+<h3 id="41-白话原理">4.1 白话原理</h3>
+<p>Mamba/SSM、线性注意力这类层不保存每个 token 的 K、V，而是维护一个固定大小的“状态”，每处理一个 token 就把它更新一次。好处是长度再长，状态大小也不变。</p>
+<h3 id="42-为什么不能分块拼接">4.2 为什么不能分块拼接</h3>
+<p>普通 KV 可以按 chunk 存：chunk 0、chunk 1、chunk 2 拼起来就是前缀的 KV。状态层不行：位置 p 的状态已经“吸收”了之前所有 token，无法由几个 chunk 的部分结果拼出来。要从位置 p 继续，<strong>必须有恰好在 p 处保存的完整状态快照</strong>。</p>
+<h3 id="43-存储上怎么做">4.3 存储上怎么做</h3>
+<ul>
+<li>在 chunk 边界保存状态快照（检查点），命中只能发生在这些边界上。</li>
+<li>快照越密，命中越精细，但存储和写入量越大；快照大小和 token 数无关，适合与注意力层的 KV 分开计算预算。</li>
+<li>混合模型的命中判断要同时满足：注意力层的 KV 前缀完整，并且状态层在同一边界有快照。</li>
+</ul>
+
+<h2 id="5-moe专家不改变-kv">5. MoE：专家不改变 KV</h2>
+<p>MoE 的“专家”在前馈网络（FFN）里，注意力部分不变，所以<strong>每 token 的 KV 大小只取决于注意力结构</strong>，与专家数量无关。例如 DeepSeek-V3 是 MoE 模型，它的 KV 大小由 MLA 决定。</p>
+<p>MoE 改变的是部署方式：常见做法是注意力用数据并行（DP）、专家用专家并行（EP）。注意力 DP 时，每个 DP rank 保存自己负责的请求的完整 KV，不再按 TP 切分。对缓存系统的影响是：</p>
+<ul>
+<li>请求被路由到哪个 DP rank，决定 KV 在哪里产生、在哪里能命中，缓存感知路由更重要。</li>
+<li>专家通信（all-to-all）与 KV 传输可能共用网络，需要一起做流量规划。</li>
+</ul>
+
+<h2 id="6-kv-量化省一半也多一层格式">6. KV 量化：省一半，也多一层格式</h2>
+<p>把 KV 从 BF16 换成 FP8，元素大小减半，容量、带宽和存储都近似减半。代价有两点：</p>
+<ul>
+<li><strong>精度</strong>：需要用评测集验证输出质量，不能只看速度。</li>
+<li><strong>格式</strong>：FP8 KV 通常伴随缩放因子（按张量、按 head 等不同粒度）。量化方式、缩放粒度和 dtype 都必须进入格式身份；BF16 的缓存不能给 FP8 实例用，反之亦然。</li>
+</ul>
+
+<h2 id="7-还会改变相同的因素">7. 还会改变“相同”的因素</h2>
+<div class="table-scroll"><table>
+<thead><tr><th>因素</th><th>为什么影响复用</th><th>key 或格式里要体现什么</th></tr></thead>
+<tbody>
+<tr><td>多模态输入</td><td>图片、音频常用相同的占位 token 表示，但不同图片产生的 KV 完全不同</td><td>媒体内容的 hash 必须进入前缀身份。例如 vLLM 学习版本在计算 block hash 时，把多模态内容 hash 作为额外 key 加入；自建缓存必须同样处理</td></tr>
+<tr><td>LoRA 适配器</td><td>同一基座、不同 LoRA，相同 token 的 KV 不同</td><td>适配器 ID 与版本（vLLM 学习版本同样把 LoRA 名称写进 block hash 的额外 key）</td></tr>
+<tr><td>投机解码</td><td>草稿模型有自己的 KV，与目标模型不能混用</td><td>按模型分开命名空间</td></tr>
+<tr><td>位置编码配置</td><td>RoPE 缩放等参数变化会改变 K</td><td>模型配置版本</td></tr>
+<tr><td>并行与布局</td><td>TP/PP 改变每个 rank 保存的内容与形状</td><td>rank、layout 描述</td></tr>
+</tbody></table></div>
+
+<h2 id="8-面试怎么答">8. 面试怎么答</h2>
+<p><strong>问</strong>：给你一个新模型，怎样估算 KV 容量并设计缓存？</p>
+<ol>
+<li>先读模型配置和引擎的 KV 规格，按层列出每层缓存的是 KV、latent、窗口 KV 还是状态。</li>
+<li>按层分别算容量再求和，标出哪些层随 token 数增长、哪些固定。</li>
+<li>确认 TP/DP 下每个 rank 保存什么，是否存在复制。</li>
+<li>分别写出每类层的命中条件，取共同可用范围。</li>
+<li>把模型版本、dtype、量化方式、布局、适配器和多模态内容纳入身份与格式。</li>
+<li>用一次正确性实验（对比开关缓存的输出）验证。</li>
+</ol>
+<p><strong>常见失分</strong>：把 GQA 公式套到 MLA；认为 TP 一定能降低每 rank KV；认为滑窗层缺早期 chunk 就不能复用；认为状态层也能按 chunk 拼接；认为 MoE 的专家数影响 KV 大小。</p>
+<p>动手验证：在<a href="../01-foundations/interactive.html">互动容量计算器</a>里选择“MLA”，层数填 61、维度填 576，可以得到每 token 约 68.6 KiB，并看到 TP 增大时每 rank 占用不变。</p>
+
+</article>
+<footer><a href="../index.html">返回总目录</a>
+<p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-总览六类差异一张表">1. 总览：六类差异一张表</a><a class="level-2" href="#2-mla缓存一个压缩向量">2. MLA：缓存一个压缩向量</a><a class="level-3" href="#21-白话原理">2.1 白话原理</a><a class="level-3" href="#22-算一笔账">2.2 算一笔账</a><a class="level-3" href="#23-tp-下的特殊之处">2.3 TP 下的特殊之处</a><a class="level-2" href="#3-滑窗注意力只看最近一段">3. 滑窗注意力：只看最近一段</a><a class="level-3" href="#31-白话原理">3.1 白话原理</a><a class="level-3" href="#32-算一笔账">3.2 算一笔账</a><a class="level-3" href="#33-复用规则不同">3.3 复用规则不同</a><a class="level-2" href="#4-混合状态模型只能存检查点">4. 混合状态模型：只能存检查点</a><a class="level-3" href="#41-白话原理">4.1 白话原理</a><a class="level-3" href="#42-为什么不能分块拼接">4.2 为什么不能分块拼接</a><a class="level-3" href="#43-存储上怎么做">4.3 存储上怎么做</a><a class="level-2" href="#5-moe专家不改变-kv">5. MoE：专家不改变 KV</a><a class="level-2" href="#6-kv-量化省一半也多一层格式">6. KV 量化：省一半，也多一层格式</a><a class="level-2" href="#7-还会改变相同的因素">7. 还会改变“相同”的因素</a><a class="level-2" href="#8-面试怎么答">8. 面试怎么答</a></aside>
+<dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
+<button id="search-close" aria-label="关闭搜索">关闭</button></div>
+<input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">
+<p id="search-status" role="status">输入主题、术语或问题</p><ol id="search-results"></ol></dialog>
+</body></html>

@@ -12,14 +12,6 @@
 <button id="search-open">搜索内容 <kbd>/</kbd></button></header>
 <aside id="sidebar"><nav aria-label="学习主题">
 <a href="../../../index.html">总目录</a>
-<div class="featured">
-<a href="../../../01-foundations/interactive.html">互动演示：算一算、点一点</a>
-<a href="../../../01-foundations/design-atlas.html">设计图册</a>
-<a href="../../expert-interview-guide.html">P7–P8 专家面试</a>
-<a href="../../expert-qa.html">KV 存储深挖问答</a>
-<a href="../../../04-storage/kv-cache-storage.html">KV 存储详解</a>
-<a href="../../../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake</a>
-</div>
 <details><summary>01 基础与设计图</summary>
 <a href="../../../01-foundations/index.html">01 基础与全景：先理解计算、资源和请求</a>
 <a href="../../../01-foundations/overview.html">全景导读：先把一次请求的整条链路想明白</a>
@@ -42,6 +34,7 @@
 <a href="../../../03-kv-cache/index.html">03 KV Cache 管理：让正确的状态在正确的时间可用</a>
 <a href="../../../03-kv-cache/semantics-and-costs.html">KV Cache 原理：复用条件与容量推导</a>
 <a href="../../../03-kv-cache/capacity-and-reuse.html">KV Cache 基础：容量与性能模型</a>
+<a href="../../../03-kv-cache/model-variants.html">复杂模型与 KV 存储：MLA、滑窗、混合状态、MoE 与量化</a>
 <a href="../../../03-kv-cache/implementations/vllm/integration.html">vLLM：外部 KV 接入（LMCache 与 Mooncake）</a>
 <a href="../../../03-kv-cache/implementations/sglang/prefix-cache.html">SGLang：KV 原理、分页与前缀复用</a>
 <a href="../../../03-kv-cache/implementations/sglang/tiered-cache.html">SGLang：HiCache 分层缓存与 PD 分离</a>
@@ -66,11 +59,13 @@
 <details><summary>06 Serving 与性能</summary>
 <a href="../../../06-serving/index.html">06 Serving 与性能：让整条链路满足服务目标</a>
 <a href="../../../06-serving/component-selection.html">组件选型：在同一技术问题下比较实现</a>
+<a href="../../../06-serving/gpu-kernel-basics.html">GPU 与 kernel 基础：带宽、异步拷贝与性能分析</a>
 <a href="../../../06-serving/implementations/vllm/performance-and-parallelism.html">vLLM：性能、分布式与服务工程</a>
 <a href="../../../06-serving/implementations/lmcache/observability.html">LMCache：优化、可观测与生产设计</a>
 </details>
 <details><summary>07 实验与验证</summary>
 <a href="../../../07-practice/index.html">07 实验与验证：用证据回答系统问题</a>
+<a href="../../../07-practice/measurement-and-drills.html">实测与故障演练：测什么、怎么测、怎样记录</a>
 <a href="../../../07-practice/implementations/vllm/walkthrough.html">vLLM：运行步骤、源码作业与参考答案</a>
 <a href="../../../07-practice/implementations/vllm/experiments.html">vLLM：实验与项目</a>
 <a href="../../../07-practice/implementations/sglang/labs.html">SGLang：从单机基线到共享缓存与 PD</a>
@@ -107,6 +102,7 @@
 </nav></aside>
 <main id="content"><div class="breadcrumbs">08 专家能力与面试 · 专注 KV Cache 存储</div>
 <article><h1 id="推理-infra-面试36-道题与系统设计">SGLang 专项：36 道面试题与系统设计</h1>
+<div class="note"><p><strong>白话导读</strong>：SGLang 方向的 36 道题：执行基础、KV 正确性与分层缓存、分布式与系统设计。</p><ul><li>重点题：PagedAttention 与 RadixAttention 的区别、完整命中后是否还要计算、MLA 与 Mamba 的缓存差异。</li><li>与<a href="../../expert-qa.html">专家深挖问答</a>重叠的题，以深挖问答为主答案。</li></ul><p>复杂模型相关题配合<a href="../../../03-kv-cache/model-variants.html">复杂模型与 KV 存储</a>阅读。</p></div>
 <p><a href="../../../02-runtime/implementations/sglang/overview.html">返回导航</a> · <a href="../../../01-foundations/compute-and-memory.html">推理基础</a> · <a href="../../../03-kv-cache/implementations/sglang/prefix-cache.html">KV 专题</a> · <a href="../../../03-kv-cache/implementations/sglang/tiered-cache.html">框架专题</a></p>
 <p>回答结构建议：<strong>结论 → 原理 → 适用条件 → 验证方法</strong>。涉及版本支持时，区分算法能力、框架能力和当前引擎 connector 的能力。</p>
 <h2 id="一推理与执行基础">一、推理与执行基础</h2>

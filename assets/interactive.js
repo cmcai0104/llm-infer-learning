@@ -31,11 +31,12 @@
   const verdict = (cls, text) => `<p class="lab-verdict ${cls}">${text}</p>`;
 
   bind("lab-capacity", (v) => {
-    const perToken = 2 * v.layers * v.kvHeads * v.headDim * v.dtype;
+    const mla = v.kind === 1;
+    const perToken = mla ? v.layers * v.headDim * v.dtype : 2 * v.layers * v.kvHeads * v.headDim * v.dtype;
     const total = perToken * v.tokens;
     const chunks = Math.ceil(v.tokens / v.chunk);
     const tail = v.tokens % v.chunk;
-    const evenSplit = v.kvHeads >= v.tp && v.kvHeads % v.tp === 0;
+    const evenSplit = !mla && v.kvHeads >= v.tp && v.kvHeads % v.tp === 0;
     let html = row("每 token KV", fmtBytes(perToken), "整个模型、所有层");
     html += row("整个前缀 KV", fmtBytes(total), `${num(v.tokens)} token`);
     html += row("chunk 数", num(chunks), tail ? `最后 ${tail} 个 token 不满一个 chunk，按 chunk 对齐的方案通常无法复用这段尾巴` : "正好对齐");
@@ -44,6 +45,9 @@
       html += row("每个 TP rank 持有", fmtBytes(total / v.tp), "前提：KV head 均匀切分、无复制");
       html += row("存储对象数（chunk × rank）", num(chunks * v.tp), `单对象约 ${fmtBytes((perToken * v.chunk) / v.tp)}`);
       html += verdict("ok", "对象数越多，元数据和 RPC 压力越大；单对象越小，传输效率越容易受固定开销影响。");
+    } else if (mla) {
+      html += row("每个 TP rank 持有", fmtBytes(total), "MLA 的 latent 被所有 head 共用，常见实现每个 rank 各存一份");
+      html += verdict("warn", "MLA 下增加 TP 不会降低每个 rank 的 KV；各 rank 对象内容可能相同，能否只存一份取决于缓存系统设计。");
     } else {
       html += verdict("warn", `KV head（${v.kvHeads}）少于 TP（${v.tp}）或不能整除：常见实现会复制 KV head，每个 rank 的容量不能简单除以 TP，要看实际布局。`);
     }

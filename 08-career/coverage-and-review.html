@@ -12,14 +12,6 @@
 <button id="search-open">搜索内容 <kbd>/</kbd></button></header>
 <aside id="sidebar"><nav aria-label="学习主题">
 <a href="../index.html">总目录</a>
-<div class="featured">
-<a href="../01-foundations/interactive.html">互动演示：算一算、点一点</a>
-<a href="../01-foundations/design-atlas.html">设计图册</a>
-<a href="expert-interview-guide.html">P7–P8 专家面试</a>
-<a href="expert-qa.html">KV 存储深挖问答</a>
-<a href="../04-storage/kv-cache-storage.html">KV 存储详解</a>
-<a href="../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake</a>
-</div>
 <details><summary>01 基础与设计图</summary>
 <a href="../01-foundations/index.html">01 基础与全景：先理解计算、资源和请求</a>
 <a href="../01-foundations/overview.html">全景导读：先把一次请求的整条链路想明白</a>
@@ -42,6 +34,7 @@
 <a href="../03-kv-cache/index.html">03 KV Cache 管理：让正确的状态在正确的时间可用</a>
 <a href="../03-kv-cache/semantics-and-costs.html">KV Cache 原理：复用条件与容量推导</a>
 <a href="../03-kv-cache/capacity-and-reuse.html">KV Cache 基础：容量与性能模型</a>
+<a href="../03-kv-cache/model-variants.html">复杂模型与 KV 存储：MLA、滑窗、混合状态、MoE 与量化</a>
 <a href="../03-kv-cache/implementations/vllm/integration.html">vLLM：外部 KV 接入（LMCache 与 Mooncake）</a>
 <a href="../03-kv-cache/implementations/sglang/prefix-cache.html">SGLang：KV 原理、分页与前缀复用</a>
 <a href="../03-kv-cache/implementations/sglang/tiered-cache.html">SGLang：HiCache 分层缓存与 PD 分离</a>
@@ -66,11 +59,13 @@
 <details><summary>06 Serving 与性能</summary>
 <a href="../06-serving/index.html">06 Serving 与性能：让整条链路满足服务目标</a>
 <a href="../06-serving/component-selection.html">组件选型：在同一技术问题下比较实现</a>
+<a href="../06-serving/gpu-kernel-basics.html">GPU 与 kernel 基础：带宽、异步拷贝与性能分析</a>
 <a href="../06-serving/implementations/vllm/performance-and-parallelism.html">vLLM：性能、分布式与服务工程</a>
 <a href="../06-serving/implementations/lmcache/observability.html">LMCache：优化、可观测与生产设计</a>
 </details>
 <details><summary>07 实验与验证</summary>
 <a href="../07-practice/index.html">07 实验与验证：用证据回答系统问题</a>
+<a href="../07-practice/measurement-and-drills.html">实测与故障演练：测什么、怎么测、怎样记录</a>
 <a href="../07-practice/implementations/vllm/walkthrough.html">vLLM：运行步骤、源码作业与参考答案</a>
 <a href="../07-practice/implementations/vllm/experiments.html">vLLM：实验与项目</a>
 <a href="../07-practice/implementations/sglang/labs.html">SGLang：从单机基线到共享缓存与 PD</a>
@@ -109,18 +104,16 @@
 <article><h1 id="资料结构与覆盖范围审阅">资料结构与覆盖范围审阅</h1>
 <p><a href="../index.html">总目录</a> · <a href="expert-interview-guide.html">专家面试总纲</a> · <a href="../01-foundations/design-atlas.html">设计图册</a></p>
 <h2 id="1-审阅结论">1. 审阅结论</h2>
-<p><strong>结构：按技术主题组织是合理的，问题主要出在“入口好不好找、命名是否统一”。</strong>八个主题负责学习顺序，框架资料放在各主题的 <code>implementations/</code> 中做案例；专家面试、设计图、KV 存储详解、联合链路和互动演示作为快捷入口放在侧栏最上方。</p>
-<p><strong>本轮修正</strong>：</p>
+<p><strong>结构：按技术主题组织是合理的。</strong>八个主题负责学习顺序，框架资料放在各主题的 <code>implementations/</code> 中做案例。每篇文章只出现在所属主题下；首页“先从这里开始”表格负责把常用文章串起来，侧栏不再重复列出。</p>
+<p><strong>重叠内容怎样处理</strong>：没有把重复段落全部删成链接，以免读一段跳一次。做法是给容易重叠的文章写清“本篇定位”，说明以哪篇为准、本篇只负责什么：</p>
 <ul>
-<li>统一全部页面标题与侧栏命名：主题页用“编号 + 问题”，实现页用“项目：主题”，去掉了 <code>internals</code>、<code>labs</code>、旧章节号等不统一的名字。</li>
-<li>侧栏按“概览 → 原理 → 实现”排序；四个项目的专项题库与 28 天计划单独归为“专项题库与计划”，避免和统一主线混在一起。</li>
-<li>设计图从 9 张补到 13 张，新增超时与租约、主节点切换、容量规划、升级与多租户四张失败与演进类设计图。</li>
-<li>新增 16 道深挖问答，每题给出考察点、回答要点、继续追问、常见失分和 P8 加分方向。</li>
-<li>新增<a href="../01-foundations/interactive.html">互动演示</a>：容量计算、加载与重算盈亏、前缀命中折叠、超时租约时间线和容量规划，用来快速建立“算账”直觉。</li>
-<li>删除旧 Markdown/RST、生成快照、构建脚本和重复图源，只保留 HTML、SVG、样式脚本和 CPU 实验脚本。</li>
+<li>KV 存储的共同原理以<a href="../04-storage/kv-cache-storage.html">KV 存储详解</a>为准，Mooncake、LMCache 页面讲实现。</li>
+<li>主线设计图集中在<a href="../01-foundations/design-atlas.html">设计图册</a>，框架页面的图只对应各自源码。</li>
+<li>面试资料按“专家总纲 → 深挖问答 → 基础面试 → 项目题库”的顺序使用，重复的题以深挖问答为准。</li>
+<li>基础概念以<a href="../01-foundations/concepts.html">公共概念</a>为准，其余基础篇标明是推导还是速查。</li>
 </ul>
-<p><strong>为什么只加少量交互</strong>：交互适合“改参数看结果”的定量问题和“点一下看状态变化”的判断问题；原理讲解、源码导读和面试回答仍以静态正文为主，便于阅读、打印和让 AI 直接修改。所有交互不依赖网络和第三方库。</p>
-<p><strong>知识点核查</strong>：已抽查全库带宽与容量算例（如 1 GiB / 400 Gbit/s ≈ 21.47 ms、200 Gb/s ≈ 23.28 GiB/s、TP 切分前提、串行与流水加载估算），以及 FlashAttention、PagedAttention、RadixAttention、MLA、TTFT/ITL/TPOT、RDMA 零拷贝等易错表述，未发现计算或概念错误。LMCache 与 Mooncake 的实现描述对照了资料中固定版本的源码；版本变化后需要重新核对。</p>
+<p><strong>本轮补充</strong>：复杂模型与 KV 存储（MLA、滑窗、混合状态、MoE、KV 量化、多模态）、GPU 与 kernel 基础、实测与故障演练模板；互动容量计算器增加了 MLA；19 篇专项与旧格式页面加了白话导读；统一了全部页面标题。</p>
+<p><strong>知识点核查</strong>：已逐条复核全库 77 处带数字的算例（容量、带宽、对象数、元数据、时延、盈亏与容量规划），未发现计算错误；并核对了 FlashAttention、PagedAttention、RadixAttention、MLA、TTFT/ITL/TPOT、RDMA 零拷贝等易错概念。MLA 的 TP 复制、多模态与 LoRA 进入前缀 hash 等实现细节对照了 vLLM 学习版本源码；LMCache 与 Mooncake 对照资料中固定版本的源码，版本变化后需要重新核对。</p>
 <p>覆盖目标是<strong>在线推理 Infra，重点 KV Cache 存储的学习、设计与面试准备</strong>；这不等于覆盖所有 LLM Infra 方向，也不等于已经完成生产或硬件验证。</p>
 <h2 id="2-结构边界是否合理">2. 结构边界是否合理</h2>
 <div class="table-scroll"><table>
@@ -259,11 +252,12 @@
 <h2 id="4-不能声称已经完备的部分">4. 不能声称已经完备的部分</h2>
 <ul>
 <li><strong>专家实践证据</strong>：文档不能替代独立负责子系统、处理复杂故障和推进跨团队接口的经历。阅读完整不等于达到某个职级。</li>
-<li><strong>真实 GPU/RDMA 和规模验证</strong>：提供实验方法与版本入口，不把理论下界、教学脚本或协议推演说成真实收益。</li>
-<li><strong>CUDA/kernel 深度工程</strong>：已有性能原理和阅读入口，尚不是从编写 kernel 到质量/性能回归的完整专项课程。</li>
-<li><strong>复杂模型与并行</strong>：MLA、滑窗、混合状态、MoE、EP 等已有边界提示和部分教材，仍需按目标模型深入，不能视为所有架构均已覆盖。</li>
+<li><strong>真实 GPU/RDMA 数据与故障记录</strong>：<a href="../07-practice/measurement-and-drills.html">实测与故障演练</a>给出了步骤、命令和记录模板，但数据必须在你的环境中测出来，文档里的数字都是推导或公开规格。</li>
+<li><strong>kernel 开发</strong>：<a href="../06-serving/gpu-kernel-basics.html">GPU 与 kernel 基础</a>覆盖 KV 存储岗需要的程度（带宽、异步完成、分析工具、评估方法）；以写 kernel 为主业的岗位还需要专门的 CUDA/Triton 训练。</li>
+<li><strong>复杂模型</strong>：<a href="../03-kv-cache/model-variants.html">复杂模型与 KV 存储</a>讲清了各类结构的容量和复用规则；具体模型仍要按其配置和所用引擎的 KV 规格核对。</li>
 <li><strong>平台运维落地</strong>：已有 SLO、故障、配额与演进设计；具体 Kubernetes 编排、自动扩缩容、发布流水线与安全集成仍需结合目标平台。</li>
 <li><strong>训练与其他 LLM Infra</strong>：分布式训练、训练 checkpoint、数据平台和完整编译器工程不在这套推理主线的覆盖承诺内。</li>
+<li><strong>旧专项页面的文风</strong>：从原 RST 教材转来的专项页面加了白话导读，正文仍偏书面，按需再逐页改写。</li>
 </ul>
 <h2 id="5-面向专家岗位的验收门槛">5. 面向专家岗位的验收门槛</h2>
 <p>至少形成一份含正常、超时、取消和故障路径的设计；一套容量、网络、元数据与成本预算；一条可以定位到源码的联合实现；一份有退化条件的实验或明确未测项的验证计划。</p>

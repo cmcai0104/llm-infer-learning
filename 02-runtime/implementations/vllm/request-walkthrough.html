@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vLLM 源码教材：跟踪一条请求及其资源 · LLM Infra</title>
+<link rel="stylesheet" href="../../../assets/site.css">
+<script defer src="../../../assets/search-index.js"></script>
+<script defer src="../../../assets/site.js"></script></head>
+<body data-root="../../..">
+<a class="skip" href="#content">跳到正文</a>
+<header class="topbar"><button id="nav-toggle" aria-controls="sidebar" aria-expanded="false">目录</button>
+<a class="brand" href="../../../index.html">LLM Infra <span>学习资料库</span></a>
+<button id="search-open">搜索内容 <kbd>/</kbd></button></header>
+<aside id="sidebar"><nav aria-label="学习主题">
+<a href="../../../index.html">总目录</a>
+<div class="featured">
+<a href="../../../01-foundations/design-atlas.html">设计图册</a>
+<a href="../../../08-career/expert-interview-guide.html">P7–P8 专家面试</a>
+<a href="../../../08-career/expert-qa.html">KV 存储深挖问答</a>
+<a href="../../../04-storage/kv-cache-storage.html">KV 存储详解</a>
+<a href="../../../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake</a>
+</div>
+<details><summary>01 基础与设计图</summary>
+<a href="../../../01-foundations/index.html">01 · 基础与全景：先理解计算、资源和请求</a>
+<a href="../../../01-foundations/attention-and-inference.html">推理基础教材：从 Transformer 到服务成本</a>
+<a href="../../../01-foundations/compute-and-memory.html">推理基础、调度、GPU 优化与分布式</a>
+<a href="../../../01-foundations/concepts.html">公共基础：推理、KV Cache、内存和性能</a>
+<a href="../../../01-foundations/design-atlas.html">设计图册：从请求执行到共享 KV 存储</a>
+<a href="../../../01-foundations/overview.html">LLM Infra 总体介绍：先把整条链路想明白</a>
+</details>
+<details open><summary>02 推理运行时</summary>
+<a href="../../index.html">02 · 推理运行时：把请求变成每一轮 GPU 工作</a>
+<a href="../sglang/knowledge-map.html">学习大纲与完整知识地图</a>
+<a href="../sglang/overview.html">SGLang：把请求调度、前缀复用与分层缓存连起来</a>
+<a href="../sglang/runtime.html">SGLang 架构、运行图与源码路线</a>
+<a href="architecture.html">知识地图与 vLLM 设计图</a>
+<a href="overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
+<a href="request-walkthrough.html" aria-current="page">vLLM 源码教材：跟踪一条请求及其资源</a>
+</details>
+<details><summary>03 KV Cache 管理</summary>
+<a href="../../../03-kv-cache/index.html">03 · KV Cache 管理：让正确的状态在正确的时间可用</a>
+<a href="../../../03-kv-cache/capacity-and-reuse.html">03 · KV Cache 基础与性能模型</a>
+<a href="../../../03-kv-cache/semantics-and-costs.html">semantics-and-costs</a>
+<a href="../../../03-kv-cache/implementations/lmcache/internals.html">internals</a>
+<a href="../../../03-kv-cache/implementations/lmcache/overview.html">LMCache：把 KV 的保存、查找、加载和回收管起来</a>
+<a href="../../../03-kv-cache/implementations/lmcache/state-diagrams.html">state-diagrams</a>
+<a href="../../../03-kv-cache/implementations/sglang/prefix-cache.html">KV Cache：原理、容量、分页、前缀复用与正确性</a>
+<a href="../../../03-kv-cache/implementations/sglang/tiered-cache.html">HiCache、Mooncake、LMCache 与 PD 分离</a>
+<a href="../../../03-kv-cache/implementations/vllm/integration.html">KV Cache 专题：vLLM、LMCache 与 Mooncake</a>
+</details>
+<details><summary>04 分布式存储</summary>
+<a href="../../../04-storage/index.html">04 · 分布式存储：把可复用状态放进共享资源池</a>
+<a href="../../../04-storage/kv-cache-storage.html">KV Cache 存储详解：数据模型、协议、容量、性能与故障</a>
+<a href="../../../04-storage/implementations/lmcache/backend-contracts.html">backend-contracts</a>
+<a href="../../../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake：从一次 KV 保存到下一次请求恢复</a>
+<a href="../../../04-storage/implementations/mooncake/architecture.html">02 · 知识地图与设计图</a>
+<a href="../../../04-storage/implementations/mooncake/integrations.html">05 · LMCache 与推理引擎集成</a>
+<a href="../../../04-storage/implementations/mooncake/internals.html">04 · Mooncake 内核与源码路线</a>
+<a href="../../../04-storage/implementations/mooncake/overview.html">Mooncake：KV 对象怎样共享、怎样安全地高速搬运</a>
+</details>
+<details><summary>05 数据传输</summary>
+<a href="../../../05-transfer/index.html">05 · 数据传输：搬得动、搬得快，还要搬得安全</a>
+<a href="../../../05-transfer/implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine：字节移动的实现案例</a>
+</details>
+<details><summary>06 Serving 与性能</summary>
+<a href="../../../06-serving/index.html">06 · Serving 与性能：让整条链路满足服务目标</a>
+<a href="../../../06-serving/component-selection.html">Serving 组件选型：在同一技术问题下比较实现</a>
+<a href="../../../06-serving/implementations/lmcache/observability.html">observability</a>
+<a href="../../../06-serving/implementations/vllm/performance-and-parallelism.html">性能、分布式与服务工程教材</a>
+</details>
+<details><summary>07 实验与验证</summary>
+<a href="../../../07-practice/index.html">07 · 实验与验证：用证据回答系统问题</a>
+<a href="../../../07-practice/implementations/lmcache/labs.html">labs</a>
+<a href="../../../07-practice/implementations/mooncake/labs.html">06 · 实验与性能诊断</a>
+<a href="../../../07-practice/implementations/sglang/labs.html">实验手册：从单机基线到共享缓存与 PD</a>
+<a href="../../../07-practice/implementations/vllm/experiments.html">实验与项目：从原理到可复现证据</a>
+<a href="../../../07-practice/implementations/vllm/walkthrough.html">实践教材：运行步骤、源码作业与参考答案</a>
+</details>
+<details><summary>08 专家能力与面试</summary>
+<a href="../../../08-career/index.html">08 · 岗位、学习计划与面试：按能力组织成果</a>
+<a href="../../../08-career/coverage-and-review.html">资料结构与覆盖范围审阅</a>
+<a href="../../../08-career/expert-interview-guide.html">LLM 推理 Infra 专家面试总纲：P7–P8 能力参考，重点 KV Cache 存储</a>
+<a href="../../../08-career/expert-qa.html">P7–P8 KV Cache 存储深挖问答</a>
+<a href="../../../08-career/interview-and-design.html">面试与项目：能解释、能算账、能处理失败</a>
+<a href="../../../08-career/references.html">按问题查资料：专题索引与版本基线</a>
+<a href="../../../08-career/roles.html">按岗位方向学习：什么必须熟练，什么可以后学</a>
+<a href="../../../08-career/study-plan.html">统一 28 天学习计划：基础只学一次，后面按岗位分流</a>
+<a href="../../../08-career/implementations/lmcache/index.html">index</a>
+<a href="../../../08-career/implementations/lmcache/questions.html">questions</a>
+<a href="../../../08-career/implementations/lmcache/study-plan.html">study-plan</a>
+<a href="../../../08-career/implementations/lmcache/system-design.html">system-design</a>
+<a href="../../../08-career/implementations/mooncake/index.html">Mooncake 与 KV Cache 存储：28 天学习手册</a>
+<a href="../../../08-career/implementations/mooncake/questions.html">07 · 面试题与参考回答</a>
+<a href="../../../08-career/implementations/mooncake/study-plan.html">01 · 28 天学习计划</a>
+<a href="../../../08-career/implementations/mooncake/system-design.html">08 · 系统设计、毕业项目与参考资料</a>
+<a href="../../../08-career/implementations/sglang/assessment.html">参考资料、实验报告与最终验收</a>
+<a href="../../../08-career/implementations/sglang/questions.html">推理 Infra 面试：36 道题与系统设计</a>
+<a href="../../../08-career/implementations/sglang/study-plan.html">28 天学习计划</a>
+<a href="../../../08-career/implementations/vllm/questions.html">推理 Infra 面试：60 个问题与参考回答</a>
+<a href="../../../08-career/implementations/vllm/references.html">官方资料与版本说明</a>
+<a href="../../../08-career/implementations/vllm/study-plan.html">28 天学习大纲与每日计划</a>
+</details>
+<a href="../../../08-career/coverage-and-review.html">覆盖范围与审阅</a>
+</nav></aside>
+<main id="content"><div class="breadcrumbs">02 推理运行时 · 专注 KV Cache 存储</div>
+<article><h1 id="vllm-源码教材跟踪一条请求及其资源">vLLM 源码教材：跟踪一条请求及其资源</h1>
+<p><a href="overview.html">返回导航</a> · <a href="../../../01-foundations/attention-and-inference.html">基础教材</a> · <a href="../../../06-serving/implementations/vllm/performance-and-parallelism.html">性能教材</a></p>
+<p>本章已核对本地源码，阅读基准为提交 <code>f3871c3cbf8a608f7ee833ec4c2c5277f77bee41</code>。先沿普通文本、单卡、稠密模型、常规采样阅读，再增加异步、外部 KV、多卡和特殊模型。源码链接指向上游的固定提交；路径相对于 vLLM 源码根目录，符号名用于定位，行号只作为该快照的辅助。</p>
+<h2 id="r1-先识别系统边界和版本">R1. 先识别系统边界和版本</h2>
+<p>V1 指引擎架构；<strong>Model Runner V2（MRV2）是 V1 引擎内部的另一套执行器实现，不是“vLLM V2 引擎”</strong>。</p>
+<p>当前快照同时存在：</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>层</th>
+<th>源码</th>
+<th>主要职责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>离线接口</td>
+<td><a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/entrypoints/llm.py">LLM</a></td>
+<td>提交批量 prompt，收集完整结果</td>
+</tr>
+<tr>
+<td>离线公用逻辑</td>
+<td><a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/entrypoints/common/offline.py">OfflineInferenceMixin</a></td>
+<td>输入接入和驱动引擎循环</td>
+</tr>
+<tr>
+<td>客户端引擎</td>
+<td><a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/engine/llm_engine.py">LLMEngine</a>、<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/engine/async_llm.py">AsyncLLM</a></td>
+<td>接入、输出与异步请求管理</td>
+</tr>
+<tr>
+<td>核心引擎</td>
+<td><a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/engine/core.py">EngineCore</a></td>
+<td>调度和执行的核心循环</td>
+</tr>
+<tr>
+<td>调度</td>
+<td><a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/core/sched/scheduler.py">Scheduler</a></td>
+<td>决定每个请求本轮计算量</td>
+</tr>
+<tr>
+<td>KV 管理</td>
+<td><a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/core/kv_cache_manager.py">KVCacheManager</a>、<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/core/block_pool.py">BlockPool</a></td>
+<td>分配、共享、命中与回收</td>
+</tr>
+<tr>
+<td>GPU Worker</td>
+<td><a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/worker/gpu_worker.py">Worker</a></td>
+<td>设备、执行后端与模型 runner</td>
+</tr>
+<tr>
+<td>原 runner 路径</td>
+<td><a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/worker/gpu_model_runner.py">gpu_model_runner.py</a></td>
+<td>原有 V1 执行路径</td>
+</tr>
+<tr>
+<td>MRV2 路径</td>
+<td><a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/worker/gpu/model_runner.py">gpu/model_runner.py</a></td>
+<td>更模块化的输入、状态和执行</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>Worker._make_model_runner()</code> 在该快照约 570 行，按配置选择 runner。先看实际配置与日志再决定追哪条路径；不要仅因为文件名带 V1，就断定所有执行都走旧 runner。</p>
+<p>配套阅读：<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/docs/design/arch_overview.md">架构概览</a>、<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/docs/design/model_runner_v2.md">MRV2 设计</a>。设计文档可能记录阶段性目标，实际支持情况仍由代码和选定配置决定。</p>
+<h2 id="r2-从-llmgenerate-开始读">R2. 从 <code>LLM.generate()</code> 开始读</h2>
+<p>离线接口适合第一次学习，因为不需要先理解 HTTP 框架。</p>
+<p>当前源码的主线：</p>
+<pre><code class="language-text">LLM.generate()
+  → OfflineInferenceMixin._run_completion()
+      → _add_completion_requests()
+      → _run_engine()
+          → while llm_engine.has_unfinished_requests()
+              → LLMEngine.step()
+              → 收集 finished 的 RequestOutput
+</code></pre>
+<p>对应入口：</p>
+<ul>
+<li><code>LLM.generate</code>：<code>vllm/entrypoints/llm.py</code>，约 417 行。</li>
+<li><code>_run_completion</code>：<code>vllm/entrypoints/common/offline.py</code>，约 340 行。</li>
+<li><code>_run_engine</code>：同文件约 589 行。</li>
+</ul>
+<p>这里的 <code>generate()</code> 会把多个 prompt 交给引擎自动组织批次；调用者给出的 Python list 不直接等于每次 GPU forward 的固定 batch。</p>
+<p>阅读时记录三个事实：</p>
+<ol>
+<li>输入如何变成引擎请求，哪些参数在每请求层存储？</li>
+<li>一次 <code>step()</code> 为什么可能返回多个请求的进展？</li>
+<li>对外完整结果的排列顺序，与内部按什么顺序完成请求，是两个问题。</li>
+</ol>
+<p><strong>练习</strong>：为什么把 100 个 prompt 放进一次调用，与串行调用 100 次 <code>generate()</code> 可能有不同吞吐？<br />
+<strong>答案</strong>：前者给调度器提供更大的可调度集合，能混合不同请求进度；后者可能只暴露单请求，无法形成同样的跨请求批处理。实际收益仍受显存和负载限制。</p>
+<h2 id="r3-输入请求对象与进程间通信">R3. 输入、请求对象与进程间通信</h2>
+<h3 id="输入处理">输入处理</h3>
+<p>对照 <a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/engine/input_processor.py">InputProcessor</a> 和 <a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/engine/llm_engine.py">LLMEngine.add_request</a>。</p>
+<p>概念上要完成：</p>
+<pre><code class="language-text">输入渲染/模板与tokenization
+→ 参数和长度等校验
+→ EngineCoreRequest
+→ 核心引擎中的 Request
+→ 调度队列
+</code></pre>
+<p>输入处理在 renderer、入口和 engine 间的具体分工随版本演进，不要把所有 tokenization 都归到一个固定函数。</p>
+<h3 id="request-是执行状态不只是-api-参数"><code>Request</code> 是执行状态，不只是 API 参数</h3>
+<p>读 <a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/request.py">request.py</a>：</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>字段/属性</th>
+<th>应怎样理解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>prompt / output token IDs</td>
+<td>输入和已经产生的输出历史</td>
+</tr>
+<tr>
+<td><code>num_computed_tokens</code></td>
+<td>调度使用的计算进度；异步路径可能包含乐观推进</td>
+</tr>
+<tr>
+<td><code>num_tokens_with_spec</code></td>
+<td>包含投机候选的待追赶 token 目标</td>
+</tr>
+<tr>
+<td><code>num_output_placeholders</code></td>
+<td>异步情况下尚未拿到具体 token 的占位状态</td>
+</tr>
+<tr>
+<td><code>num_in_flight_tokens</code></td>
+<td>已调度但输出尚未处理的工作</td>
+</tr>
+<tr>
+<td><code>block_hashes</code></td>
+<td>已构建的缓存身份</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td>等待、运行、抢占或完成等状态</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>重要区别</strong>：调度器视角的计数、GPU 真正完成的工作、客户端已收到的输出，不一定同时更新。当前代码明确记录 in-flight 和 stale output 等状态，不能用一个变量覆盖全部语义。</p>
+<h3 id="通信边界">通信边界</h3>
+<p>在线引擎通常用 client/core 通信，见 <a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/engine/core_client.py">core_client.py</a>。同一个对象名出现在两边，不代表它们共享同一 Python 对象或地址空间。IPC 需要明确序列化、消息顺序、请求身份和失败清理。</p>
+<h2 id="r4-enginecore-怎样驱动模型">R4. EngineCore 怎样驱动模型</h2>
+<p>先读 <a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/engine/core.py">EngineCore.step</a> 约 657 行。简化后的职责如下：</p>
+<pre><code class="language-text">检查是否有请求
+→ scheduler.schedule(...)
+→ executor.execute_model(..., non_block=True)
+→ 准备适用的 grammar 信息
+→ 获取执行结果，必要时独立 sample_tokens(...)
+→ 处理执行期间发生的 abort
+→ scheduler.update_from_output(...)
+→ 产生 EngineCoreOutputs
+</code></pre>
+<p>这段流程有两个值得注意的设计：</p>
+<ol>
+<li>模型执行与采样不总是单个同步调用；某些路径的执行结果为空，随后单独采样。</li>
+<li>执行过程中也可能发生请求取消，更新输出之前需要处理它，避免把取消请求当作仍活跃请求推进。</li>
+</ol>
+<h3 id="batch-queue-与异步路径">batch queue 与异步路径</h3>
+<p>随后读同文件 <code>step_with_batch_queue()</code>，约 698 行：</p>
+<ul>
+<li>有空间且有工作时，优先继续调度/提交。</li>
+<li>不能继续提交时，再等待较早的执行结果。</li>
+<li>根据结果更新调度状态。</li>
+</ul>
+<p>目的在于让 CPU 准备与 GPU 计算重叠，但必须处理在途状态和正确的依赖。不要用只读同步 <code>step()</code> 得到的顺序，断言所有配置都严格“提交 → 完整等待 → 再调度”。</p>
+<p><strong>练习</strong>：一个 batch forward 已提交，客户端此时取消请求，为什么不能立即覆盖它的 KV？<br />
+<strong>答案</strong>：设备可能仍在读写旧 buffer。逻辑取消应阻止后续推进，物理回收必须覆盖到真实访问结束。</p>
+<h2 id="r5-scheduler从请求集合到每轮-token-数">R5. Scheduler：从请求集合到每轮 token 数</h2>
+<p>读 <a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/core/sched/scheduler.py">Scheduler.schedule</a> 约 675 行，以及 <a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/core/sched/output.py">SchedulerOutput</a>。</p>
+<p>核心抽象是：</p>
+<pre><code class="language-text">让每请求的已计算进度追赶本轮允许处理的 token 目标
+同时满足：token预算、请求数、KV容量、状态、优先级和特殊约束
+</code></pre>
+<p>当前 <code>schedule()</code> 同时读取 <code>max_num_scheduled_tokens</code> 和 <code>max_num_batched_tokens</code> 等预算。旧文章只讲一个 token budget，学习时可以用它理解原理，但做配置解释应返回当前实现。</p>
+<h3 id="一个可手推的例子">一个可手推的例子</h3>
+<p>假设预算 8，A/B 各需一个 Decode token，C 还有 10 个 prompt token：</p>
+<pre><code class="language-text">轮1：A=1，B=1，C=6
+轮2：A=1，B=1，C=4
+</code></pre>
+<p>这是教学策略，假设资源充足且优先服务两个 Decode 请求；实际源码有优先级、prefill 节流、公平性、外部 KV、投机等分支，不保证所有配置都产生相同顺序。</p>
+<h3 id="输出不只是一个-batch-list">输出不只是一个 batch list</h3>
+<p><code>SchedulerOutput</code> 包含：</p>
+<ul>
+<li>首次被调度的新请求信息。</li>
+<li>之前已调度请求的增量信息。</li>
+<li><code>num_scheduled_tokens</code> 和总 token 数。</li>
+<li>结束或抢占的 request IDs。</li>
+<li>投机、encoder、结构化生成和 connector 元数据。</li>
+</ul>
+<p>“新请求全量 + 旧请求增量”的设计降低每轮重复传输和重建的成本。它要求 worker 的持久状态与调度器保持一致，取消/抢占恢复不能漏通知。</p>
+<h3 id="阅读分支的顺序">阅读分支的顺序</h3>
+<p>先跟踪一条运行请求；再看新请求 admission；然后看 <code>allocate_slots</code> 失败时怎样处理；最后看远端 KV 和投机。不要从第一行起试图一次记住所有 if 分支。</p>
+<p>在相同文件中继续定位 <code>update_from_output()</code>，约 2180 行：它把实际执行和采样结果带回调度状态，连接本轮和下一轮。</p>
+<h2 id="r6-kv-manager-与-blockpool三个不同问题">R6. KV Manager 与 BlockPool：三个不同问题</h2>
+<p>先分清：</p>
+<ol>
+<li><strong>可复用多少</strong>：前缀 hash 和模型语义决定。</li>
+<li><strong>内存够不够</strong>：物理 blocks、引用、预留与组布局决定。</li>
+<li><strong>数据是否 ready</strong>：本地完成或外部传输状态决定。</li>
+</ol>
+<h3 id="get_computed_blocks"><code>get_computed_blocks</code></h3>
+<p>入口：<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/core/kv_cache_manager.py">kv_cache_manager.py</a> 约 264 行。</p>
+<p>当前快照返回三个值：缓存 blocks、命中 token 数、混合/稀疏状态相关的共享边界信息。旧文章写成两个返回值时，不能直接照抄成当前代码。</p>
+<p>源码明确把普通全命中的查找上界限制到 <code>request.num_tokens - 1</code>，以便重新处理尾部获得 logits。受完整块对齐影响，有时重算的不止一个 token。</p>
+<p>例子：块大小 16、prompt 长度 32、只有完整块复用且遵循此上界，则最大可用的对齐命中可能为 16，而不是 32。prompt 长度 33 时，32-token 命中后处理最后一 token 更容易实现。特殊缓存组/后端需按实际规则分析。</p>
+<h3 id="allocate_slots"><code>allocate_slots</code></h3>
+<p>入口同文件约 371 行。除了新 token，还区分：</p>
+<ul>
+<li>已有计算进度。</li>
+<li>新发现的本地缓存命中。</li>
+<li>外部可复用 token。</li>
+<li>投机 lookahead。</li>
+<li>延迟发布缓存、全序列可容纳 admission、保留给其他在途请求的 blocks。</li>
+</ul>
+<p>这说明“为请求分配多少内存”不只是 <code>ceil(new_tokens/block_size)</code>。已有块、共享引用、模型缓存组和在途工作都影响结果。</p>
+<h3 id="touch--free_blocks"><code>touch</code> / <code>free_blocks</code></h3>
+<p>入口：<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/core/block_pool.py">block_pool.py</a>。</p>
+<ul>
+<li><code>touch()</code>：命中块重新被使用时增加引用，必要时从 free queue 移除。</li>
+<li><code>free_blocks()</code>：减少引用，归零后根据是否可缓存等条件归回可重用结构。</li>
+<li><code>_maybe_evict_cached_block()</code>：物理块准备改作他用时移除旧缓存身份。</li>
+</ul>
+<p>“在 free queue”“没有请求引用”“没有有效缓存内容”不是同义词。缓存内容可保留到真正驱逐时；设备 pool 也可能始终保留物理内存。</p>
+<p><strong>练习</strong>：共享块 ref=2，A 完成后 ref=1，B 完成后 ref=0，此时一定清零 KV 吗？<br />
+<strong>答案</strong>：不一定，可作为空闲有效缓存继续保留；实际驱逐或复用时再撤销旧身份。异步传输还可能延长安全生命周期。</p>
+<h2 id="r7-modelrunner-怎样把请求变成-tensor">R7. ModelRunner 怎样把请求变成 Tensor</h2>
+<p>调度结果是请求级描述，GPU 需要紧凑的 Tensor 与注意力元数据。</p>
+<p>假设 A 已有 5 个 KV token，本轮计算 2 个位置；B 已有 9 个 KV token，本轮 Decode 1 个：</p>
+<pre><code class="language-text">num_scheduled_tokens = [2, 1]
+packed input_ids = [A的新token0, A的新token1, B的新token0]
+positions = [5, 6, 9]
+query_start_loc = [0, 2, 3]
+本轮后可访问的序列长度 = [7, 10]
+</code></pre>
+<p><code>query_start_loc</code> 是打包 query 的累计边界，不是历史 KV 的完整长度。Attention 还要知道 block table、序列长度和本轮 token 的写入位置。</p>
+<h3 id="slot-mapping">slot mapping</h3>
+<p>在一个简单全注意力组中，block size=C：</p>
+<pre><code class="language-text">logical_block = position // C
+offset = position % C
+physical_block = block_table[request][logical_block]
+slot = physical_block × C + offset
+</code></pre>
+<p>例如 C=4，A 的 block table 为 <code>[7,2]</code>，position=5，则落到物理 block 2 的 offset 1，slot=9。这个 slot 是概念上的 token 槽索引，具体 K/V 各维物理排布还由 backend 决定。</p>
+<p>阅读：<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/worker/block_table.py">worker/block_table.py</a>、<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/worker/gpu/input_batch.py">MRV2 input_batch.py</a>。</p>
+<h3 id="为什么要-persistent-state">为什么要 persistent state</h3>
+<p>连续两轮大多数请求仍相同。每轮重建完整 block table 和采样参数会增加 CPU 成本，因此 worker 保留状态并应用变化。</p>
+<p>MRV2 的设计进一步区分“请求存储位置”和“本轮输入顺序”：为活跃请求分配状态行，再按本轮需要 gather。相比反复重排全部持久状态，这可以减少耦合与 CPU 工作。</p>
+<h2 id="r8-模型-forwardattention-backend-与-mrv2">R8. 模型 forward、Attention backend 与 MRV2</h2>
+<p>先看 <a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/model_executor/models/llama.py">LlamaAttention.forward</a> 约 224 行：</p>
+<pre><code class="language-text">qkv_proj(hidden_states)
+→ 按 q_size / kv_size 切出 Q/K/V
+→ rotary_emb(positions, Q, K)
+→ Attention(Q,K,V)
+→ o_proj
+</code></pre>
+<p>再看同文件 <code>LlamaDecoderLayer.forward</code>，约 313 行：归一化和残差、Attention、归一化和残差、MLP。这里可以把 F2 的数学对应到真实模型层。</p>
+<p>Attention 调用没有显式传完整历史 K/V，不表示没有历史缓存；执行上下文、backend 和 KV 张量组织负责连接它们。继续阅读 <a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/docs/design/attention_backends.md">Attention backend 设计</a>。</p>
+<h3 id="backend-不只是一个-kernel-名字">backend 不只是一个 kernel 名字</h3>
+<p>选择 backend 时可能涉及 GPU 架构、dtype、head dimension、KV layout、模型类型、特性兼容等。换 backend 既可能改变性能，也可能改变数值路径和支持能力。</p>
+<h3 id="mrv2-的本轮执行">MRV2 的本轮执行</h3>
+<p>入口：<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/worker/gpu/model_runner.py">gpu/model_runner.py</a> 的 <code>execute_model()</code>，约 1742 行。</p>
+<p>当前代码先处理请求结束、状态释放、新请求加入和更新，再应用 block table 的 staged writes；如果没有实际 forward 工作，可走 connector 等无 forward 路径。</p>
+<p>然后准备 batch 描述、输入、执行模式，运行模型并产生后续采样需要的状态。它并非一个单纯的 <code>model(input_ids)</code> 包装。</p>
+<p>MRV2 的几个阅读重点：</p>
+<ul>
+<li>请求状态与本轮输入分离。</li>
+<li>将部分 metadata 准备放到 GPU。</li>
+<li>用增量写入维护大 Tensor。</li>
+<li>尽量避免主循环里的 CPU/GPU 同步。</li>
+<li>把采样和功能拆入独立模块。</li>
+</ul>
+<p><strong>注意</strong>：CPU 写 pinned buffer 的同时，GPU 异步读取同一块内存，会产生竞争。异步正确性要求稳定源副本或同步/所有权方案，不能只加 <code>non_blocking=True</code>。</p>
+<h2 id="r9-采样输出处理和停止">R9. 采样、输出处理和停止</h2>
+<p>模型输出 hidden states/logits 后，需要根据策略选择 token。原 sampler 可从 <a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/sample/sampler.py">v1/sample/sampler.py</a> 阅读；MRV2 有自己的模块化路径，应沿实际 runner 的 <code>sample_tokens()</code> 继续追。</p>
+<p>要区分：</p>
+<ol>
+<li>模型 forward 生成什么计算结果。</li>
+<li>哪些位置需要 logits；中间 Prefill chunk 不一定需要生成输出。</li>
+<li>采样怎样处理 penalties、约束与随机性。</li>
+<li>哪些 token 交回引擎，以及怎样更新已计算/在途状态。</li>
+</ol>
+<h3 id="从-token-ids-到用户结果">从 token IDs 到用户结果</h3>
+<p><a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/engine/output_processor.py">OutputProcessor</a> 管理请求输出状态，配合 <a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/v1/engine/detokenizer.py">detokenizer.py</a> 转成文本。</p>
+<p><code>LLMEngine.step()</code> 在约 319 行先获取核心结果，再调用输出处理；stop string 等条件还可能触发对核心请求的 abort。</p>
+<p>停止可以来自 EOS、生成长度、停止串、取消或错误。流式返回文本不能随意泄漏未确认的停止串片段；输出层与核心状态需一致。</p>
+<h3 id="不要把时钟混在一起">不要把时钟混在一起</h3>
+<p>GPU step 完成时间、输出处理时间、服务端写出时间、客户端收到时间不同。优化 GPU kernel 后客户端 TTFT 不变，可能是排队或输入处理主导，而不是测试一定有错。</p>
+<h2 id="r10-外部-kv-connector语义与同步的接口">R10. 外部 KV Connector：语义与同步的接口</h2>
+<p>入口：<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/vllm/distributed/kv_transfer/kv_connector/v1/base.py">KVConnectorBase_V1</a>。</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>调度侧</th>
+<th>要解决的问题</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>get_num_new_matched_tokens()</code></td>
+<td>本地已计算范围之外，可从外部复用多少？查询是否还未完成？</td>
+</tr>
+<tr>
+<td><code>update_state_after_alloc()</code></td>
+<td>目标 blocks 已分配，如何记录传输状态？</td>
+</tr>
+<tr>
+<td><code>build_connector_meta()</code></td>
+<td>给 worker 哪些执行元数据？</td>
+</tr>
+<tr>
+<td><code>request_finished()</code> 等完成接口</td>
+<td>是否需要延迟释放请求 blocks？</td>
+</tr>
+</tbody>
+</table></div>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>执行侧</th>
+<th>要解决的问题</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>start_load_kv()</code></td>
+<td>何时发起加载？</td>
+</tr>
+<tr>
+<td><code>wait_for_layer_load()</code></td>
+<td>本层计算前数据是否 ready？</td>
+</tr>
+<tr>
+<td><code>save_kv_layer()</code></td>
+<td>如何保存已经产生的本层 KV？</td>
+</tr>
+<tr>
+<td><code>wait_for_save()</code> / <code>get_finished()</code></td>
+<td>哪些操作真正完成、哪些引用可释放？</td>
+</tr>
+</tbody>
+</table></div>
+<p>在当前基类约 516 行，<code>get_num_new_matched_tokens()</code> 的第一个返回值可为 <code>None</code>，表示还不能确定命中数，应之后再查询；另一个值表达是否跨调度步异步加载。它不是单纯的同步 <code>get(key)</code>。</p>
+<p>学习链路：</p>
+<pre><code class="language-text">兼容身份查询
+→ 命中范围
+→ 预留目标内存
+→ 搬运
+→ 完成/失败
+→ 更新可计算范围
+→ 后续forward
+→ 保存与回收
+</code></pre>
+<p>参考 <a href="../../../03-kv-cache/implementations/vllm/integration.html">04 专题</a>理解 LMCache、Mooncake 如何接到这一边界。不要因为某个后端能读写 bytes，就假设它自动理解 token 前缀或所有模型布局。</p>
+<h2 id="最后一次源码作业">最后一次源码作业</h2>
+<p>按顺序在 IDE 标出以下 10 个符号，并给每个符号写一句输入、输出与所有权说明：</p>
+<pre><code class="language-text">LLM.generate
+OfflineInferenceMixin._run_completion
+LLMEngine.add_request
+EngineCore.step / step_with_batch_queue
+Scheduler.schedule
+KVCacheManager.get_computed_blocks / allocate_slots
+BlockPool.touch / free_blocks
+Worker._make_model_runner
+GPUModelRunner.execute_model / sample_tokens
+OutputProcessor.process_outputs
+</code></pre>
+<p>再追一条失败路径：外部命中后加载失败，或者请求执行期间取消。能讲清失败后哪些状态回退、哪些内存暂时不能释放，才算读通主线。</p>
+<p>可继续阅读的真实测试入口：<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/tests/v1/core/test_scheduler.py">scheduler tests</a>、<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/tests/v1/core/test_async_scheduler.py">async scheduler tests</a>。阅读测试关注边界条件；本手册未在当前 macOS 环境运行 GPU 测试。</p>
+</article>
+<footer><a href="../../../index.html">返回总目录</a>
+<p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#r1-先识别系统边界和版本">R1. 先识别系统边界和版本</a><a class="level-2" href="#r2-从-llmgenerate-开始读">R2. 从 LLM.generate() 开始读</a><a class="level-2" href="#r3-输入请求对象与进程间通信">R3. 输入、请求对象与进程间通信</a><a class="level-3" href="#输入处理">输入处理</a><a class="level-3" href="#request-是执行状态不只是-api-参数">Request 是执行状态，不只是 API 参数</a><a class="level-3" href="#通信边界">通信边界</a><a class="level-2" href="#r4-enginecore-怎样驱动模型">R4. EngineCore 怎样驱动模型</a><a class="level-3" href="#batch-queue-与异步路径">batch queue 与异步路径</a><a class="level-2" href="#r5-scheduler从请求集合到每轮-token-数">R5. Scheduler：从请求集合到每轮 token 数</a><a class="level-3" href="#一个可手推的例子">一个可手推的例子</a><a class="level-3" href="#输出不只是一个-batch-list">输出不只是一个 batch list</a><a class="level-3" href="#阅读分支的顺序">阅读分支的顺序</a><a class="level-2" href="#r6-kv-manager-与-blockpool三个不同问题">R6. KV Manager 与 BlockPool：三个不同问题</a><a class="level-3" href="#get_computed_blocks">get_computed_blocks</a><a class="level-3" href="#allocate_slots">allocate_slots</a><a class="level-3" href="#touch--free_blocks">touch / free_blocks</a><a class="level-2" href="#r7-modelrunner-怎样把请求变成-tensor">R7. ModelRunner 怎样把请求变成 Tensor</a><a class="level-3" href="#slot-mapping">slot mapping</a><a class="level-3" href="#为什么要-persistent-state">为什么要 persistent state</a><a class="level-2" href="#r8-模型-forwardattention-backend-与-mrv2">R8. 模型 forward、Attention backend 与 MRV2</a><a class="level-3" href="#backend-不只是一个-kernel-名字">backend 不只是一个 kernel 名字</a><a class="level-3" href="#mrv2-的本轮执行">MRV2 的本轮执行</a><a class="level-2" href="#r9-采样输出处理和停止">R9. 采样、输出处理和停止</a><a class="level-3" href="#从-token-ids-到用户结果">从 token IDs 到用户结果</a><a class="level-3" href="#不要把时钟混在一起">不要把时钟混在一起</a><a class="level-2" href="#r10-外部-kv-connector语义与同步的接口">R10. 外部 KV Connector：语义与同步的接口</a><a class="level-2" href="#最后一次源码作业">最后一次源码作业</a></aside>
+<dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
+<button id="search-close" aria-label="关闭搜索">关闭</button></div>
+<input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">
+<p id="search-status" role="status">输入主题、术语或问题</p><ol id="search-results"></ol></dialog>
+</body></html>

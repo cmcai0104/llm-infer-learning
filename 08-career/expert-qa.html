@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>P7–P8 KV Cache 存储深挖问答 · LLM Infra</title>
+<link rel="stylesheet" href="../assets/site.css">
+<script defer src="../assets/search-index.js"></script>
+<script defer src="../assets/site.js"></script></head>
+<body data-root="..">
+<a class="skip" href="#content">跳到正文</a>
+<header class="topbar"><button id="nav-toggle" aria-controls="sidebar" aria-expanded="false">目录</button>
+<a class="brand" href="../index.html">LLM Infra <span>学习资料库</span></a>
+<button id="search-open">搜索内容 <kbd>/</kbd></button></header>
+<aside id="sidebar"><nav aria-label="学习主题">
+<a href="../index.html">总目录</a>
+<div class="featured">
+<a href="../01-foundations/design-atlas.html">设计图册</a>
+<a href="expert-interview-guide.html">P7–P8 专家面试</a>
+<a href="expert-qa.html" aria-current="page">KV 存储深挖问答</a>
+<a href="../04-storage/kv-cache-storage.html">KV 存储详解</a>
+<a href="../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake</a>
+</div>
+<details><summary>01 基础与设计图</summary>
+<a href="../01-foundations/index.html">01 · 基础与全景：先理解计算、资源和请求</a>
+<a href="../01-foundations/attention-and-inference.html">推理基础教材：从 Transformer 到服务成本</a>
+<a href="../01-foundations/compute-and-memory.html">推理基础、调度、GPU 优化与分布式</a>
+<a href="../01-foundations/concepts.html">公共基础：推理、KV Cache、内存和性能</a>
+<a href="../01-foundations/design-atlas.html">设计图册：从请求执行到共享 KV 存储</a>
+<a href="../01-foundations/overview.html">LLM Infra 总体介绍：先把整条链路想明白</a>
+</details>
+<details><summary>02 推理运行时</summary>
+<a href="../02-runtime/index.html">02 · 推理运行时：把请求变成每一轮 GPU 工作</a>
+<a href="../02-runtime/implementations/sglang/knowledge-map.html">学习大纲与完整知识地图</a>
+<a href="../02-runtime/implementations/sglang/overview.html">SGLang：把请求调度、前缀复用与分层缓存连起来</a>
+<a href="../02-runtime/implementations/sglang/runtime.html">SGLang 架构、运行图与源码路线</a>
+<a href="../02-runtime/implementations/vllm/architecture.html">知识地图与 vLLM 设计图</a>
+<a href="../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
+<a href="../02-runtime/implementations/vllm/request-walkthrough.html">vLLM 源码教材：跟踪一条请求及其资源</a>
+</details>
+<details><summary>03 KV Cache 管理</summary>
+<a href="../03-kv-cache/index.html">03 · KV Cache 管理：让正确的状态在正确的时间可用</a>
+<a href="../03-kv-cache/capacity-and-reuse.html">03 · KV Cache 基础与性能模型</a>
+<a href="../03-kv-cache/semantics-and-costs.html">semantics-and-costs</a>
+<a href="../03-kv-cache/implementations/lmcache/internals.html">internals</a>
+<a href="../03-kv-cache/implementations/lmcache/overview.html">LMCache：把 KV 的保存、查找、加载和回收管起来</a>
+<a href="../03-kv-cache/implementations/lmcache/state-diagrams.html">state-diagrams</a>
+<a href="../03-kv-cache/implementations/sglang/prefix-cache.html">KV Cache：原理、容量、分页、前缀复用与正确性</a>
+<a href="../03-kv-cache/implementations/sglang/tiered-cache.html">HiCache、Mooncake、LMCache 与 PD 分离</a>
+<a href="../03-kv-cache/implementations/vllm/integration.html">KV Cache 专题：vLLM、LMCache 与 Mooncake</a>
+</details>
+<details><summary>04 分布式存储</summary>
+<a href="../04-storage/index.html">04 · 分布式存储：把可复用状态放进共享资源池</a>
+<a href="../04-storage/kv-cache-storage.html">KV Cache 存储详解：数据模型、协议、容量、性能与故障</a>
+<a href="../04-storage/implementations/lmcache/backend-contracts.html">backend-contracts</a>
+<a href="../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake：从一次 KV 保存到下一次请求恢复</a>
+<a href="../04-storage/implementations/mooncake/architecture.html">02 · 知识地图与设计图</a>
+<a href="../04-storage/implementations/mooncake/integrations.html">05 · LMCache 与推理引擎集成</a>
+<a href="../04-storage/implementations/mooncake/internals.html">04 · Mooncake 内核与源码路线</a>
+<a href="../04-storage/implementations/mooncake/overview.html">Mooncake：KV 对象怎样共享、怎样安全地高速搬运</a>
+</details>
+<details><summary>05 数据传输</summary>
+<a href="../05-transfer/index.html">05 · 数据传输：搬得动、搬得快，还要搬得安全</a>
+<a href="../05-transfer/implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine：字节移动的实现案例</a>
+</details>
+<details><summary>06 Serving 与性能</summary>
+<a href="../06-serving/index.html">06 · Serving 与性能：让整条链路满足服务目标</a>
+<a href="../06-serving/component-selection.html">Serving 组件选型：在同一技术问题下比较实现</a>
+<a href="../06-serving/implementations/lmcache/observability.html">observability</a>
+<a href="../06-serving/implementations/vllm/performance-and-parallelism.html">性能、分布式与服务工程教材</a>
+</details>
+<details><summary>07 实验与验证</summary>
+<a href="../07-practice/index.html">07 · 实验与验证：用证据回答系统问题</a>
+<a href="../07-practice/implementations/lmcache/labs.html">labs</a>
+<a href="../07-practice/implementations/mooncake/labs.html">06 · 实验与性能诊断</a>
+<a href="../07-practice/implementations/sglang/labs.html">实验手册：从单机基线到共享缓存与 PD</a>
+<a href="../07-practice/implementations/vllm/experiments.html">实验与项目：从原理到可复现证据</a>
+<a href="../07-practice/implementations/vllm/walkthrough.html">实践教材：运行步骤、源码作业与参考答案</a>
+</details>
+<details open><summary>08 专家能力与面试</summary>
+<a href="index.html">08 · 岗位、学习计划与面试：按能力组织成果</a>
+<a href="coverage-and-review.html">资料结构与覆盖范围审阅</a>
+<a href="expert-interview-guide.html">LLM 推理 Infra 专家面试总纲：P7–P8 能力参考，重点 KV Cache 存储</a>
+<a href="expert-qa.html" aria-current="page">P7–P8 KV Cache 存储深挖问答</a>
+<a href="interview-and-design.html">面试与项目：能解释、能算账、能处理失败</a>
+<a href="references.html">按问题查资料：专题索引与版本基线</a>
+<a href="roles.html">按岗位方向学习：什么必须熟练，什么可以后学</a>
+<a href="study-plan.html">统一 28 天学习计划：基础只学一次，后面按岗位分流</a>
+<a href="implementations/lmcache/index.html">index</a>
+<a href="implementations/lmcache/questions.html">questions</a>
+<a href="implementations/lmcache/study-plan.html">study-plan</a>
+<a href="implementations/lmcache/system-design.html">system-design</a>
+<a href="implementations/mooncake/index.html">Mooncake 与 KV Cache 存储：28 天学习手册</a>
+<a href="implementations/mooncake/questions.html">07 · 面试题与参考回答</a>
+<a href="implementations/mooncake/study-plan.html">01 · 28 天学习计划</a>
+<a href="implementations/mooncake/system-design.html">08 · 系统设计、毕业项目与参考资料</a>
+<a href="implementations/sglang/assessment.html">参考资料、实验报告与最终验收</a>
+<a href="implementations/sglang/questions.html">推理 Infra 面试：36 道题与系统设计</a>
+<a href="implementations/sglang/study-plan.html">28 天学习计划</a>
+<a href="implementations/vllm/questions.html">推理 Infra 面试：60 个问题与参考回答</a>
+<a href="implementations/vllm/references.html">官方资料与版本说明</a>
+<a href="implementations/vllm/study-plan.html">28 天学习大纲与每日计划</a>
+</details>
+<a href="coverage-and-review.html">覆盖范围与审阅</a>
+</nav></aside>
+<main id="content"><div class="breadcrumbs">08 专家能力与面试 · 专注 KV Cache 存储</div>
+<article><h1 id="p7p8-kv-cache-存储深挖问答">P7–P8 KV Cache 存储深挖问答</h1>
+<p><a href="expert-interview-guide.html">专家面试总纲</a> · <a href="../01-foundations/design-atlas.html">设计图册</a> · <a href="../04-storage/kv-cache-storage.html">KV 存储详解</a> · <a href="../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake</a></p>
+<p>总纲回答“要准备什么”，这一页回答“具体怎么答”。每题按 <strong>考察点 → 回答要点 → 继续追问 → 常见失分</strong> 组织。回答要点是参考思路，不是标准答案；涉及 LMCache、Mooncake 的细节对应资料中的固定版本，面试时应说明“以我读过的版本为准”。</p>
+<p>P7 型回答至少要把一个问题讲到状态、预算和失败处理；P8 型回答还要比较方案、说明演进路线和跨团队边界。每题末尾的“P8 加分”给出这一层的方向。</p>
+
+<h2 id="一正确性与身份">一、正确性与身份</h2>
+
+<h3 id="q1-两条请求文本相同为什么不一定能共享-kv">Q1：两条请求文本相同，为什么不一定能共享 KV？</h3>
+<p><strong>考察点</strong>：是否把 KV 当作“计算状态”而不是“文本缓存”。</p>
+<p><strong>回答要点</strong>：</p>
+<ol>
+<li>KV 由模型权重、tokenizer 与模板产生的 token 序列、位置编码、dtype 和并行切分共同决定。文本相同但模板、LoRA、模型 revision、RoPE 配置不同，状态就不同。</li>
+<li>普通因果注意力下，第 i 个 token 的 KV 依赖它之前的全部 token，所以 key 必须包含父前缀身份，单独 hash 一个 chunk 的内容是错误的。</li>
+<li>即使身份一致，读出的字节还要按相同的 layer/head/rank 布局解释；布局变了，key 相同也不能用。</li>
+<li>因此设计上把“语义身份”编码进 key 或 namespace，把“表示格式”放进版本化的格式描述，两者都要校验。</li>
+</ol>
+<p><strong>继续追问</strong>：哪些字段必须进 key，哪些可以由部署约束保证？滑窗或混合模型怎么办？</p>
+<p><strong>常见失分</strong>：只说“用 prompt 的 hash 当 key”；忽略 tokenizer 模板；把 namespace 当成访问控制。</p>
+<p><strong>P8 加分</strong>：提出跨引擎的格式描述与兼容性矩阵，说明谁负责维护、升级时怎样双写或隔离。</p>
+
+<h3 id="q2-4-个-rank-中一个对象缺失能复用多少">Q2：一个 chunk 在 TP=4 下拆成 4 个对象，其中 1 个缺失，能复用多少？</h3>
+<p><strong>考察点</strong>：对象级命中与模型级可用范围的区别。</p>
+<p><strong>回答要点</strong>：普通 full attention 下，每个 rank 只持有部分 head，缺一个 rank 这个 chunk 就不完整，所有 rank 都不能跳过它；后续 chunk 依赖它，也不能用。可复用范围是“所有 rank 都完整的最长连续前缀”。实现上可以像 LMCache 的分组 bitmap 那样按行（group × rank）记录，再折叠出共同前缀。</p>
+<p><strong>继续追问</strong>：滑窗层只需要最近窗口的 KV，折叠规则如何改变？已经加载成功的其他 rank 数据怎么处理？</p>
+<p><strong>常见失分</strong>：把 4 个对象中 3 个命中说成“命中率 75%，跳过 75% 计算”。</p>
+<p><strong>P8 加分</strong>：讨论是否需要 manifest 级提交（一个前缀的所有对象一起发布）与消费端折叠两种方案的取舍：前者写路径复杂，后者读路径浪费带宽。</p>
+
+<h2 id="二发布与生命周期">二、发布与生命周期</h2>
+
+<h3 id="q3-为什么写入要分配发布两步">Q3：为什么写入要“分配 → 写数据 → 发布”分步，而不是一次 put？</h3>
+<p><strong>考察点</strong>：可见性边界。</p>
+<p><strong>回答要点</strong>：分配成功只代表有了空间，数据还没写完。如果分配后立刻可见，读者可能读到半成品。所以要先写入，确认完整后再发布。Mooncake 的单对象路径可以用 <code>PutStart → 写入 → PutEnd/PutRevoke</code> 理解，LMCache 的 L1 用 staging → admission 实现同样的不变量。写者中途退出时，需要超时清理未发布对象和空间，同时不能伤害仍在进行的传输。</p>
+<p><strong>继续追问</strong>：两个写者同时写同一个内容 key 怎么办？批量写一半成功，上层如何计数？</p>
+<p><strong>常见失分</strong>：认为“批量写”是事务；认为 put 返回成功就一定覆盖了旧值（在 Mooncake 学习版本中，已存在对象可以返回成功而不覆盖）。</p>
+<p><strong>P8 加分</strong>：把“幂等写”“版本化 key”“upsert”三种语义列成对照，说明 KV 内容寻址场景为什么优先不可变 key。</p>
+
+<h3 id="q4-lease-引用计数-设备事件-能互相替代吗">Q4：读租约、引用计数、CUDA event 能互相替代吗？</h3>
+<p><strong>考察点</strong>：三层保护各管什么。</p>
+<p><strong>回答要点</strong>：</p>
+<ul>
+<li><strong>读租约</strong>：存储服务在一段时间内不回收某个副本，跨进程、跨机器生效，但有时限。</li>
+<li><strong>引用计数</strong>：本进程内某块内存还有几个使用者，没有时限，但只在所属进程内可见。</li>
+<li><strong>设备事件 / 传输完成</strong>：异步操作是否真的结束，回答“现在能不能读写这块 buffer”。</li>
+</ul>
+<p>三者回答的问题不同，互相不能替代。例如租约有效不代表 DMA 已完成；DMA 完成不代表租约在读取期间一直有效；本地锁计数也不会自动变成远端的跨客户端锁（学习版本中 LMCache 的 native adapter 就是在客户端本地维护锁计数）。</p>
+<p><strong>继续追问</strong>：租约时长怎么定？读取超过租约会发生什么？</p>
+<p><strong>常见失分</strong>：说“有租约就安全”；把 TTL、pin 当成在途保护。</p>
+<p><strong>P8 加分</strong>：给出统一的“资源所有者表”：每块资源由谁分配、谁持有、哪个事件之后可以释放，作为跨团队接口约定。</p>
+
+<h3 id="q5-超时后为什么不能立即释放-buffer">Q5：远端加载超时，为什么不能立即释放目标 buffer？</h3>
+<p><strong>考察点</strong>：异步资源安全。参考<a href="../01-foundations/design-atlas.html#d10--远端加载超时与租约到期">设计图 D10</a>。</p>
+<p><strong>回答要点</strong>：超时只是调用方不再等待，底层 RDMA 或 DMA 可能仍在写这块内存。立即复用会导致新请求的数据被旧任务覆盖，输出错误且难以复现。正确做法：标记放弃 → 隔离目标 → 等待取消确认或完成事件 → 释放；迟到的回调用 generation 判断是否过期并丢弃。服务层面，本次请求走重算，不阻塞在这个 buffer 上。</p>
+<p><strong>继续追问</strong>：隔离期间内存被占住，怎样防止大量超时导致内存耗尽？</p>
+<p><strong>常见失分</strong>：只说“设置超时后重试”。</p>
+<p><strong>P8 加分</strong>：提出隔离内存的配额与告警，把“超时后仍未完成的任务数”作为健康指标。</p>
+
+<h2 id="三容量性能与成本">三、容量、性能与成本</h2>
+
+<h3 id="q6-命中率-90ttft-却变差怎么排查">Q6：命中率从 50% 提到 90%，TTFT 反而变差，怎么排查？</h3>
+<p><strong>考察点</strong>：指标口径与端到端归因。</p>
+<p><strong>回答要点</strong>：</p>
+<ol>
+<li>先核对口径：命中率是按请求、按 token 还是按对象统计？实际少算了多少 token？</li>
+<li>拆分 TTFT：排队、lookup、加载等待、H2D、Prefill 计算各占多少。</li>
+<li>常见原因：热点集中导致少数存储节点排队；加载比重算还慢（短前缀）；预取占满 staging，挤压了其他请求；同步等待阻塞了调度。</li>
+<li>对照实验：固定负载，分别关闭远端层、只开本地层、限制加载等待上限，看哪一段变化。</li>
+</ol>
+<p><strong>继续追问</strong>：加载与重算的盈亏点怎么算？</p>
+<p><strong>常见失分</strong>：默认“命中率越高越好”。</p>
+<p><strong>P8 加分</strong>：建议引入“有效节省 token / 加载字节”等成本指标，让命中策略以 goodput 和成本为目标，而不是命中率。</p>
+
+<h3 id="q7-加载与重算的盈亏点">Q7：给一个模型和网络，怎样判断该加载还是重算？</h3>
+<p><strong>考察点</strong>：定量能力。</p>
+<p><strong>回答要点</strong>：以示例模型每 token 128 KiB 为例，1K token 约 128 MiB。按 400 Gbit/s 理想线速约 50 GB/s，传输下界约 2.7 ms；真实系统再加查询、排队、H2D 和同步。再估算这 1K token 的 Prefill 时间（取决于模型大小和 GPU）。加载关键路径明显短于重算时才值得加载；短前缀、网络拥塞或 GPU 空闲时，重算可能更划算。这些是推导，不是实测，结论要用实验验证。</p>
+<p><strong>继续追问</strong>：GPU 繁忙和空闲时结论会变吗？预取能隐藏多少？</p>
+<p><strong>常见失分</strong>：只比较带宽，不算查询和排队；把理论线速当实际吞吐。</p>
+<p><strong>P8 加分</strong>：把盈亏点做成运行时决策（按前缀长度、当前队列和 GPU 负载动态选择），并说明怎样防止决策抖动。</p>
+
+<h3 id="q8-chunk-大小怎么选">Q8：chunk 大小选 64 还是 256 token？</h3>
+<p><strong>考察点</strong>：多维取舍。参考<a href="../01-foundations/design-atlas.html#d12--共享-kv-层容量与流量规划">设计图 D12</a>。</p>
+<p><strong>回答要点</strong>：小 chunk 匹配更精细、部分命中浪费少，但对象数、元数据、RPC 和注册开销成倍增加；大 chunk 元数据少、传输效率高，但尾部不满一个 chunk 的部分无法复用，失败时重传成本大。还要和引擎 page 大小、TP 切分后的单对象大小一起看：TP=4 时单对象只有逻辑 chunk 的四分之一。</p>
+<p><strong>继续追问</strong>：对象数达到几百万时控制面会先遇到什么瓶颈？</p>
+<p><strong>常见失分</strong>：只给一个数字，不说依据。</p>
+<p><strong>P8 加分</strong>：提出按负载特征分层（热点长前缀用大 chunk，多轮对话尾部用小 chunk）并说明复杂度代价。</p>
+
+<h3 id="q9-容量规划">Q9：保留 32,768 个 8K 前缀、两副本，需要多少机器？</h3>
+<p><strong>考察点</strong>：完整的预算方法。</p>
+<p><strong>回答要点</strong>：逻辑 KV 32 TiB，两副本 payload 64 TiB。若每台 512 GiB 且只有 80% 可用于缓存池，128 台只有 51.2 TiB，不够；160 台刚好 64 TiB，但还没留元数据、staging、碎片和故障余量，所以需要更多。还要检查去掉一个故障域后是否仍够，以及读带宽（例：200 req/s × 75% × 1 GiB ≈ 150 GiB/s）需要多少链路。</p>
+<p><strong>继续追问</strong>：前缀大量共享时怎样重新估算？</p>
+<p><strong>常见失分</strong>：只算 payload；按请求数而不是唯一前缀数计算。</p>
+<p><strong>P8 加分</strong>：给出正常、单故障域退出、扩容迁移三种状态下的预算，并说明成本与 SLO 的取舍由谁拍板。</p>
+
+<h2 id="四可靠性与运维">四、可靠性与运维</h2>
+
+<h3 id="q10-两副本能否容忍一台机器故障">Q10：两副本能否容忍一台机器故障？</h3>
+<p><strong>考察点</strong>：副本与故障域。</p>
+<p><strong>回答要点</strong>：取决于放置。两个副本若在同一台机器的两个 segment 上，整机故障时会同时丢失。必须确认放置策略真正跨 host 或 rack，并检查实际分配结果（申请 N 副本不保证得到 N 个跨机器副本）。另外，副本丢失后要有修复或重新写入策略，修复流量会和在线读写竞争。对可重算的 KV，副本主要换来的是“故障时少重算”，要和容量成本一起算。</p>
+<p><strong>继续追问</strong>：目录服务 HA 与数据副本有什么区别？</p>
+<p><strong>常见失分</strong>：把“副本数 = 2”直接等同于“可容忍单机故障”。</p>
+<p><strong>P8 加分</strong>：结合重算容量讨论：如果 GPU 侧有足够余量，可以少副本；否则副本是在买 SLO。</p>
+
+<h3 id="q11-目录主节点故障时怎么办">Q11：目录主节点故障，服务应该怎样表现？</h3>
+<p><strong>考察点</strong>：HA 与降级。参考<a href="../01-foundations/design-atlas.html#d11--目录主节点切换与恢复">设计图 D11</a>。</p>
+<p><strong>回答要点</strong>：切换期间新查询失败按 miss 处理，请求走重算；已在途读取以租约和完成结果判断是否有效。新主上任要先隔离旧主（递增 term），再从快照和日志恢复元数据，核对 payload 是否还在，清理未发布对象。恢复后限流预热，避免大量请求同时回源。</p>
+<p><strong>继续追问</strong>：如果所有内存副本都丢了，HA 能恢复数据吗？</p>
+<p><strong>常见失分</strong>：说“主备切换后数据就恢复了”。元数据可以恢复，丢失的内存 payload 不能凭空恢复。</p>
+<p><strong>P8 加分</strong>：定义恢复目标（多久恢复查询、多久恢复写入、命中率多久回到基线），并把演练纳入发布流程。</p>
+
+<h3 id="q12-缓存层故障导致重算风暴">Q12：缓存层整体故障，GPU 重算被打满，怎么设计降级？</h3>
+<p><strong>考察点</strong>：系统级背压。</p>
+<p><strong>回答要点</strong>：缓存故障本身不影响正确性，但会把负载转移到 GPU。需要：限制重试次数和回源速率；按优先级准入，必要时拒绝或排队低优先级请求；监控 miss 原因和 GPU 队列；恢复后分批预热，避免第二波冲击。容量规划时就要评估“缓存全冷”状态下的服务能力。</p>
+<p><strong>继续追问</strong>：哪些指标触发降级，由谁执行？</p>
+<p><strong>常见失分</strong>：只说“缓存失败就重算”，不考虑容量。</p>
+<p><strong>P8 加分</strong>：把缓存层纳入整体容量模型，明确“有缓存”和“无缓存”两种运行状态的 SLO 承诺。</p>
+
+<h3 id="q13-升级模型时缓存怎么办">Q13：升级模型或 KV 格式时，已有缓存怎么处理？</h3>
+<p><strong>考察点</strong>：演进与治理。参考<a href="../01-foundations/design-atlas.html#d13--模型格式升级与多租户隔离">设计图 D13</a>。</p>
+<p><strong>回答要点</strong>：新模型的 KV 和旧模型不兼容，使用新 namespace；新旧实例互不读取。灰度期间新实例从冷启动开始，命中率下降，要预估额外的 GPU 重算；可以预热热点前缀。旧 namespace 只读并逐步淘汰。出现正确性或 SLO 异常时路由回旧版本。</p>
+<p><strong>继续追问</strong>：能否把旧 KV 转换成新格式？</p>
+<p><strong>常见失分</strong>：沿用旧 key 让新模型读旧缓存。</p>
+<p><strong>P8 加分</strong>：把升级流程标准化为平台能力，包括配额、预热预算、观测指标和回滚开关。</p>
+
+<h2 id="五实现与工程">五、实现与工程</h2>
+
+<h3 id="q14-讲一次-lmcache-mooncake-的保存与恢复">Q14：讲一次 LMCache + Mooncake 的保存与恢复。</h3>
+<p><strong>考察点</strong>：能否把源码落到状态与完成事件。参考<a href="../01-foundations/design-atlas.html#d9--实现案例保存与恢复的两条完成链">设计图 D9</a>。</p>
+<p><strong>回答要点</strong>：保存：GPU 产生 KV → LMCache L1 预留 staging → 设备拷贝完成后发布为可读 → 按策略提交 L2 → native adapter 调用 Mooncake 批量写 → Store 分配、传输、发布 → 汇总结果并释放本次保留。恢复：LOOKUP 的 ack 只表示已登记 → 规划 L1/L2 来源并取得保护 → 远端数据先进 L1 staging → 成功对象发布并加读保留 → 按 group/rank 折叠出可用前缀 → 拷贝到 GPU 页 → 引擎跳过相应 token。要强调至少三个不同的“完成”：L1 可读、L2 保存完成、GPU 可消费。</p>
+<p><strong>继续追问</strong>：哪一步失败会造成错误输出，哪一步只会造成性能损失？</p>
+<p><strong>常见失分</strong>：把 lookup 成功当命中；忽略 GPU 侧的完成条件。</p>
+<p><strong>P8 加分</strong>：指出接口契约与实现保证的差距（例如本地锁计数与远端租约），并提出可验证的改进。</p>
+
+<h3 id="q15-手写同-key-在途加载合并">Q15：手写“同 key 在途加载合并”，要注意什么？</h3>
+<p><strong>考察点</strong>：并发编码。</p>
+<p><strong>回答要点</strong>：用一个 map 记录 key → 在途任务；第一个请求创建任务，后来者等待同一个结果。必须处理：任务失败时唤醒所有等待者并移除条目，避免后来者永远等待；等待者取消时不能取消别人的任务；最后一个等待者离开时决定是否取消底层任务；结果的生命周期要覆盖所有读者。锁只保护 map，不要在持锁时做 I/O。</p>
+<p><strong>继续追问</strong>：怎样测试失败和取消路径？</p>
+<p><strong>常见失分</strong>：只写成功路径；持锁做网络调用。</p>
+<p><strong>P8 加分</strong>：讨论在途合并与预取、热点复制的关系，以及对尾延迟的影响。</p>
+
+<h3 id="q16-讲一个你推动的设计">Q16：讲一个你负责或推动的 KV 存储设计。</h3>
+<p><strong>考察点</strong>：真实经历与影响力。</p>
+<p><strong>回答结构</strong>：背景和目标（指标）→ 约束 → 备选方案与取舍 → 你的具体决定 → 落地过程与协作 → 结果数据 → 遗留问题与复盘。数据要说明测量条件；没有生产经历时，可以讲完整的设计与实验项目，但要如实说明范围。</p>
+<p><strong>常见失分</strong>：只讲做了什么，不讲为什么这样选；夸大个人范围。</p>
+<p><strong>P8 加分</strong>：说明怎样让多个团队接受接口约定，以及方案在后续一两年的演进。</p>
+
+<h2 id="练习方法">练习方法</h2>
+<p>每题限时 5 分钟口述，录音后对照“常见失分”自查；每周挑 3 题请别人连续追问三层。答不出来的地方回到<a href="../04-storage/kv-cache-storage.html">KV 存储详解</a>和<a href="../04-storage/implementations/lmcache/mooncake-walkthrough.html">联合链路</a>补齐，再在<a href="expert-interview-guide.html#7-专家自评方法">总纲的自评表</a>中更新等级。</p>
+</article>
+<footer><a href="../index.html">返回总目录</a>
+<p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#一正确性与身份">一、正确性与身份</a><a class="level-2" href="#二发布与生命周期">二、发布与生命周期</a><a class="level-2" href="#三容量性能与成本">三、容量、性能与成本</a><a class="level-2" href="#四可靠性与运维">四、可靠性与运维</a><a class="level-2" href="#五实现与工程">五、实现与工程</a><a class="level-2" href="#练习方法">练习方法</a></aside>
+<dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
+<button id="search-close" aria-label="关闭搜索">关闭</button></div>
+<input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">
+<p id="search-status" role="status">输入主题、术语或问题</p><ol id="search-results"></ol></dialog>
+</body></html>

@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>02 · 知识地图与设计图 · LLM Infra</title>
+<link rel="stylesheet" href="../../../assets/site.css">
+<script defer src="../../../assets/search-index.js"></script><script defer src="../../../assets/mermaid.min.js"></script>
+<script defer src="../../../assets/site.js"></script></head>
+<body data-root="../../..">
+<a class="skip" href="#content">跳到正文</a>
+<header class="topbar"><button id="nav-toggle" aria-controls="sidebar" aria-expanded="false">目录</button>
+<a class="brand" href="../../../index.html">LLM Infra <span>学习资料库</span></a>
+<button id="search-open">搜索内容 <kbd>/</kbd></button></header>
+<aside id="sidebar"><nav aria-label="学习主题">
+<a href="../../../index.html">总目录</a>
+<div class="featured">
+<a href="../../../01-foundations/design-atlas.html">设计图册</a>
+<a href="../../../08-career/expert-interview-guide.html">P7–P8 专家面试</a>
+<a href="../../../08-career/expert-qa.html">KV 存储深挖问答</a>
+<a href="../../kv-cache-storage.html">KV 存储详解</a>
+<a href="../lmcache/mooncake-walkthrough.html">LMCache + Mooncake</a>
+</div>
+<details><summary>01 基础与设计图</summary>
+<a href="../../../01-foundations/index.html">01 · 基础与全景：先理解计算、资源和请求</a>
+<a href="../../../01-foundations/attention-and-inference.html">推理基础教材：从 Transformer 到服务成本</a>
+<a href="../../../01-foundations/compute-and-memory.html">推理基础、调度、GPU 优化与分布式</a>
+<a href="../../../01-foundations/concepts.html">公共基础：推理、KV Cache、内存和性能</a>
+<a href="../../../01-foundations/design-atlas.html">设计图册：从请求执行到共享 KV 存储</a>
+<a href="../../../01-foundations/overview.html">LLM Infra 总体介绍：先把整条链路想明白</a>
+</details>
+<details><summary>02 推理运行时</summary>
+<a href="../../../02-runtime/index.html">02 · 推理运行时：把请求变成每一轮 GPU 工作</a>
+<a href="../../../02-runtime/implementations/sglang/knowledge-map.html">学习大纲与完整知识地图</a>
+<a href="../../../02-runtime/implementations/sglang/overview.html">SGLang：把请求调度、前缀复用与分层缓存连起来</a>
+<a href="../../../02-runtime/implementations/sglang/runtime.html">SGLang 架构、运行图与源码路线</a>
+<a href="../../../02-runtime/implementations/vllm/architecture.html">知识地图与 vLLM 设计图</a>
+<a href="../../../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
+<a href="../../../02-runtime/implementations/vllm/request-walkthrough.html">vLLM 源码教材：跟踪一条请求及其资源</a>
+</details>
+<details><summary>03 KV Cache 管理</summary>
+<a href="../../../03-kv-cache/index.html">03 · KV Cache 管理：让正确的状态在正确的时间可用</a>
+<a href="../../../03-kv-cache/capacity-and-reuse.html">03 · KV Cache 基础与性能模型</a>
+<a href="../../../03-kv-cache/semantics-and-costs.html">semantics-and-costs</a>
+<a href="../../../03-kv-cache/implementations/lmcache/internals.html">internals</a>
+<a href="../../../03-kv-cache/implementations/lmcache/overview.html">LMCache：把 KV 的保存、查找、加载和回收管起来</a>
+<a href="../../../03-kv-cache/implementations/lmcache/state-diagrams.html">state-diagrams</a>
+<a href="../../../03-kv-cache/implementations/sglang/prefix-cache.html">KV Cache：原理、容量、分页、前缀复用与正确性</a>
+<a href="../../../03-kv-cache/implementations/sglang/tiered-cache.html">HiCache、Mooncake、LMCache 与 PD 分离</a>
+<a href="../../../03-kv-cache/implementations/vllm/integration.html">KV Cache 专题：vLLM、LMCache 与 Mooncake</a>
+</details>
+<details open><summary>04 分布式存储</summary>
+<a href="../../index.html">04 · 分布式存储：把可复用状态放进共享资源池</a>
+<a href="../../kv-cache-storage.html">KV Cache 存储详解：数据模型、协议、容量、性能与故障</a>
+<a href="../lmcache/backend-contracts.html">backend-contracts</a>
+<a href="../lmcache/mooncake-walkthrough.html">LMCache + Mooncake：从一次 KV 保存到下一次请求恢复</a>
+<a href="architecture.html" aria-current="page">02 · 知识地图与设计图</a>
+<a href="integrations.html">05 · LMCache 与推理引擎集成</a>
+<a href="internals.html">04 · Mooncake 内核与源码路线</a>
+<a href="overview.html">Mooncake：KV 对象怎样共享、怎样安全地高速搬运</a>
+</details>
+<details><summary>05 数据传输</summary>
+<a href="../../../05-transfer/index.html">05 · 数据传输：搬得动、搬得快，还要搬得安全</a>
+<a href="../../../05-transfer/implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine：字节移动的实现案例</a>
+</details>
+<details><summary>06 Serving 与性能</summary>
+<a href="../../../06-serving/index.html">06 · Serving 与性能：让整条链路满足服务目标</a>
+<a href="../../../06-serving/component-selection.html">Serving 组件选型：在同一技术问题下比较实现</a>
+<a href="../../../06-serving/implementations/lmcache/observability.html">observability</a>
+<a href="../../../06-serving/implementations/vllm/performance-and-parallelism.html">性能、分布式与服务工程教材</a>
+</details>
+<details><summary>07 实验与验证</summary>
+<a href="../../../07-practice/index.html">07 · 实验与验证：用证据回答系统问题</a>
+<a href="../../../07-practice/implementations/lmcache/labs.html">labs</a>
+<a href="../../../07-practice/implementations/mooncake/labs.html">06 · 实验与性能诊断</a>
+<a href="../../../07-practice/implementations/sglang/labs.html">实验手册：从单机基线到共享缓存与 PD</a>
+<a href="../../../07-practice/implementations/vllm/experiments.html">实验与项目：从原理到可复现证据</a>
+<a href="../../../07-practice/implementations/vllm/walkthrough.html">实践教材：运行步骤、源码作业与参考答案</a>
+</details>
+<details><summary>08 专家能力与面试</summary>
+<a href="../../../08-career/index.html">08 · 岗位、学习计划与面试：按能力组织成果</a>
+<a href="../../../08-career/coverage-and-review.html">资料结构与覆盖范围审阅</a>
+<a href="../../../08-career/expert-interview-guide.html">LLM 推理 Infra 专家面试总纲：P7–P8 能力参考，重点 KV Cache 存储</a>
+<a href="../../../08-career/expert-qa.html">P7–P8 KV Cache 存储深挖问答</a>
+<a href="../../../08-career/interview-and-design.html">面试与项目：能解释、能算账、能处理失败</a>
+<a href="../../../08-career/references.html">按问题查资料：专题索引与版本基线</a>
+<a href="../../../08-career/roles.html">按岗位方向学习：什么必须熟练，什么可以后学</a>
+<a href="../../../08-career/study-plan.html">统一 28 天学习计划：基础只学一次，后面按岗位分流</a>
+<a href="../../../08-career/implementations/lmcache/index.html">index</a>
+<a href="../../../08-career/implementations/lmcache/questions.html">questions</a>
+<a href="../../../08-career/implementations/lmcache/study-plan.html">study-plan</a>
+<a href="../../../08-career/implementations/lmcache/system-design.html">system-design</a>
+<a href="../../../08-career/implementations/mooncake/index.html">Mooncake 与 KV Cache 存储：28 天学习手册</a>
+<a href="../../../08-career/implementations/mooncake/questions.html">07 · 面试题与参考回答</a>
+<a href="../../../08-career/implementations/mooncake/study-plan.html">01 · 28 天学习计划</a>
+<a href="../../../08-career/implementations/mooncake/system-design.html">08 · 系统设计、毕业项目与参考资料</a>
+<a href="../../../08-career/implementations/sglang/assessment.html">参考资料、实验报告与最终验收</a>
+<a href="../../../08-career/implementations/sglang/questions.html">推理 Infra 面试：36 道题与系统设计</a>
+<a href="../../../08-career/implementations/sglang/study-plan.html">28 天学习计划</a>
+<a href="../../../08-career/implementations/vllm/questions.html">推理 Infra 面试：60 个问题与参考回答</a>
+<a href="../../../08-career/implementations/vllm/references.html">官方资料与版本说明</a>
+<a href="../../../08-career/implementations/vllm/study-plan.html">28 天学习大纲与每日计划</a>
+</details>
+<a href="../../../08-career/coverage-and-review.html">覆盖范围与审阅</a>
+</nav></aside>
+<main id="content"><div class="breadcrumbs">04 分布式存储 · 专注 KV Cache 存储</div>
+<article><h1 id="02--知识地图与设计图">02 · 知识地图与设计图</h1>
+<p>本章 Mermaid 图由本地页面直接渲染。图中“教学模型”表示为了理解而抽象的行为；涉及具体 API 的部分以 <a href="internals.html">源码路线</a> 为准。</p>
+<h2 id="1-完整知识地图">1. 完整知识地图</h2>
+<figure class="diagram" data-status="pending"><div class="mermaid-target" aria-label="设计图"></div><details open><summary>查看图源</summary><pre class="mermaid-source"><code>flowchart TB
+    R[&quot;推理 Infra / KV Cache 存储&quot;]
+    R --&gt; A[&quot;计算与语义 P0&quot;]
+    R --&gt; B[&quot;缓存与存储 P0&quot;]
+    R --&gt; C[&quot;通信与硬件 P0/P1&quot;]
+    R --&gt; D[&quot;分布式正确性 P0/P1&quot;]
+    R --&gt; E[&quot;集成与调度 P0/P1&quot;]
+    R --&gt; F[&quot;评估与工程 P0&quot;]
+    R --&gt; G[&quot;Mooncake 进阶 P2&quot;]
+    A --&gt; A1[&quot;Attention / Prefill / Decode&quot;]
+    A --&gt; A2[&quot;MHA / GQA / MQA / MLA&quot;]
+    A --&gt; A3[&quot;分页 / 前缀依赖 / dtype / TP&quot;]
+    B --&gt; B1[&quot;HBM / DRAM / SSD / 远端池&quot;]
+    B --&gt; B2[&quot;内容标识 / namespace / chunk&quot;]
+    B --&gt; B3[&quot;准入 / 淘汰 / 预取 / 写回&quot;]
+    B --&gt; B4[&quot;容量 / 碎片 / 副本 / 热点&quot;]
+    C --&gt; C1[&quot;NUMA / PCIe / NVLink / HBM&quot;]
+    C --&gt; C2[&quot;TCP / RDMA / QP / CQ / MR&quot;]
+    C --&gt; C3[&quot;批处理 / 多网卡 / GDR / 完成语义&quot;]
+    D --&gt; D1[&quot;对象状态 / 租约 / pin / 幂等&quot;]
+    D --&gt; D2[&quot;部分失败 / fencing / HA / 恢复&quot;]
+    D --&gt; D3[&quot;隔离 / 配额 / 校验 / 生命周期&quot;]
+    E --&gt; E1[&quot;vLLM Connector / LMCache / HiCache&quot;]
+    E --&gt; E2[&quot;PD 分离 / cache-aware routing&quot;]
+    E --&gt; E3[&quot;SLO / 队列 / 准入 / 背压&quot;]
+    F --&gt; F1[&quot;TTFT / ITL / goodput / 分位数&quot;]
+    F --&gt; F2[&quot;负载模型 / 消融 / 故障注入&quot;]
+    F --&gt; F3[&quot;C++ 并发 / Python 绑定 / 监控&quot;]
+    G --&gt; G1[&quot;TENT / Store-RS / P2P Store&quot;]
+    G --&gt; G2[&quot;Conductor / EP / PG / Reshard / RL&quot;]
+</code></pre></details></figure><p>把图变成可执行知识表：</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>分支</th>
+<th>核心问题</th>
+<th>必须掌握的工程技能</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>计算</td>
+<td>哪些计算可省，哪些必须保留？</td>
+<td>根据模型实际 KV 张量计算容量，核对 prefix reuse 边界</td>
+</tr>
+<tr>
+<td>存储</td>
+<td>哪些对象值得留，放在哪里？</td>
+<td>容量规划、分配器、变长对象、冷热分层、写放大分析</td>
+</tr>
+<tr>
+<td>通信</td>
+<td>数据何时真正能被 GPU 使用？</td>
+<td>注册内存、跨节点传输、CUDA event/stream、NUMA 定位</td>
+</tr>
+<tr>
+<td>正确性</td>
+<td>如何保证读不到部分、过期或不兼容的 KV？</td>
+<td>状态机、租约、引用计数、版本化 namespace、失败回退</td>
+</tr>
+<tr>
+<td>调度</td>
+<td>命中最多的节点一定最快吗？</td>
+<td>比较队列等待、计算、传输、后续 decode 预算</td>
+</tr>
+<tr>
+<td>评估</td>
+<td>如何证明改动提升用户体验？</td>
+<td>可重复负载、冷/热对照、SLO goodput、尾延迟和质量校验</td>
+</tr>
+<tr>
+<td>实现</td>
+<td>在哪里加功能、看测试？</td>
+<td>追踪调用链、RAII、锁粒度、异步任务所有权、错误传播</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="2-生态职责图">2. 生态职责图</h2>
+<figure class="diagram" data-status="pending"><div class="mermaid-target" aria-label="设计图"></div><details open><summary>查看图源</summary><pre class="mermaid-source"><code>flowchart TB
+    U[&quot;请求 / API 网关&quot;] --&gt; R[&quot;上层 Router / Scheduler&quot;]
+    R -. &quot;可查询缓存位置&quot; .-&gt; C[&quot;Conductor：前缀索引&quot;]
+    R --&gt; V[&quot;vLLM / SGLang：执行模型、GPU block、请求调度&quot;]
+    V --&gt; N[&quot;原生 Mooncake Store Connector&quot;]
+    V --&gt; L[&quot;LMCache 或 SGLang HiCache：KV 管理与分层&quot;]
+    V --&gt; P[&quot;PD Connector：直接搬运 KV&quot;]
+    N --&gt; S[&quot;Mooncake Store：对象、副本、租约、空间&quot;]
+    L --&gt; S
+    S --&gt; T[&quot;Transfer Engine：字节传输、拓扑、批任务&quot;]
+    P --&gt; T
+    T --&gt; H[&quot;DRAM / GPU / 网络 / 支持的存储后端&quot;]
+    V -. &quot;缓存事件&quot; .-&gt; C
+    S -. &quot;对象事件&quot; .-&gt; C
+</code></pre></details></figure><p><strong>阅读要点</strong>：LMCache 是一条可选集成路径，不是所有 Mooncake 用户都必须经过的组件。Conductor 提供缓存位置查询，上层路由器仍需结合负载和 SLO 做决策。</p>
+<p>论文中的全局调度器是系统设计的一部分；不能由“安装 Store 和 TE”推断已获得论文里的完整准入、预测和调度策略。</p>
+<h2 id="3-store-部署与控制面数据面">3. Store 部署与控制面/数据面</h2>
+<figure class="diagram" data-status="pending"><div class="mermaid-target" aria-label="设计图"></div><details open><summary>查看图源</summary><pre class="mermaid-source"><code>flowchart LR
+    subgraph CTRL[&quot;控制面&quot;]
+        M[&quot;Store Master&lt;br/&gt;key 到 replica、租约、分配和回收&quot;]
+        MD[&quot;Transfer metadata&lt;br/&gt;HTTP / etcd / P2P handshake 等&quot;]
+        HA[&quot;可选 HA 协调与恢复状态&lt;br/&gt;依部署配置&quot;]
+        M -.-&gt; HA
+    end
+    subgraph A[&quot;节点 A&quot;]
+        CA[&quot;Store Client A / TE&quot;]
+        BA[&quot;本地缓冲区&quot;]
+        SA[&quot;贡献的 segment A&quot;]
+        CA --- BA
+        CA --- SA
+    end
+    subgraph B[&quot;节点 B&quot;]
+        CB[&quot;Store Client B / TE&quot;]
+        SB[&quot;贡献的 segment B&quot;]
+        DB[&quot;可选 SSD tier&quot;]
+        CB --- SB
+        CB --- DB
+    end
+    CA -. &quot;PutStart / GetReplicaList 等 RPC&quot; .-&gt; M
+    CB -. &quot;挂载、心跳、元数据 RPC&quot; .-&gt; M
+    CA -. &quot;发现连接和内存描述&quot; .-&gt; MD
+    CB -. &quot;发布连接和内存描述&quot; .-&gt; MD
+    CA == &quot;数据直接传输，不经过 Master&quot; ==&gt; SB
+</code></pre></details></figure><p>Master 的对象元数据与 TE 的连接/内存元数据是两个逻辑概念。内置 HTTP metadata server 可以与 Master 同进程，但职责没有合并。HA 使用 etcd 也不代表每个 KV 对象的 payload 或每次数据读取都经过 etcd。</p>
+<p>Client 可以既是访问者又是资源贡献者；图中的 segment 属于相应进程/节点的资源。退出贡献者可能让该处缓存副本消失。</p>
+<h2 id="4-put-正常与失败路径">4. Put 正常与失败路径</h2>
+<p>以下是 C++ Store 普通内存副本路径的简化图；磁盘/DFS 等副本具有各自完成规则。</p>
+<figure class="diagram" data-status="pending"><div class="mermaid-target" aria-label="设计图"></div><details open><summary>查看图源</summary><pre class="mermaid-source"><code>sequenceDiagram
+    participant App as 应用 / Connector
+    participant C as Store Client
+    participant M as Master
+    participant S as 远端 segment
+    App-&gt;&gt;C: put(key, bytes)
+    C-&gt;&gt;M: PutStart(key, size, config)
+    M-&gt;&gt;M: 检查键和配额、分配副本、记录未完成状态
+    M--&gt;&gt;C: replica descriptors
+    C-&gt;&gt;S: TE 写入已分配位置
+    alt 数据传输成功并满足完成规则
+        S--&gt;&gt;C: 传输完成
+        C-&gt;&gt;M: PutEnd
+        M-&gt;&gt;M: 副本变为可读
+        M--&gt;&gt;C: 提交结果
+        C--&gt;&gt;App: 成功
+    else 传输失败
+        C-&gt;&gt;M: PutRevoke / 对应失败处理
+        C--&gt;&gt;App: 错误
+    end
+    Note over M,S: Client 崩溃可能留下未完成对象，由超时清理路径处理
+</code></pre></details></figure><p>这个 start/end 协议让数据准备与发布可见性分离，但不应叫成跨对象数据库事务。读者不能使用仅分配而尚未完成的副本。</p>
+<h2 id="5-get-与租约时序">5. Get 与租约时序</h2>
+<figure class="diagram" data-status="pending"><div class="mermaid-target" aria-label="设计图"></div><details open><summary>查看图源</summary><pre class="mermaid-source"><code>sequenceDiagram
+    participant App as 应用
+    participant C as Store Client
+    participant M as Master
+    participant S as 远端副本
+    App-&gt;&gt;C: get / get_into
+    C-&gt;&gt;M: GetReplicaList(key)
+    M-&gt;&gt;M: 查可读副本并授予读租约
+    M--&gt;&gt;C: descriptors + lease
+    C-&gt;&gt;S: TE 读入目标 buffer
+    S--&gt;&gt;C: 完成 / 失败
+    C-&gt;&gt;C: 检查传输、适用的 checksum 和 lease
+    alt 全部有效
+        C--&gt;&gt;App: 返回可使用的数据
+    else 未命中 / 失败 / 租约过期
+        C--&gt;&gt;App: miss 或错误
+        App-&gt;&gt;App: 有界重试 / 重新查询 / 重算
+    end
+    Note over App,C: get_into 的目标内存可能已被写入；返回失败时不能消费它
+</code></pre></details></figure><p>租约保护正常删除/淘汰窗口；最终是否成功还依赖实际 I/O、客户端时间判断和故障状态。不能把 descriptor 缓存无限期复用。</p>
+<h2 id="6-请求运行图缓存复用与-pd">6. 请求运行图：缓存复用与 PD</h2>
+<figure class="diagram" data-status="pending"><div class="mermaid-target" aria-label="设计图"></div><details open><summary>查看图源</summary><pre class="mermaid-source"><code>flowchart TB
+    R[&quot;新请求：tokenize + namespace&quot;] --&gt; H[&quot;查找最长兼容前缀&quot;]
+    H --&gt; LOCAL{&quot;本地 KV 可用？&quot;}
+    LOCAL --&gt;|&quot;是&quot;| READY[&quot;得到可用连续前缀&quot;]
+    LOCAL --&gt;|&quot;否/部分&quot;| COST{&quot;远端拉取比重算划算且满足 deadline？&quot;}
+    COST --&gt;|&quot;是&quot;| FETCH[&quot;预取远端 KV，检查完成与各 rank 一致&quot;]
+    COST --&gt;|&quot;否&quot;| MISS[&quot;从未命中位置计算&quot;]
+    FETCH --&gt;|&quot;成功的连续前缀&quot;| READY
+    FETCH --&gt;|&quot;失败或截止&quot;| MISS
+    READY --&gt; PREFILL[&quot;只计算剩余 prompt&lt;br/&gt;可能保留末 token 用于 logits&quot;]
+    MISS --&gt; PREFILL
+    PREFILL --&gt; PD{&quot;Prefill 与 Decode 分离？&quot;}
+    PD --&gt;|&quot;否&quot;| DEC[&quot;本实例 Decode&quot;]
+    PD --&gt;|&quot;是&quot;| MOVE[&quot;直接 TE 或经 Store 交接 KV&lt;br/&gt;传递布局、请求和完成信息&quot;]
+    MOVE --&gt; DEC
+    PREFILL -. &quot;依准入策略异步缓存&quot; .-&gt; POOL[&quot;KV 缓存池&quot;]
+    DEC --&gt; OUT[&quot;流式 token / 结束 / 释放引用&quot;]
+</code></pre></details></figure><p>这张图是通用运行模型，不规定某一 Connector 的实际回调顺序。直接 TE 与 Store 交接是不同路径，部署时只能使用框架和版本实际支持的协议。</p>
+<h2 id="7-lmcache-mp-数据流">7. LMCache MP 数据流</h2>
+<figure class="diagram" data-status="pending"><div class="mermaid-target" aria-label="设计图"></div><details open><summary>查看图源</summary><pre class="mermaid-source"><code>flowchart LR
+    V[&quot;vLLM Worker&lt;br/&gt;GPU KV block&quot;] &lt;--&gt;|&quot;GPU 数据交换；依传输模式&quot;| L1
+    V -. &quot;经 MP Connector 请求&lt;br/&gt;STORE / LOOKUP / RETRIEVE&quot; .-&gt; SERVER
+    subgraph MP[&quot;LMCache 独立服务进程：典型 CPU L1 配置&quot;]
+        SERVER[&quot;请求处理 / KV 语义&quot;]
+        L1[&quot;L1 Manager&lt;br/&gt;CPU 内存、对象锁与生命周期&quot;]
+        SC[&quot;StoreController&quot;]
+        PC[&quot;PrefetchController&quot;]
+        AD[&quot;mooncake_store L2 adapter&quot;]
+        SERVER --&gt; L1
+        L1 --&gt; SC
+        SC --&gt; AD
+        AD --&gt; PC
+        PC --&gt; L1
+    end
+    AD &lt;--&gt;|&quot;对象 put/get 与数据传输&quot;| MC[&quot;Mooncake Store&lt;br/&gt;Master + 资源池 + TE&quot;]
+</code></pre></details></figure><p>MP 请求通道不等于 KV 大块数据必须序列化后穿过 RPC。实际 GPU 数据交换依赖支持的模式、内存映射和同步实现。此图画的是 CPU L1 常见配置；MP 还有特定版本支持的 GDS L1 等选项。</p>
+<h2 id="8-对象与缓冲区状态两套不同的生命周期">8. 对象与缓冲区状态：两套不同的生命周期</h2>
+<figure class="diagram" data-status="pending"><div class="mermaid-target" aria-label="设计图"></div><details open><summary>查看图源</summary><pre class="mermaid-source"><code>stateDiagram-v2
+    [*] --&gt; Absent
+    Absent --&gt; Writing: PutStart / 分配
+    Writing --&gt; Readable: 数据完成并提交
+    Writing --&gt; Absent: 撤销 / 超时清理
+    Readable --&gt; Readable: 查询并授予租约
+    Readable --&gt; Reclaimable: 满足租约和 pin 等回收条件
+    Reclaimable --&gt; Readable: 新访问可能重新保护
+    Reclaimable --&gt; Absent: 删除 / 淘汰 / 资源失效
+</code></pre></details></figure><p>这是教学对象状态机，不是 <code>ReplicaStatus</code> 枚举的逐项映射。不同副本可以处于不同状态；“可回收”也不是读不到数据，而是已满足回收资格。</p>
+<figure class="diagram" data-status="pending"><div class="mermaid-target" aria-label="设计图"></div><details open><summary>查看图源</summary><pre class="mermaid-source"><code>flowchart LR
+    A[&quot;分配 buffer&quot;] --&gt; B[&quot;注册内存 / 建立 MR&quot;]
+    B --&gt; C[&quot;数据生产完成&lt;br/&gt;必要的 CUDA 同步&quot;]
+    C --&gt; D[&quot;提交传输&quot;]
+    D --&gt; E[&quot;在途：禁止释放或改写&quot;]
+    E --&gt; F[&quot;确认完成或安全 drain&quot;]
+    F --&gt; G[&quot;消费者可使用 / 复用&quot;]
+    G --&gt; H[&quot;注销注册&quot;]
+    H --&gt; I[&quot;释放所有者&quot;]
+</code></pre></details></figure><p>超时只是等待方停止等待的信号之一；释放前必须确认底层不会再访问该内存。缓存对象生命周期与本次传输 buffer 生命周期不能互相替代。</p>
+<h2 id="9-pagechunkobjectslice-的关系">9. Page、chunk、object、slice 的关系</h2>
+<figure class="diagram" data-status="pending"><div class="mermaid-target" aria-label="设计图"></div><details open><summary>查看图源</summary><pre class="mermaid-source"><code>flowchart TB
+    TOK[&quot;逻辑 token 序列&quot;] --&gt; PAGE[&quot;推理引擎 page/block&lt;br/&gt;例如 16 tokens，教学示例&quot;]
+    PAGE --&gt; CHUNK[&quot;上层缓存 chunk&lt;br/&gt;例如 256 tokens，教学示例&quot;]
+    CHUNK --&gt; OBJ[&quot;Store object&lt;br/&gt;由 Connector 定义 key 与 bytes&quot;]
+    OBJ --&gt; SLICE[&quot;Transfer Engine 传输 slice&lt;br/&gt;用于并行和路径调度&quot;]
+    CHUNK -. &quot;各层、K/V、rank 的布局可能不同&quot; .-&gt; LAYOUT[&quot;layout / shape / dtype / rank metadata&quot;]
+</code></pre></details></figure><p>几个粒度不能混用：模型 attention window、引擎 page、LMCache chunk、Store object、TE slice 的职责不同。一个 chunk 是否包含所有层、某个 rank 或某种 packed 布局，必须看当前 Connector。</p>
+<h2 id="10-缓存感知路由与过载">10. 缓存感知路由与过载</h2>
+<figure class="diagram" data-status="pending"><div class="mermaid-target" aria-label="设计图"></div><details open><summary>查看图源</summary><pre class="mermaid-source"><code>flowchart LR
+    REQ[&quot;请求&quot;] --&gt; ROUTER[&quot;Router：候选实例&quot;]
+    IDX[&quot;Conductor / cache index&quot;] --&gt;|&quot;位置与命中估计&quot;| ROUTER
+    LOAD[&quot;队列 / GPU / 网络 / decode 负载&quot;] --&gt; ROUTER
+    ROUTER --&gt; SCORE[&quot;预测 queue + fetch + prefill + handoff&quot;]
+    SCORE --&gt; OK{&quot;可满足 TTFT 与 decode SLO？&quot;}
+    OK --&gt;|&quot;是&quot;| SELECT[&quot;选取满足约束的低成本实例&quot;]
+    OK --&gt;|&quot;否&quot;| POLICY[&quot;限流 / 排队预算 / 拒绝 / 服务降级&quot;]
+</code></pre></details></figure><p>索引可能过期。路由命中预测是性能提示，不能代替 Store 读取与兼容性检查。最大化缓存命中率还必须考虑排队、热点与网络拥塞。</p>
+</article>
+<footer><a href="../../../index.html">返回总目录</a>
+<p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-完整知识地图">1. 完整知识地图</a><a class="level-2" href="#2-生态职责图">2. 生态职责图</a><a class="level-2" href="#3-store-部署与控制面数据面">3. Store 部署与控制面/数据面</a><a class="level-2" href="#4-put-正常与失败路径">4. Put 正常与失败路径</a><a class="level-2" href="#5-get-与租约时序">5. Get 与租约时序</a><a class="level-2" href="#6-请求运行图缓存复用与-pd">6. 请求运行图：缓存复用与 PD</a><a class="level-2" href="#7-lmcache-mp-数据流">7. LMCache MP 数据流</a><a class="level-2" href="#8-对象与缓冲区状态两套不同的生命周期">8. 对象与缓冲区状态：两套不同的生命周期</a><a class="level-2" href="#9-pagechunkobjectslice-的关系">9. Page、chunk、object、slice 的关系</a><a class="level-2" href="#10-缓存感知路由与过载">10. 缓存感知路由与过载</a></aside>
+<dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
+<button id="search-close" aria-label="关闭搜索">关闭</button></div>
+<input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">
+<p id="search-status" role="status">输入主题、术语或问题</p><ol id="search-results"></ol></dialog>
+</body></html>

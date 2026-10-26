@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KV Cache：原理、容量、分页、前缀复用与正确性 · LLM Infra</title>
+<link rel="stylesheet" href="../../../assets/site.css">
+<script defer src="../../../assets/search-index.js"></script><script defer src="../../../assets/mermaid.min.js"></script>
+<script defer src="../../../assets/site.js"></script></head>
+<body data-root="../../..">
+<a class="skip" href="#content">跳到正文</a>
+<header class="topbar"><button id="nav-toggle" aria-controls="sidebar" aria-expanded="false">目录</button>
+<a class="brand" href="../../../index.html">LLM Infra <span>学习资料库</span></a>
+<button id="search-open">搜索内容 <kbd>/</kbd></button></header>
+<aside id="sidebar"><nav aria-label="学习主题">
+<a href="../../../index.html">总目录</a>
+<div class="featured">
+<a href="../../../01-foundations/design-atlas.html">设计图册</a>
+<a href="../../../08-career/expert-interview-guide.html">P7–P8 专家面试</a>
+<a href="../../../08-career/expert-qa.html">KV 存储深挖问答</a>
+<a href="../../../04-storage/kv-cache-storage.html">KV 存储详解</a>
+<a href="../../../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake</a>
+</div>
+<details><summary>01 基础与设计图</summary>
+<a href="../../../01-foundations/index.html">01 · 基础与全景：先理解计算、资源和请求</a>
+<a href="../../../01-foundations/attention-and-inference.html">推理基础教材：从 Transformer 到服务成本</a>
+<a href="../../../01-foundations/compute-and-memory.html">推理基础、调度、GPU 优化与分布式</a>
+<a href="../../../01-foundations/concepts.html">公共基础：推理、KV Cache、内存和性能</a>
+<a href="../../../01-foundations/design-atlas.html">设计图册：从请求执行到共享 KV 存储</a>
+<a href="../../../01-foundations/overview.html">LLM Infra 总体介绍：先把整条链路想明白</a>
+</details>
+<details><summary>02 推理运行时</summary>
+<a href="../../../02-runtime/index.html">02 · 推理运行时：把请求变成每一轮 GPU 工作</a>
+<a href="../../../02-runtime/implementations/sglang/knowledge-map.html">学习大纲与完整知识地图</a>
+<a href="../../../02-runtime/implementations/sglang/overview.html">SGLang：把请求调度、前缀复用与分层缓存连起来</a>
+<a href="../../../02-runtime/implementations/sglang/runtime.html">SGLang 架构、运行图与源码路线</a>
+<a href="../../../02-runtime/implementations/vllm/architecture.html">知识地图与 vLLM 设计图</a>
+<a href="../../../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
+<a href="../../../02-runtime/implementations/vllm/request-walkthrough.html">vLLM 源码教材：跟踪一条请求及其资源</a>
+</details>
+<details open><summary>03 KV Cache 管理</summary>
+<a href="../../index.html">03 · KV Cache 管理：让正确的状态在正确的时间可用</a>
+<a href="../../capacity-and-reuse.html">03 · KV Cache 基础与性能模型</a>
+<a href="../../semantics-and-costs.html">semantics-and-costs</a>
+<a href="../lmcache/internals.html">internals</a>
+<a href="../lmcache/overview.html">LMCache：把 KV 的保存、查找、加载和回收管起来</a>
+<a href="../lmcache/state-diagrams.html">state-diagrams</a>
+<a href="prefix-cache.html" aria-current="page">KV Cache：原理、容量、分页、前缀复用与正确性</a>
+<a href="tiered-cache.html">HiCache、Mooncake、LMCache 与 PD 分离</a>
+<a href="../vllm/integration.html">KV Cache 专题：vLLM、LMCache 与 Mooncake</a>
+</details>
+<details><summary>04 分布式存储</summary>
+<a href="../../../04-storage/index.html">04 · 分布式存储：把可复用状态放进共享资源池</a>
+<a href="../../../04-storage/kv-cache-storage.html">KV Cache 存储详解：数据模型、协议、容量、性能与故障</a>
+<a href="../../../04-storage/implementations/lmcache/backend-contracts.html">backend-contracts</a>
+<a href="../../../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake：从一次 KV 保存到下一次请求恢复</a>
+<a href="../../../04-storage/implementations/mooncake/architecture.html">02 · 知识地图与设计图</a>
+<a href="../../../04-storage/implementations/mooncake/integrations.html">05 · LMCache 与推理引擎集成</a>
+<a href="../../../04-storage/implementations/mooncake/internals.html">04 · Mooncake 内核与源码路线</a>
+<a href="../../../04-storage/implementations/mooncake/overview.html">Mooncake：KV 对象怎样共享、怎样安全地高速搬运</a>
+</details>
+<details><summary>05 数据传输</summary>
+<a href="../../../05-transfer/index.html">05 · 数据传输：搬得动、搬得快，还要搬得安全</a>
+<a href="../../../05-transfer/implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine：字节移动的实现案例</a>
+</details>
+<details><summary>06 Serving 与性能</summary>
+<a href="../../../06-serving/index.html">06 · Serving 与性能：让整条链路满足服务目标</a>
+<a href="../../../06-serving/component-selection.html">Serving 组件选型：在同一技术问题下比较实现</a>
+<a href="../../../06-serving/implementations/lmcache/observability.html">observability</a>
+<a href="../../../06-serving/implementations/vllm/performance-and-parallelism.html">性能、分布式与服务工程教材</a>
+</details>
+<details><summary>07 实验与验证</summary>
+<a href="../../../07-practice/index.html">07 · 实验与验证：用证据回答系统问题</a>
+<a href="../../../07-practice/implementations/lmcache/labs.html">labs</a>
+<a href="../../../07-practice/implementations/mooncake/labs.html">06 · 实验与性能诊断</a>
+<a href="../../../07-practice/implementations/sglang/labs.html">实验手册：从单机基线到共享缓存与 PD</a>
+<a href="../../../07-practice/implementations/vllm/experiments.html">实验与项目：从原理到可复现证据</a>
+<a href="../../../07-practice/implementations/vllm/walkthrough.html">实践教材：运行步骤、源码作业与参考答案</a>
+</details>
+<details><summary>08 专家能力与面试</summary>
+<a href="../../../08-career/index.html">08 · 岗位、学习计划与面试：按能力组织成果</a>
+<a href="../../../08-career/coverage-and-review.html">资料结构与覆盖范围审阅</a>
+<a href="../../../08-career/expert-interview-guide.html">LLM 推理 Infra 专家面试总纲：P7–P8 能力参考，重点 KV Cache 存储</a>
+<a href="../../../08-career/expert-qa.html">P7–P8 KV Cache 存储深挖问答</a>
+<a href="../../../08-career/interview-and-design.html">面试与项目：能解释、能算账、能处理失败</a>
+<a href="../../../08-career/references.html">按问题查资料：专题索引与版本基线</a>
+<a href="../../../08-career/roles.html">按岗位方向学习：什么必须熟练，什么可以后学</a>
+<a href="../../../08-career/study-plan.html">统一 28 天学习计划：基础只学一次，后面按岗位分流</a>
+<a href="../../../08-career/implementations/lmcache/index.html">index</a>
+<a href="../../../08-career/implementations/lmcache/questions.html">questions</a>
+<a href="../../../08-career/implementations/lmcache/study-plan.html">study-plan</a>
+<a href="../../../08-career/implementations/lmcache/system-design.html">system-design</a>
+<a href="../../../08-career/implementations/mooncake/index.html">Mooncake 与 KV Cache 存储：28 天学习手册</a>
+<a href="../../../08-career/implementations/mooncake/questions.html">07 · 面试题与参考回答</a>
+<a href="../../../08-career/implementations/mooncake/study-plan.html">01 · 28 天学习计划</a>
+<a href="../../../08-career/implementations/mooncake/system-design.html">08 · 系统设计、毕业项目与参考资料</a>
+<a href="../../../08-career/implementations/sglang/assessment.html">参考资料、实验报告与最终验收</a>
+<a href="../../../08-career/implementations/sglang/questions.html">推理 Infra 面试：36 道题与系统设计</a>
+<a href="../../../08-career/implementations/sglang/study-plan.html">28 天学习计划</a>
+<a href="../../../08-career/implementations/vllm/questions.html">推理 Infra 面试：60 个问题与参考回答</a>
+<a href="../../../08-career/implementations/vllm/references.html">官方资料与版本说明</a>
+<a href="../../../08-career/implementations/vllm/study-plan.html">28 天学习大纲与每日计划</a>
+</details>
+<a href="../../../08-career/coverage-and-review.html">覆盖范围与审阅</a>
+</nav></aside>
+<main id="content"><div class="breadcrumbs">03 KV Cache 管理 · 专注 KV Cache 存储</div>
+<article><h1 id="kv-cache原理容量分页前缀复用与正确性">KV Cache：原理、容量、分页、前缀复用与正确性</h1>
+<p><a href="../../../02-runtime/implementations/sglang/overview.html">返回导航</a> · <a href="tiered-cache.html">分层缓存与框架专题</a></p>
+<h2 id="1-kv-cache-保存什么">1. KV Cache 保存什么</h2>
+<p>在标准因果自回归模型中，KV Cache 保存历史 token 在各层产生的 Key 和 Value。新增后续 token 不会改变历史位置已经计算的 K/V，因此可以复用。</p>
+<p>新 token 的 Query 读取历史 K/V；历史 Query 通常不再用于未来步骤，因此通常无需缓存。</p>
+<p>KV Cache 避免历史 token 在各层的重复前向计算，但新 token 仍需执行模型层和对历史 KV 的 Attention。序列增长后，KV 读取成本仍会增加。</p>
+<h2 id="2-容量公式">2. 容量公式</h2>
+<p>对各层形状一致的标准 Full Attention：</p>
+<div class="math block">
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+  <msub>
+    <mi>M</mi>
+    <mtext>KV</mtext>
+  </msub>
+  <mo>=</mo>
+  <mn>2</mn>
+  <mo>×</mo>
+  <mi>L</mi>
+  <mo>×</mo>
+  <msub>
+    <mi>H</mi>
+    <mtext>KV</mtext>
+  </msub>
+  <mo>×</mo>
+  <msub>
+    <mi>D</mi>
+    <mtext>head</mtext>
+  </msub>
+  <mo>×</mo>
+  <mi>b</mi>
+  <mo>×</mo>
+  <munder>
+    <mo movablelimits="true">∑</mo>
+    <mi>i</mi>
+  </munder>
+  <msub>
+    <mi>S</mi>
+    <mi>i</mi>
+  </msub>
+</math>
+</div>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>符号</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2</td>
+<td>K 与 V</td>
+</tr>
+<tr>
+<td>(L)</td>
+<td>层数</td>
+</tr>
+<tr>
+<td>(H_{\text{KV}})</td>
+<td>KV head 数，不是默认用 Query head 数</td>
+</tr>
+<tr>
+<td>(D_{\text{head}})</td>
+<td>Head dimension</td>
+</tr>
+<tr>
+<td>(b)</td>
+<td>每元素字节数</td>
+</tr>
+<tr>
+<td>(S_i)</td>
+<td>请求 (i) 当前缓存长度</td>
+</tr>
+</tbody>
+</table></div>
+<p>若不同请求共享物理前缀，不能重复计算该前缀的物理占用；上式按请求长度求和对应无共享或逻辑用量估计。</p>
+<h3 id="21-示例gqabf168k-上下文">2.1 示例：GQA、BF16、8K 上下文</h3>
+<p>假设：</p>
+<ul>
+<li>32 层。</li>
+<li>8 个 KV heads。</li>
+<li>Head dimension 128。</li>
+<li>BF16，每元素 2 bytes。</li>
+</ul>
+<div class="math block">
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+  <msub>
+    <mi>M</mi>
+    <mtext>每 token</mtext>
+  </msub>
+  <mo>=</mo>
+  <mn>2</mn>
+  <mo>×</mo>
+  <mn>32</mn>
+  <mo>×</mo>
+  <mn>8</mn>
+  <mo>×</mo>
+  <mn>128</mn>
+  <mo>×</mo>
+  <mn>2</mn>
+  <mo>=</mo>
+  <mn>131072</mn>
+  <mtext> bytes</mtext>
+  <mo>=</mo>
+  <mn>128</mn>
+  <mtext> KiB</mtext>
+</math>
+</div>
+<p>因此：</p>
+<ul>
+<li>8192 token 单请求约 1 GiB。</li>
+<li>32 个不共享前缀的同长度请求约 32 GiB。</li>
+<li>若改成 32 个 KV heads，每 token 512 KiB，8K 单请求约 4 GiB。</li>
+</ul>
+<p>计算器示例：</p>
+<pre><code class="language-python">def kv_bytes_per_token(layers, kv_heads, head_dim, element_bytes):
+    return 2 * layers * kv_heads * head_dim * element_bytes
+
+per_token = kv_bytes_per_token(32, 8, 128, 2)
+per_request = per_token * 8192
+print({&quot;bytes_per_token&quot;: per_token, &quot;gib_per_request&quot;: per_request / 2**30})
+</code></pre>
+<h3 id="22-模型权重与其他开销">2.2 模型权重与其他开销</h3>
+<p>Dense 8B 模型的 BF16 权重粗略为 16 GB，约 14.9 GiB。部署时还需预留：</p>
+<ul>
+<li>激活与 workspace。</li>
+<li>CUDA Graph 的额外缓冲和内存池。</li>
+<li>通信缓冲。</li>
+<li>内存碎片与页面尾部浪费。</li>
+<li>量化 scale、索引和元数据。</li>
+<li>投机解码、混合状态、多模态或 LoRA 的额外资源。</li>
+</ul>
+<p>不能用“GPU 显存减权重”作为完全可用的 KV 容量。</p>
+<h3 id="23-并发上限近似">2.3 并发上限近似</h3>
+<p>无共享、长度近似一致时：</p>
+<div class="math block">
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+  <msub>
+    <mi>C</mi>
+    <mtext>capacity</mtext>
+  </msub>
+  <mo>≈</mo>
+  <mrow>
+    <mo>⌊</mo>
+    <mfrac>
+      <msub>
+        <mi>M</mi>
+        <mtext>可用 KV</mtext>
+      </msub>
+      <mrow>
+        <msub>
+          <mi>M</mi>
+          <mtext>每 token</mtext>
+        </msub>
+        <mo>×</mo>
+        <msub>
+          <mi>S</mi>
+          <mtext>预算</mtext>
+        </msub>
+      </mrow>
+    </mfrac>
+    <mo>⌋</mo>
+  </mrow>
+</math>
+</div>
+<p>这是容量上限近似，不是满足 SLO 的吞吐容量。(S_{\text{预算}}) 应考虑输入和输出增长；共享、碎片、调度及其他状态会改变结果。</p>
+<h3 id="24-并行切分">2.4 并行切分</h3>
+<div class="math block">
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+  <msub>
+    <mi>M</mi>
+    <mtext>每 rank KV</mtext>
+  </msub>
+  <mo>=</mo>
+  <mn>2</mn>
+  <mo>×</mo>
+  <msub>
+    <mi>L</mi>
+    <mtext>本 rank</mtext>
+  </msub>
+  <mo>×</mo>
+  <msub>
+    <mi>H</mi>
+    <mtext>本 rank KV</mtext>
+  </msub>
+  <mo>×</mo>
+  <msub>
+    <mi>D</mi>
+    <mtext>head</mtext>
+  </msub>
+  <mo>×</mo>
+  <mi>b</mi>
+  <mo>×</mo>
+  <mi>S</mi>
+</math>
+</div>
+<p>只有实际均匀切分时才可直接除以 TP size。KV 复制、PP、CP/DCP、MLA 等会改变每 rank 的状态分布。</p>
+<h2 id="3-地址映射与物理分页">3. 地址映射与物理分页</h2>
+<pre><code class="language-text">请求 ID
+  ↓
+请求中 token 的逻辑位置
+  ↓
+KV slot / page 索引
+  ↓
+该层 K/V tensor 中的物理位置
+</code></pre>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>组件</th>
+<th>职责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>批次分配策略</td>
+<td>根据 batch 的增长决定需要哪些新位置</td>
+</tr>
+<tr>
+<td>Allocator</td>
+<td>管理空闲 slot/page，分配与回收索引</td>
+</tr>
+<tr>
+<td>KV pool</td>
+<td>定义实际张量和物理布局</td>
+</tr>
+<tr>
+<td>Prefix cache</td>
+<td>根据 token 前缀决定共享、保留与淘汰</td>
+</tr>
+<tr>
+<td>Attention backend</td>
+<td>按索引读取 KV 并执行计算</td>
+</tr>
+</tbody>
+</table></div>
+<p>当前分层说明：<a href="https://github.com/sgl-project/sglang/blob/30dc2f94303e339431cbd51489b2d1719678b0c1/python/sglang/srt/mem_cache/README.md">mem_cache README</a>。</p>
+<p>分页让逻辑连续的序列可以对应非连续物理页，减少动态增长时的连续大块分配问题，也便于共享。它不能消除所有浪费，例如最后一页可能未填满，元数据也有成本。</p>
+<p>页面大小的取舍：</p>
+<ul>
+<li>小页：匹配粒度细，尾部浪费少，但索引和小 I/O 更多。</li>
+<li>大页：元数据少，批量传输友好，但复用边界粗。</li>
+<li>引擎 page 与外部缓存 chunk 的概念及大小不一定相同，需要 connector 正确处理对齐。</li>
+</ul>
+<h2 id="4-pagedattention-与-radixattention">4. PagedAttention 与 RadixAttention</h2>
+<ul>
+<li>PagedAttention 关注分页管理和按页访问 KV。</li>
+<li>RadixAttention 关注通过前缀树索引和复用已有 KV。</li>
+</ul>
+<p>一个解决物理内存组织，一个解决逻辑复用索引，可以结合使用。</p>
+<h2 id="5-radix-tree-示例">5. Radix tree 示例</h2>
+<pre><code class="language-text">请求 1：A B C D E
+请求 2：A B C D F
+请求 3：A B G
+
+root
+  └── [A B]
+        ├── [C D]
+        │     ├── [E]
+        │     └── [F]
+        └── [G]
+</code></pre>
+<p>树节点通常保存物理 KV 的索引与元数据，不是每个节点都复制一份完整的请求 KV。</p>
+<h3 id="51-查找">5.1 查找</h3>
+<p><code>match_prefix</code> 沿 token 路径查找可复用的最长前缀，同时考虑页面边界与状态有效性。</p>
+<h3 id="52-插入">5.2 插入</h3>
+<p><code>insert</code> 将新的 token span 与 KV 索引纳入树，复用已有公共路径，并处理重复物理位置。</p>
+<h3 id="53-拆分">5.3 拆分</h3>
+<p>如果匹配或分叉发生在压缩节点内部，需要拆出新的公共边界。例如原节点 <code>[A B C D]</code> 遇到请求 <code>[A B G]</code>，应拆为 <code>[A B]</code> 与后续分支。</p>
+<h3 id="54-淘汰">5.4 淘汰</h3>
+<p><code>evict</code> 回收允许淘汰的物理缓存并维护树结构。保留共享父路径、保护活跃引用，以及多组件状态的一致性，是实现难点。</p>
+<p>源码入口：</p>
+<ul>
+<li><a href="https://github.com/sgl-project/sglang/blob/30dc2f94303e339431cbd51489b2d1719678b0c1/python/sglang/srt/mem_cache/radix_cache.py">RadixCache：基础算法参考</a></li>
+<li><a href="https://github.com/sgl-project/sglang/blob/30dc2f94303e339431cbd51489b2d1719678b0c1/python/sglang/srt/mem_cache/unified_radix_cache.py">UnifiedRadixCache：当前主要路径</a></li>
+<li><a href="https://github.com/sgl-project/sglang/blob/30dc2f94303e339431cbd51489b2d1719678b0c1/python/sglang/srt/mem_cache/unified_cache/components/README.md">Unified 组件说明</a></li>
+</ul>
+<h2 id="6-生命周期与引用保护">6. 生命周期与引用保护</h2>
+<p>下面是教学状态图，不是源码中的枚举名称：</p>
+<figure class="diagram" data-status="pending"><div class="mermaid-target" aria-label="设计图"></div><details open><summary>查看图源</summary><pre class="mermaid-source"><code>stateDiagram-v2
+    [*] --&gt; Free
+    Free --&gt; Allocated: 分配物理位置
+    Allocated --&gt; InUse: 写入完成并被请求使用
+    InUse --&gt; Retained: 活跃请求释放引用
+    Retained --&gt; InUse: 新请求命中
+    Retained --&gt; Transferring: 备份或迁移
+    Transferring --&gt; Retained: 传输完成
+    Retained --&gt; Free: 满足安全淘汰条件
+</code></pre></details></figure><p>真实实现可同时存在多个副本和多个引用，不能仅凭单个状态判断是否可释放。</p>
+<p>关键不变量：</p>
+<ol>
+<li>活跃计算使用的物理位置不能被覆盖。</li>
+<li>传输读取的源 buffer 在操作完成前不能提前复用。</li>
+<li>目标数据完整就绪前不能被当作有效缓存消费。</li>
+<li>请求取消后仍需处理异步操作的引用和完成状态。</li>
+<li>树中的有效索引必须对应有效的物理资源。</li>
+</ol>
+<p>请求完成时，通常释放请求引用和私有资源；可复用 KV 可继续留在树中，等后续策略淘汰。</p>
+<h2 id="7-缓存兼容性与-key">7. 缓存兼容性与 key</h2>
+<p>正确复用至少考虑：</p>
+<ul>
+<li>模型权重与版本。</li>
+<li>实际 token IDs、前文和位置。</li>
+<li>RoPE、Attention mask 等计算语义。</li>
+<li>LoRA 或其他改变前向结果的适配器。</li>
+<li>多模态输入所产生的状态。</li>
+<li>KV dtype、量化参数、存储布局。</li>
+<li>并行切分和兼容的重组方式。</li>
+<li>租户、命名空间与 cache salt。</li>
+</ul>
+<p>通常采样温度不改变输入 Prefill 的 KV，但采样结果会改变后续序列。</p>
+<p>分布式缓存常用带历史信息的链式 hash，概念上：</p>
+<div class="math block">
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+  <msub>
+    <mi>h</mi>
+    <mi>i</mi>
+  </msub>
+  <mo>=</mo>
+  <mi>H</mi>
+  <mo stretchy="false">(</mo>
+  <mtext>namespace</mtext>
+  <mo>,</mo>
+  <msub>
+    <mi>h</mi>
+    <mrow>
+      <mi>i</mi>
+      <mo>−</mo>
+      <mn>1</mn>
+    </mrow>
+  </msub>
+  <mo>,</mo>
+  <mtext>当前 token 块</mtext>
+  <mo stretchy="false">)</mo>
+</math>
+</div>
+<p>只 hash 当前文本块不够：相同文本放在不同前文后，KV 可能不同。</p>
+<p>命名空间隔离也不等于访问控制。生产系统还需要服务认证、权限、配额和网络隔离。</p>
+<h3 id="71-当前可选统一-l3-key-scheme">7.1 当前可选统一 L3 key scheme</h3>
+<p>当前源码有 <code>--hicache-storage-key-scheme unified</code> 对应的统一方案，用层范围、head 范围等数据坐标描述对象，而非仅按写入 rank 命名。</p>
+<p>这要求整个共享域约定：</p>
+<ul>
+<li>head group。</li>
+<li>layer partition。</li>
+<li>page size。</li>
+<li>模型标识与逻辑 dtype。</li>
+<li>对象布局及其他兼容条件。</li>
+</ul>
+<p>不能认为任意 TP/PP 配置天然能互换 KV。默认按本地 shard 推导的配置也不等于跨拓扑共享已完成。</p>
+<p><a href="https://github.com/sgl-project/sglang/blob/30dc2f94303e339431cbd51489b2d1719678b0c1/python/sglang/srt/mem_cache/hicache_key_scheme.py">统一 key scheme</a></p>
+<h2 id="8-gqamlaswa-与-ssm">8. GQA、MLA、SWA 与 SSM</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>类型</th>
+<th>缓存特征</th>
+<th>容量与正确性注意事项</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MHA</td>
+<td>多组 K/V heads</td>
+<td>根据实际 KV heads 计算</td>
+</tr>
+<tr>
+<td>GQA</td>
+<td>多个 Query heads 共享较少 KV heads</td>
+<td>不要用 Query head 数估算 KV</td>
+</tr>
+<tr>
+<td>MQA</td>
+<td>更少 KV heads</td>
+<td>仍需考虑实现中的复制</td>
+</tr>
+<tr>
+<td>MLA</td>
+<td>压缩 latent 与位置相关状态等</td>
+<td>按实际 pool 的 shape 和 dtype 计算</td>
+</tr>
+<tr>
+<td>SWA</td>
+<td>相应层只需窗口范围内历史</td>
+<td>混合模型中的 Full 层仍可能需要完整历史</td>
+</tr>
+<tr>
+<td>Mamba/SSM</td>
+<td>递归状态、checkpoint、分支 COW</td>
+<td>不等同于普通逐 token KV</td>
+</tr>
+<tr>
+<td>混合模型</td>
+<td>多类状态共同决定可恢复前缀</td>
+<td>不能只看 Full KV 命中长度</td>
+</tr>
+</tbody>
+</table></div>
+<p>MLA 的具体缓存取决于模型与 backend；不能普遍把它写成某个固定压缩比例。</p>
+<p>Mamba/SSM 的状态通常不以 Full Attention 同样的方式随序列增长，但前缀分支、检查点和并发会增加所需状态数量。</p>
+<h2 id="9-unified-cache-的多组件语义">9. Unified Cache 的多组件语义</h2>
+<p>当前实现把 Full、SWA、Mamba 等抽象为组件：</p>
+<ul>
+<li>共享逻辑前缀树。</li>
+<li>各组件保存自己的物理状态和锁引用。</li>
+<li>匹配必须满足相关组件有效性。</li>
+<li>物理恢复可能涉及 COW。</li>
+<li>淘汰可能触发跨组件级联，以保持可恢复状态一致。</li>
+</ul>
+<p>Full 组件当前通过可淘汰叶集合管理候选，辅助组件有独立 LRU。不要把“Unified”理解成所有状态只有一个内存池或一种淘汰算法。</p>
+<h2 id="10-量化压缩淘汰与分层">10. 量化、压缩、淘汰与分层</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>技术</th>
+<th>改变什么</th>
+<th>必须验证</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>KV 量化</td>
+<td>每个值的精度与字节数</td>
+<td>质量、scale、转换与 kernel 开销</td>
+</tr>
+<tr>
+<td>KV 压缩</td>
+<td>存储/传输表示</td>
+<td>压缩率、编解码、质量</td>
+</tr>
+<tr>
+<td>缓存淘汰</td>
+<td>保留哪些缓存</td>
+<td>未来复用率、重算、活跃状态正确性</td>
+</tr>
+<tr>
+<td>分层迁移</td>
+<td>缓存位于何种介质</td>
+<td>容量、带宽、加载与生命周期</td>
+</tr>
+</tbody>
+</table></div>
+<p>淘汰未使用的前缀主要影响未来重算；删除活跃 Attention 必需的内容则可能改变语义，或要求专门恢复。两者必须区分。</p>
+<h2 id="11-完整命中与非前缀复用">11. 完整命中与非前缀复用</h2>
+<p>完整 Prompt 命中不一定意味着零计算：</p>
+<ul>
+<li>系统通常缓存 KV，不一定保存末位置 hidden state 或 logits。</li>
+<li>可能需要重新处理最后一个 token 来获得输出分布。</li>
+<li>页面或 chunk 对齐可能导致尾部没有复用。</li>
+<li>混合模型可能缺少对应 checkpoint。</li>
+</ul>
+<p>RAG 文档块出现在新的前文之后时，其 KV 通常会变化。直接拼接独立计算的文档 KV 不能保证标准 Attention 的原始语义。相关 CacheBlend 方法见 <a href="tiered-cache.html">06</a>。</p>
+<h2 id="12-正确性检查清单">12. 正确性检查清单</h2>
+<ul>
+<li>相同输入、模型、配置下，与无复用路径比较。</li>
+<li>检查首次匹配、节点内部拆分、部分页命中。</li>
+<li>检查并发共享、重复插入、淘汰后重命中。</li>
+<li>检查取消、超时、异步传输完成后清理。</li>
+<li>检查 LoRA、dtype、layout、位置、版本与租户隔离。</li>
+<li>检查多 rank 成功恢复长度的一致性。</li>
+<li>检查混合状态缺失时是否拒绝错误命中。</li>
+<li>对数值差异使用合适的 logprob/任务质量验证，不把所有非 bitwise 一致都判为错误。</li>
+</ul>
+<h2 id="13-练习">13. 练习</h2>
+<ol>
+<li>将示例的 BF16 改为 1 byte KV，计算理论数据体积；列出未计入的 scale 和转换成本。</li>
+<li>32 个请求共享 4096 token 前缀、各有 4096 token 私有后缀，计算理想物理 KV，比较无共享情况。</li>
+<li>对 page size 64，解释 130 token 前缀在只复用完整页的情况下可能留下多少尾部。</li>
+<li>构造“文本块相同但前文不同”的反例，解释为什么不能仅按块文本 hash。</li>
+<li>说明一次异步回写期间请求被取消时，源与目标分别需要什么保护。</li>
+</ol>
+</article>
+<footer><a href="../../../index.html">返回总目录</a>
+<p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-kv-cache-保存什么">1. KV Cache 保存什么</a><a class="level-2" href="#2-容量公式">2. 容量公式</a><a class="level-3" href="#21-示例gqabf168k-上下文">2.1 示例：GQA、BF16、8K 上下文</a><a class="level-3" href="#22-模型权重与其他开销">2.2 模型权重与其他开销</a><a class="level-3" href="#23-并发上限近似">2.3 并发上限近似</a><a class="level-3" href="#24-并行切分">2.4 并行切分</a><a class="level-2" href="#3-地址映射与物理分页">3. 地址映射与物理分页</a><a class="level-2" href="#4-pagedattention-与-radixattention">4. PagedAttention 与 RadixAttention</a><a class="level-2" href="#5-radix-tree-示例">5. Radix tree 示例</a><a class="level-3" href="#51-查找">5.1 查找</a><a class="level-3" href="#52-插入">5.2 插入</a><a class="level-3" href="#53-拆分">5.3 拆分</a><a class="level-3" href="#54-淘汰">5.4 淘汰</a><a class="level-2" href="#6-生命周期与引用保护">6. 生命周期与引用保护</a><a class="level-2" href="#7-缓存兼容性与-key">7. 缓存兼容性与 key</a><a class="level-3" href="#71-当前可选统一-l3-key-scheme">7.1 当前可选统一 L3 key scheme</a><a class="level-2" href="#8-gqamlaswa-与-ssm">8. GQA、MLA、SWA 与 SSM</a><a class="level-2" href="#9-unified-cache-的多组件语义">9. Unified Cache 的多组件语义</a><a class="level-2" href="#10-量化压缩淘汰与分层">10. 量化、压缩、淘汰与分层</a><a class="level-2" href="#11-完整命中与非前缀复用">11. 完整命中与非前缀复用</a><a class="level-2" href="#12-正确性检查清单">12. 正确性检查清单</a><a class="level-2" href="#13-练习">13. 练习</a></aside>
+<dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
+<button id="search-close" aria-label="关闭搜索">关闭</button></div>
+<input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">
+<p id="search-status" role="status">输入主题、术语或问题</p><ol id="search-results"></ol></dialog>
+</body></html>

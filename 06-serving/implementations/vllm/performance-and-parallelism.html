@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>性能、分布式与服务工程教材 · LLM Infra</title>
+<link rel="stylesheet" href="../../../assets/site.css">
+<script defer src="../../../assets/search-index.js"></script>
+<script defer src="../../../assets/site.js"></script></head>
+<body data-root="../../..">
+<a class="skip" href="#content">跳到正文</a>
+<header class="topbar"><button id="nav-toggle" aria-controls="sidebar" aria-expanded="false">目录</button>
+<a class="brand" href="../../../index.html">LLM Infra <span>学习资料库</span></a>
+<button id="search-open">搜索内容 <kbd>/</kbd></button></header>
+<aside id="sidebar"><nav aria-label="学习主题">
+<a href="../../../index.html">总目录</a>
+<div class="featured">
+<a href="../../../01-foundations/design-atlas.html">设计图册</a>
+<a href="../../../08-career/expert-interview-guide.html">P7–P8 专家面试</a>
+<a href="../../../08-career/expert-qa.html">KV 存储深挖问答</a>
+<a href="../../../04-storage/kv-cache-storage.html">KV 存储详解</a>
+<a href="../../../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake</a>
+</div>
+<details><summary>01 基础与设计图</summary>
+<a href="../../../01-foundations/index.html">01 · 基础与全景：先理解计算、资源和请求</a>
+<a href="../../../01-foundations/attention-and-inference.html">推理基础教材：从 Transformer 到服务成本</a>
+<a href="../../../01-foundations/compute-and-memory.html">推理基础、调度、GPU 优化与分布式</a>
+<a href="../../../01-foundations/concepts.html">公共基础：推理、KV Cache、内存和性能</a>
+<a href="../../../01-foundations/design-atlas.html">设计图册：从请求执行到共享 KV 存储</a>
+<a href="../../../01-foundations/overview.html">LLM Infra 总体介绍：先把整条链路想明白</a>
+</details>
+<details><summary>02 推理运行时</summary>
+<a href="../../../02-runtime/index.html">02 · 推理运行时：把请求变成每一轮 GPU 工作</a>
+<a href="../../../02-runtime/implementations/sglang/knowledge-map.html">学习大纲与完整知识地图</a>
+<a href="../../../02-runtime/implementations/sglang/overview.html">SGLang：把请求调度、前缀复用与分层缓存连起来</a>
+<a href="../../../02-runtime/implementations/sglang/runtime.html">SGLang 架构、运行图与源码路线</a>
+<a href="../../../02-runtime/implementations/vllm/architecture.html">知识地图与 vLLM 设计图</a>
+<a href="../../../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
+<a href="../../../02-runtime/implementations/vllm/request-walkthrough.html">vLLM 源码教材：跟踪一条请求及其资源</a>
+</details>
+<details><summary>03 KV Cache 管理</summary>
+<a href="../../../03-kv-cache/index.html">03 · KV Cache 管理：让正确的状态在正确的时间可用</a>
+<a href="../../../03-kv-cache/capacity-and-reuse.html">03 · KV Cache 基础与性能模型</a>
+<a href="../../../03-kv-cache/semantics-and-costs.html">semantics-and-costs</a>
+<a href="../../../03-kv-cache/implementations/lmcache/internals.html">internals</a>
+<a href="../../../03-kv-cache/implementations/lmcache/overview.html">LMCache：把 KV 的保存、查找、加载和回收管起来</a>
+<a href="../../../03-kv-cache/implementations/lmcache/state-diagrams.html">state-diagrams</a>
+<a href="../../../03-kv-cache/implementations/sglang/prefix-cache.html">KV Cache：原理、容量、分页、前缀复用与正确性</a>
+<a href="../../../03-kv-cache/implementations/sglang/tiered-cache.html">HiCache、Mooncake、LMCache 与 PD 分离</a>
+<a href="../../../03-kv-cache/implementations/vllm/integration.html">KV Cache 专题：vLLM、LMCache 与 Mooncake</a>
+</details>
+<details><summary>04 分布式存储</summary>
+<a href="../../../04-storage/index.html">04 · 分布式存储：把可复用状态放进共享资源池</a>
+<a href="../../../04-storage/kv-cache-storage.html">KV Cache 存储详解：数据模型、协议、容量、性能与故障</a>
+<a href="../../../04-storage/implementations/lmcache/backend-contracts.html">backend-contracts</a>
+<a href="../../../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake：从一次 KV 保存到下一次请求恢复</a>
+<a href="../../../04-storage/implementations/mooncake/architecture.html">02 · 知识地图与设计图</a>
+<a href="../../../04-storage/implementations/mooncake/integrations.html">05 · LMCache 与推理引擎集成</a>
+<a href="../../../04-storage/implementations/mooncake/internals.html">04 · Mooncake 内核与源码路线</a>
+<a href="../../../04-storage/implementations/mooncake/overview.html">Mooncake：KV 对象怎样共享、怎样安全地高速搬运</a>
+</details>
+<details><summary>05 数据传输</summary>
+<a href="../../../05-transfer/index.html">05 · 数据传输：搬得动、搬得快，还要搬得安全</a>
+<a href="../../../05-transfer/implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine：字节移动的实现案例</a>
+</details>
+<details open><summary>06 Serving 与性能</summary>
+<a href="../../index.html">06 · Serving 与性能：让整条链路满足服务目标</a>
+<a href="../../component-selection.html">Serving 组件选型：在同一技术问题下比较实现</a>
+<a href="../lmcache/observability.html">observability</a>
+<a href="performance-and-parallelism.html" aria-current="page">性能、分布式与服务工程教材</a>
+</details>
+<details><summary>07 实验与验证</summary>
+<a href="../../../07-practice/index.html">07 · 实验与验证：用证据回答系统问题</a>
+<a href="../../../07-practice/implementations/lmcache/labs.html">labs</a>
+<a href="../../../07-practice/implementations/mooncake/labs.html">06 · 实验与性能诊断</a>
+<a href="../../../07-practice/implementations/sglang/labs.html">实验手册：从单机基线到共享缓存与 PD</a>
+<a href="../../../07-practice/implementations/vllm/experiments.html">实验与项目：从原理到可复现证据</a>
+<a href="../../../07-practice/implementations/vllm/walkthrough.html">实践教材：运行步骤、源码作业与参考答案</a>
+</details>
+<details><summary>08 专家能力与面试</summary>
+<a href="../../../08-career/index.html">08 · 岗位、学习计划与面试：按能力组织成果</a>
+<a href="../../../08-career/coverage-and-review.html">资料结构与覆盖范围审阅</a>
+<a href="../../../08-career/expert-interview-guide.html">LLM 推理 Infra 专家面试总纲：P7–P8 能力参考，重点 KV Cache 存储</a>
+<a href="../../../08-career/expert-qa.html">P7–P8 KV Cache 存储深挖问答</a>
+<a href="../../../08-career/interview-and-design.html">面试与项目：能解释、能算账、能处理失败</a>
+<a href="../../../08-career/references.html">按问题查资料：专题索引与版本基线</a>
+<a href="../../../08-career/roles.html">按岗位方向学习：什么必须熟练，什么可以后学</a>
+<a href="../../../08-career/study-plan.html">统一 28 天学习计划：基础只学一次，后面按岗位分流</a>
+<a href="../../../08-career/implementations/lmcache/index.html">index</a>
+<a href="../../../08-career/implementations/lmcache/questions.html">questions</a>
+<a href="../../../08-career/implementations/lmcache/study-plan.html">study-plan</a>
+<a href="../../../08-career/implementations/lmcache/system-design.html">system-design</a>
+<a href="../../../08-career/implementations/mooncake/index.html">Mooncake 与 KV Cache 存储：28 天学习手册</a>
+<a href="../../../08-career/implementations/mooncake/questions.html">07 · 面试题与参考回答</a>
+<a href="../../../08-career/implementations/mooncake/study-plan.html">01 · 28 天学习计划</a>
+<a href="../../../08-career/implementations/mooncake/system-design.html">08 · 系统设计、毕业项目与参考资料</a>
+<a href="../../../08-career/implementations/sglang/assessment.html">参考资料、实验报告与最终验收</a>
+<a href="../../../08-career/implementations/sglang/questions.html">推理 Infra 面试：36 道题与系统设计</a>
+<a href="../../../08-career/implementations/sglang/study-plan.html">28 天学习计划</a>
+<a href="../../../08-career/implementations/vllm/questions.html">推理 Infra 面试：60 个问题与参考回答</a>
+<a href="../../../08-career/implementations/vllm/references.html">官方资料与版本说明</a>
+<a href="../../../08-career/implementations/vllm/study-plan.html">28 天学习大纲与每日计划</a>
+</details>
+<a href="../../../08-career/coverage-and-review.html">覆盖范围与审阅</a>
+</nav></aside>
+<main id="content"><div class="breadcrumbs">06 Serving 与性能 · 专注 KV Cache 存储</div>
+<article><h1 id="性能分布式与服务工程教材">性能、分布式与服务工程教材</h1>
+<p><a href="../../../02-runtime/implementations/vllm/overview.html">返回导航</a> · <a href="../../../02-runtime/implementations/vllm/request-walkthrough.html">源码教材</a> · <a href="../../../07-practice/implementations/vllm/walkthrough.html">实践教材</a></p>
+<p>本章把“为什么这样设计”与“怎样证明有效”连接起来。P1～P10 覆盖性能测试、GPU 执行、并行、PD、模型扩展和服务工程；无需先写 CUDA 才能开始。</p>
+<h2 id="p1-先建立可比较的性能基线">P1. 先建立可比较的性能基线</h2>
+<p>一个 benchmark 结论至少需要六个条件：</p>
+<pre><code class="language-text">模型与精度
+硬件与拓扑
+输入/输出长度分布
+请求到达过程
+服务配置与缓存冷热
+指标与正确性要求
+</code></pre>
+<p>只说“某配置 1000 tokens/s”，缺少以上条件，就难以比较或复现。</p>
+<h3 id="开放式与闭环负载">开放式与闭环负载</h3>
+<p>闭环固定并发：始终维持约 C 个在途请求，完成后才补下一个。服务变慢时发送速度也降低，因此可能掩盖生产流量不断到来的排队问题。</p>
+<p>开放式到达率：按 λ requests/s 产生请求；若长期超过处理能力，队列增长。实际客户端仍可能受并发限制、连接数和 CPU 限制，所以要记录真实发送时间。</p>
+<p>不要把客户端等待发送的时间从所有指标里悄悄删除，再声称服务端仍有稳定低延迟。</p>
+<h3 id="单变量对照">单变量对照</h3>
+<p>先测短短、长短、短长三类负载，再加入混合。比较 token budget 时，不同时改变精度、模型、prefix 命中和输出长度。对缓存实验，先区分引擎 warmup 和 KV warmup。</p>
+<p>比较总吞吐时报告实际输出 token 数，避免某配置更早 EOS，工作量减少却被误认为同等负载加速。</p>
+<h3 id="质量是约束">质量是约束</h3>
+<p>量化、CacheBlend 或近似算法可能改变质量；不同数值执行路径也可能影响 greedy token。对语义应保持一致的优化，要用合适的数值/任务对照；不能为了得到性能数字而忽略错误。</p>
+<p>上游固定版本资料：<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/docs/configuration/optimization.md">优化与调参</a>、<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/docs/design/metrics.md">指标设计</a>。</p>
+<h2 id="p2-如何用-profiling-找原因">P2. 如何用 profiling 找原因</h2>
+<p>先看服务时间轴：</p>
+<pre><code class="language-text">输入处理 → 排队 → KV准备 → GPU执行 → 输出处理 → 网络返回
+</code></pre>
+<p>再看 GPU 执行内部：矩阵运算、Attention、采样、数据搬运、collective、空洞。</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>工具/证据</th>
+<th>适合回答</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>服务指标与日志</td>
+<td>请求在哪里排队？是否有抢占、miss、load失败？</td>
+</tr>
+<tr>
+<td>PyTorch Profiler</td>
+<td>PyTorch/CPU/CUDA 操作之间怎样关联？</td>
+</tr>
+<tr>
+<td>Nsight Systems</td>
+<td>CPU线程、CUDA stream、kernel、memcpy、通信怎样重叠？</td>
+</tr>
+<tr>
+<td>Nsight Compute</td>
+<td>某个 kernel 的访存、吞吐、occupancy、stall 如何？</td>
+</tr>
+<tr>
+<td>网络/存储与缓存 trace</td>
+<td>lookup、IO、H2D、重排和等待分别有多大？</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="一个排查例子">一个排查例子</h3>
+<p>症状：GPU utilization 不低，但 P99 TTFT 持续增长。</p>
+<p>先检查输入长度和到达率是否升高；然后分解等待与计算。如果 Prefill 时间稳定但等待变长，优先看 admission 和容量；如果同样长度的 Prefill 变慢，才进一步看 GPU/通信/缓存争用。</p>
+<h3 id="计时陷阱">计时陷阱</h3>
+<p>CUDA 提交通常异步，Python 函数返回时间不等于 GPU 完成时间。微基准需正确同步或用设备事件，但在生产主循环里每步强行 synchronize 又可能破坏原有重叠。</p>
+<p>Profiler 本身有开销。选择代表性的窗口，并将带 profiler 的结果与正常运行结果区分。</p>
+<p><strong>作业</strong>：写一个可证伪的假设，例如“尾延迟来自外部缓存 lookup 排队”。同时写出若假设错误，哪条观察会反驳它；不要只写“准备调小 batch”。</p>
+<h2 id="p3-flashattention-为什么减少-io">P3. FlashAttention 为什么减少 IO</h2>
+<p>普通 Attention 的直接实现可能把 scores 和 softmax 结果作为大矩阵写到 HBM，再读回来。T 很长时，中间矩阵规模 O(T²)，既占容量又产生大量 IO。</p>
+<p>FlashAttention 用分块与在线归一化，让 query block 与 key/value block 在更快的片上存储中计算，维护必要统计量和输出累加，而不保存整个注意力矩阵。</p>
+<h3 id="在线-softmax-的基本思想">在线 softmax 的基本思想</h3>
+<p>对一个 query，已经处理的 key 集合维护：</p>
+<pre><code class="language-text">m：已见 score 的最大值
+l：Σ exp(score - m)
+u：Σ exp(score - m) × value
+</code></pre>
+<p>加入新块 scores s、values v：</p>
+<pre><code class="language-text">m_new = max(m, max(s))
+l_new = exp(m-m_new) × l + Σ exp(s-m_new)
+u_new = exp(m-m_new) × u + Σ exp(s-m_new) × v
+output = u_new / l_new
+</code></pre>
+<p>第一次处理块时适当初始化；因果 mask 仍要正确应用。调整旧累积的尺度，是分块后仍保持同一归一化含义的关键。</p>
+<p>这解释了两个边界：</p>
+<ul>
+<li>算法保持稠密 Attention 的数学目标，浮点顺序可能不同。</li>
+<li>它减少中间存储与 IO，不表示全注意力的计算复杂度直接从 O(T²) 变 O(T)。</li>
+</ul>
+<h3 id="与分页-kv-的关系">与分页 KV 的关系</h3>
+<p>PagedAttention 解决历史 K/V 的物理管理和寻址。一个 backend 可以从分页 blocks 取 KV，再执行高效分块 Attention；两者处于不同层面。</p>
+<p>上游固定版本资料：<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/docs/design/paged_attention.md">Paged Attention</a>、<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/docs/design/attention_backends.md">Attention backends</a>。前者的具体 kernel 说明有其历史实现背景，不应据此断言当前所有模型走同一 CUDA kernel。</p>
+<h2 id="p4-kernel-优化应掌握的基本因果关系">P4. kernel 优化应掌握的基本因果关系</h2>
+<h3 id="内存层次与访存">内存层次与访存</h3>
+<p>HBM 容量大、带宽高但访问成本仍显著；片上 L2/shared memory/register 的容量更有限。连续、合并的访问更容易高效利用带宽，布局不合适可能增加无用事务。</p>
+<p>寄存器更多可以减少局部变量溢出，但每线程占用过大也可能限制同时驻留的线程/blocks。occupancy 高不是唯一目标，低 occupancy 也可能在充分数据复用时高效。</p>
+<h3 id="融合为什么有用">融合为什么有用</h3>
+<p>考虑“残差相加 → 写临时 Tensor → RMSNorm 读回”：</p>
+<pre><code class="language-text">独立实现：多个launch + 临时结果写入HBM再读出
+融合实现：适用时在同一kernel中保留中间值
+</code></pre>
+<p>融合减少 launch 和中间 IO，但可能增加寄存器压力、编译复杂度或限制形状。应该看端到端路径，不能只把 kernel 数量变少当作成功。</p>
+<h3 id="shape-决定效率">shape 决定效率</h3>
+<p>相同 FLOPs 的矩阵形状可能有不同 Tensor Core 利用、padding 和并行粒度。大 Prefill GEMM 的优化经验不能原样套到小 batch Decode。</p>
+<h3 id="正确的优化顺序">正确的优化顺序</h3>
+<ol>
+<li>定义输入 shape/dtype/布局和数值要求。</li>
+<li>建立参考与真实瓶颈证据。</li>
+<li>修改数据复用、融合或并行方式。</li>
+<li>检查生成代码与设备指标。</li>
+<li>验证代表性 shape 和服务端到端收益。</li>
+</ol>
+<p>本月无需从零优化所有算子。先能解释 RMSNorm、RoPE、GEMM、Attention 的访问特点，再按岗位选择一个深入。</p>
+<h2 id="p5-编译cuda-graph-与异步执行">P5. 编译、CUDA Graph 与异步执行</h2>
+<h3 id="三种不同层次">三种不同层次</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>机制</th>
+<th>主要作用</th>
+<th>常见成本</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>eager</td>
+<td>灵活地逐次执行算子</td>
+<td>Python/launch 开销</td>
+</tr>
+<tr>
+<td><code>torch.compile</code> 等编译</td>
+<td>图优化、融合、代码生成、形状专门化</td>
+<td>编译时间、重编译、动态分支限制</td>
+</tr>
+<tr>
+<td>CUDA Graph</td>
+<td>捕获设备执行依赖并重放，减少重复launch</td>
+<td>捕获范围、地址/shape要求、额外内存</td>
+</tr>
+</tbody>
+</table></div>
+<p>编译与 Graph 可以配合，不能把它们当作同一个开关。</p>
+<h3 id="为什么需要-padding-和多个捕获规模">为什么需要 padding 和多个捕获规模</h3>
+<p>真实请求数和 token 数一直变化，捕获图可能需要映射到支持的执行规模。padding 可以换取重放效率，却多做计算；捕获更多规模可以减少 padding，却增加启动时间和内存。</p>
+<p>某些功能只能在局部图之间运行，因此存在 piecewise 等模式。外部 KV 的层级同步可能影响捕获边界，必须检查 connector 和 backend 的兼容性。</p>
+<h3 id="异步的真实成本">异步的真实成本</h3>
+<p>CPU 准备下一步、GPU 计算当前步、NIC 搬运 KV 可以重叠。但如果共享同一个 pinned buffer，CPU 提前改写会使 GPU 读到错误数据。</p>
+<p>正确方案可以是稳定临时副本、双缓冲、事件同步或明确所有权协议。增加 stream 不能自动解决依赖；多个操作争用同一带宽也未必有收益。</p>
+<p>上游固定版本资料：<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/docs/design/torch_compile.md">torch.compile</a>、<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/docs/design/cuda_graphs.md">CUDA Graph</a>、<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/docs/design/model_runner_v2.md">MRV2</a>。</p>
+<h2 id="p6-从线性层推导-tp再理解-ppdpep">P6. 从线性层推导 TP，再理解 PP/DP/EP</h2>
+<h3 id="column-parallel">Column Parallel</h3>
+<p>线性层 <code>Y=XW</code>，W 按输出列切分：</p>
+<pre><code class="language-text">W = [W0, W1]
+Y0 = XW0
+Y1 = XW1
+Y = [Y0, Y1]
+</code></pre>
+<p>每卡得到输出分片。如果后续运算能直接消费分片，不必立即 gather。</p>
+<h3 id="row-parallel">Row Parallel</h3>
+<p>将输入特征和 W 的对应行切分：</p>
+<pre><code class="language-text">X = [X0, X1]
+Y = X0W0 + X1W1
+</code></pre>
+<p>各卡计算部分和，再通过合适的归约通信得到结果。真实实现可能使用 All-Reduce 或与其他切分配合的 collective。</p>
+<p>这解释了为什么 TP 常在每层引入通信，而不是只在请求开始时交换一次数据。</p>
+<h3 id="pp-与-dp">PP 与 DP</h3>
+<p>PP 按层或阶段放在不同设备上；需要传 hidden states 并平衡各阶段。微批或不同请求可以流水，但单请求依赖不会消失，阶段不均也会产生等待。</p>
+<p>稠密 DP 复制完整模型副本、处理不同请求；可提高总吞吐和隔离性，单请求不会因此自动利用所有副本的算力。</p>
+<h3 id="ep-与上下文并行">EP 与上下文并行</h3>
+<p>MoE 用 router 选择 experts，EP 把 experts 分散到设备，token 需要 dispatch/combine。稀疏激活降低计算，不代表没有通信和负载倾斜。</p>
+<p>上下文并行沿 token/context 维度分摊 Attention 或 KV，长上下文下有价值，但需要对应的历史信息交换和归约。Prefill 与 Decode 支持模式不同，查看所选 backend。</p>
+<h3 id="两个选择题">两个选择题</h3>
+<p><strong>8B 模型单卡放得下，四张卡要提高服务吞吐怎么办？</strong><br />
+先比较四个副本与 TP=4 等方案，在同资源和 SLO 下测量。副本避免层间 TP 通信，TP 可能降低单请求计算或释放每卡权重空间；不能只凭模型大小作最终结论。</p>
+<p><strong>跨机网络慢时能否一味增加 TP？</strong><br />
+不能。需比较通信增长、PP 阶段传输、模型容量和目标延迟。拓扑会改变最优组合。</p>
+<p>上游固定版本资料：<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/docs/serving/parallelism_scaling.md">TP/PP 扩展</a>、<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/docs/serving/data_parallel_deployment.md">DP</a>、<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/docs/serving/expert_parallel_deployment.md">EP</a>、<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/docs/serving/context_parallel_deployment.md">上下文并行</a>。</p>
+<h2 id="p7-pd-分离如何影响容量和延迟">P7. PD 分离如何影响容量和延迟</h2>
+<p>共置引擎中，长 Prefill 与 Decode 分享计算和调度。Chunked Prefill 可以控制干扰；PD 则把两阶段放到不同资源组，允许分别选择并行和容量。</p>
+<p>收益可能来自：</p>
+<ul>
+<li>更稳定的 Decode 尾延迟。</li>
+<li>对 P/D 分别使用适合的硬件或并行配置。</li>
+<li>独立扩容与更明确的资源隔离。</li>
+</ul>
+<p>新增成本包括：</p>
+<ul>
+<li>KV 交接与布局转换。</li>
+<li>P/D 两边的队列和路由协调。</li>
+<li>源端 blocks 保留、目的端空间预留。</li>
+<li>失败、取消与重算回退。</li>
+</ul>
+<h3 id="定量判断">定量判断</h3>
+<p>假设 Prefill 完成产生 1 GiB KV，网络理想吞吐为 50 GB/s，仅数据传输下界就约 21.5 ms。若应用对 TTFT 预算很紧，这笔开销不能忽略。</p>
+<p>逐层流水可能隐藏部分传输，但首层数据依赖和共享瓶颈仍在。总时间应分析关键路径，不是简单减掉一个“overlap 开关”的常数。</p>
+<p>比较共置与 PD 时固定总资源，报告 P:D 比例、网络和缓存节点成本。某方案减少 ITL 尖峰却降低低负载吞吐，也可以是合理取舍，但必须说明目标。</p>
+<p>详细的完成/回收流程见 <a href="../../../03-kv-cache/implementations/vllm/integration.html">KV 专题第 12～15 节</a>。上游固定版本资料：<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/docs/features/disagg_prefill.md">PD</a>。</p>
+<h2 id="p8-量化与投机解码两种不同的加速思路">P8. 量化与投机解码：两种不同的加速思路</h2>
+<h3 id="量化">量化</h3>
+<p>一个简化的对称量化关系：</p>
+<pre><code class="language-text">q = clip(round(x / scale), qmin, qmax)
+x_hat = q × scale
+</code></pre>
+<p>实际方案还有 per-channel/group scale、非对称零点、混合精度、校准和不同计算 kernel。压缩数据会引入误差，反量化及元数据又会增加执行工作。</p>
+<p>需要分别分析：</p>
+<ul>
+<li>权重量化：主要改变权重容量、带宽和矩阵计算路径。</li>
+<li>激活量化：影响数值范围和 kernel，通常更需关注输入分布。</li>
+<li>KV 量化：改变长上下文容量和读取量，误差可能影响后续注意力与生成。</li>
+</ul>
+<p>存储从 16-bit 到 4-bit，不意味着服务吞吐必然提高 4 倍。</p>
+<h3 id="投机解码">投机解码</h3>
+<p>draft 提出 K 个候选，目标模型一次验证多个位置，希望减少每个有效输出 token 的目标模型执行成本。</p>
+<p>收益取决于：</p>
+<pre><code class="language-text">每个有效token成本
+≈ (draft成本 + verify成本 + 协调成本) / 本轮实际接受与补充的token数
+</code></pre>
+<p>假设每层条件接受率近似为固定 α，且采用适用的完整验证/补充规则，理想期望输出数可以用 <code>1+α+...+α^K</code> 理解。这是教学近似，真实接受率有条件依赖，也受长度和策略限制。</p>
+<p>精确 speculative sampling 需要接受/拒绝修正来保持目标分布；普通贪心验证、近似方法和不同 draft 结构不能混为一谈。高接受率也不保证加速：draft 可能过贵，或者大 batch 下目标验证原本已经高效。</p>
+<p>上游固定版本资料：<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/docs/features/quantization/README.md">量化</a>、<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/docs/features/quantization/quantized_kvcache.md">KV 量化</a>、<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/docs/features/speculative_decoding/README.md">投机解码</a>。</p>
+<h2 id="p9-模型接入与高级功能怎样影响引擎">P9. 模型接入与高级功能怎样影响引擎</h2>
+<h3 id="接入一个稠密模型需要检查什么">接入一个稠密模型需要检查什么</h3>
+<ol>
+<li>配置如何描述层数、heads、位置编码和特殊结构。</li>
+<li>checkpoint 参数名、形状和分片如何对应本地模块。</li>
+<li>是否使用正确的并行线性层和 Attention 接口。</li>
+<li>forward 是否能接受引擎的 packed input/positions。</li>
+<li>logits、采样或 pooling 的接口是否匹配任务。</li>
+<li>精度、量化、LoRA、TP/PP 与 backend 的兼容性。</li>
+<li>与可信参考的数值/任务对照、长上下文与批量边界。</li>
+</ol>
+<p>只复制一个 PyTorch <code>forward()</code>，不等于已经接入生产推理系统。</p>
+<h3 id="lora">LoRA</h3>
+<p>LoRA 为特定权重增加低秩增量。多 adapter 服务要管理 adapter 身份、加载、批内混合和缓存命名空间。相同 token 使用不同 adapter，KV 不一定兼容；adapter 更新也应使旧身份失效。</p>
+<h3 id="多模态">多模态</h3>
+<p>图片/音频可能先经过 encoder，再与文本表示组合；带来预处理、encoder compute budget、特征缓存和不同位置编码。相同占位 token 不等于相同视觉内容，缓存身份不能只看文本占位符。</p>
+<h3 id="结构化输出">结构化输出</h3>
+<p>约束生成常需在采样时应用合法 token mask，并维护语法状态。异步执行时，下一步 grammar 可能依赖尚未处理的输出，影响调度和采样时序。</p>
+<h3 id="pooling-与生成">Pooling 与生成</h3>
+<p>embedding/classification 等 pooling 任务通常不走长时间自回归 Decode。吞吐指标、输出处理和 KV 需求与生成任务不同，不能把全部模型都当成聊天生成模型。</p>
+<p>上游固定版本资料：<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/docs/contributing/model/basic.md">模型接入</a>、<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/docs/contributing/model/registration.md">注册</a>、<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/docs/contributing/model/multimodal.md">多模态接入</a>、<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/docs/features/lora.md">LoRA</a>、<a href="https://github.com/vllm-project/vllm/blob/f3871c3cbf8a608f7ee833ec4c2c5277f77bee41/docs/features/structured_outputs.md">结构化输出</a>。</p>
+<h2 id="p10-服务工程队列路由取消和成本">P10. 服务工程：队列、路由、取消和成本</h2>
+<h3 id="admission-与背压">Admission 与背压</h3>
+<p>引擎有有限 GPU/KV 容量，服务入口不能无限接受等待。队列上限、超时、优先级和拒绝策略使系统在过载时保留可预测行为。</p>
+<p>重试也会产生新负载。缓存失效后大量请求同时重算，如果没有限制，可能导致第二次过载；应让上层知道失败类型并控制回退并发。</p>
+<h3 id="缓存感知路由">缓存感知路由</h3>
+<p>估计节点代价可以从以下项开始：</p>
+<pre><code class="language-text">排队 + 缓存取回 + 未命中Prefill + 必要通信
+</code></pre>
+<p>命中最多的节点可能队列最长。缓存位置索引也可能过期，需要失效、重试和回退；固定粘性路由可能提升命中也可能制造热点。</p>
+<h3 id="请求取消">请求取消</h3>
+<p>逻辑取消要阻止后续调度和输出，物理回收要等待设备与传输不再使用 buffer。取消成功的服务响应不等于底层所有内存必须瞬间归零。</p>
+<h3 id="容量和成本">容量和成本</h3>
+<p>稳定系统中 Little 定律 <code>L=λW</code> 关联平均在途请求数、实际吞吐和平均停留时间；它不能直接保证 P99，也不适合忽略持续增长的队列。</p>
+<p>单位成本可以按：</p>
+<pre><code class="language-text">满足SLO的成功请求成本 = 统计窗口内总资源成本 / 达标成功请求数
+</code></pre>
+<p>成本应计入 GPU、CPU/缓存节点、网络、重复计算和低负载浪费。比较分层缓存方案时，只看 GPU 节省可能漏掉重要支出。</p>
+<h3 id="故障分析模板">故障分析模板</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>症状</th>
+<th>先看什么</th>
+<th>需要验证的假设</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TTFT 高、ITL 稳定</td>
+<td>入口/Prefill排队、缓存miss、输入处理</td>
+<td>首输出前阶段是否主导？</td>
+</tr>
+<tr>
+<td>ITL 周期尖峰</td>
+<td>长Prefill、collective、IO与CPU事件</td>
+<td>是否与尖峰时间对齐？</td>
+</tr>
+<tr>
+<td>高命中但更慢</td>
+<td>lookup/取回/H2D/热点排队</td>
+<td>搬运是否贵于重算？</td>
+</tr>
+<tr>
+<td>OOM</td>
+<td>加载、capture、Prefill峰值或KV增长</td>
+<td>发生在哪个阶段？</td>
+</tr>
+<tr>
+<td>GPU 低利用</td>
+<td>CPU/IPC、等待、限流、小kernel</td>
+<td>谁没有及时提供工作？</td>
+</tr>
+<tr>
+<td>加卡反而变慢</td>
+<td>通信、矩阵形状、拓扑、不均衡</td>
+<td>通信增长是否抵消计算节省？</td>
+</tr>
+</tbody>
+</table></div>
+<p>本章完成后，选择一个症状，提出假设、设计最小对照并写出可能推翻假设的证据。能做到这一点，比记住几十个调参开关更接近推理 Infra 的实际工作。</p>
+</article>
+<footer><a href="../../../index.html">返回总目录</a>
+<p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#p1-先建立可比较的性能基线">P1. 先建立可比较的性能基线</a><a class="level-3" href="#开放式与闭环负载">开放式与闭环负载</a><a class="level-3" href="#单变量对照">单变量对照</a><a class="level-3" href="#质量是约束">质量是约束</a><a class="level-2" href="#p2-如何用-profiling-找原因">P2. 如何用 profiling 找原因</a><a class="level-3" href="#一个排查例子">一个排查例子</a><a class="level-3" href="#计时陷阱">计时陷阱</a><a class="level-2" href="#p3-flashattention-为什么减少-io">P3. FlashAttention 为什么减少 IO</a><a class="level-3" href="#在线-softmax-的基本思想">在线 softmax 的基本思想</a><a class="level-3" href="#与分页-kv-的关系">与分页 KV 的关系</a><a class="level-2" href="#p4-kernel-优化应掌握的基本因果关系">P4. kernel 优化应掌握的基本因果关系</a><a class="level-3" href="#内存层次与访存">内存层次与访存</a><a class="level-3" href="#融合为什么有用">融合为什么有用</a><a class="level-3" href="#shape-决定效率">shape 决定效率</a><a class="level-3" href="#正确的优化顺序">正确的优化顺序</a><a class="level-2" href="#p5-编译cuda-graph-与异步执行">P5. 编译、CUDA Graph 与异步执行</a><a class="level-3" href="#三种不同层次">三种不同层次</a><a class="level-3" href="#为什么需要-padding-和多个捕获规模">为什么需要 padding 和多个捕获规模</a><a class="level-3" href="#异步的真实成本">异步的真实成本</a><a class="level-2" href="#p6-从线性层推导-tp再理解-ppdpep">P6. 从线性层推导 TP，再理解 PP/DP/EP</a><a class="level-3" href="#column-parallel">Column Parallel</a><a class="level-3" href="#row-parallel">Row Parallel</a><a class="level-3" href="#pp-与-dp">PP 与 DP</a><a class="level-3" href="#ep-与上下文并行">EP 与上下文并行</a><a class="level-3" href="#两个选择题">两个选择题</a><a class="level-2" href="#p7-pd-分离如何影响容量和延迟">P7. PD 分离如何影响容量和延迟</a><a class="level-3" href="#定量判断">定量判断</a><a class="level-2" href="#p8-量化与投机解码两种不同的加速思路">P8. 量化与投机解码：两种不同的加速思路</a><a class="level-3" href="#量化">量化</a><a class="level-3" href="#投机解码">投机解码</a><a class="level-2" href="#p9-模型接入与高级功能怎样影响引擎">P9. 模型接入与高级功能怎样影响引擎</a><a class="level-3" href="#接入一个稠密模型需要检查什么">接入一个稠密模型需要检查什么</a><a class="level-3" href="#lora">LoRA</a><a class="level-3" href="#多模态">多模态</a><a class="level-3" href="#结构化输出">结构化输出</a><a class="level-3" href="#pooling-与生成">Pooling 与生成</a><a class="level-2" href="#p10-服务工程队列路由取消和成本">P10. 服务工程：队列、路由、取消和成本</a><a class="level-3" href="#admission-与背压">Admission 与背压</a><a class="level-3" href="#缓存感知路由">缓存感知路由</a><a class="level-3" href="#请求取消">请求取消</a><a class="level-3" href="#容量和成本">容量和成本</a><a class="level-3" href="#故障分析模板">故障分析模板</a></aside>
+<dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
+<button id="search-close" aria-label="关闭搜索">关闭</button></div>
+<input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">
+<p id="search-status" role="status">输入主题、术语或问题</p><ol id="search-results"></ol></dialog>
+</body></html>

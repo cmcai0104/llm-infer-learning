@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>统一 28 天学习计划：基础只学一次，后面按岗位分流 · LLM Infra</title>
+<link rel="stylesheet" href="../assets/site.css">
+<script defer src="../assets/search-index.js"></script>
+<script defer src="../assets/site.js"></script></head>
+<body data-root="..">
+<a class="skip" href="#content">跳到正文</a>
+<header class="topbar"><button id="nav-toggle" aria-controls="sidebar" aria-expanded="false">目录</button>
+<a class="brand" href="../index.html">LLM Infra <span>学习资料库</span></a>
+<button id="search-open">搜索内容 <kbd>/</kbd></button></header>
+<aside id="sidebar"><nav aria-label="学习主题">
+<a href="../index.html">总目录</a>
+<div class="featured">
+<a href="../01-foundations/design-atlas.html">设计图册</a>
+<a href="expert-interview-guide.html">P7–P8 专家面试</a>
+<a href="expert-qa.html">KV 存储深挖问答</a>
+<a href="../04-storage/kv-cache-storage.html">KV 存储详解</a>
+<a href="../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake</a>
+</div>
+<details><summary>01 基础与设计图</summary>
+<a href="../01-foundations/index.html">01 · 基础与全景：先理解计算、资源和请求</a>
+<a href="../01-foundations/attention-and-inference.html">推理基础教材：从 Transformer 到服务成本</a>
+<a href="../01-foundations/compute-and-memory.html">推理基础、调度、GPU 优化与分布式</a>
+<a href="../01-foundations/concepts.html">公共基础：推理、KV Cache、内存和性能</a>
+<a href="../01-foundations/design-atlas.html">设计图册：从请求执行到共享 KV 存储</a>
+<a href="../01-foundations/overview.html">LLM Infra 总体介绍：先把整条链路想明白</a>
+</details>
+<details><summary>02 推理运行时</summary>
+<a href="../02-runtime/index.html">02 · 推理运行时：把请求变成每一轮 GPU 工作</a>
+<a href="../02-runtime/implementations/sglang/knowledge-map.html">学习大纲与完整知识地图</a>
+<a href="../02-runtime/implementations/sglang/overview.html">SGLang：把请求调度、前缀复用与分层缓存连起来</a>
+<a href="../02-runtime/implementations/sglang/runtime.html">SGLang 架构、运行图与源码路线</a>
+<a href="../02-runtime/implementations/vllm/architecture.html">知识地图与 vLLM 设计图</a>
+<a href="../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
+<a href="../02-runtime/implementations/vllm/request-walkthrough.html">vLLM 源码教材：跟踪一条请求及其资源</a>
+</details>
+<details><summary>03 KV Cache 管理</summary>
+<a href="../03-kv-cache/index.html">03 · KV Cache 管理：让正确的状态在正确的时间可用</a>
+<a href="../03-kv-cache/capacity-and-reuse.html">03 · KV Cache 基础与性能模型</a>
+<a href="../03-kv-cache/semantics-and-costs.html">semantics-and-costs</a>
+<a href="../03-kv-cache/implementations/lmcache/internals.html">internals</a>
+<a href="../03-kv-cache/implementations/lmcache/overview.html">LMCache：把 KV 的保存、查找、加载和回收管起来</a>
+<a href="../03-kv-cache/implementations/lmcache/state-diagrams.html">state-diagrams</a>
+<a href="../03-kv-cache/implementations/sglang/prefix-cache.html">KV Cache：原理、容量、分页、前缀复用与正确性</a>
+<a href="../03-kv-cache/implementations/sglang/tiered-cache.html">HiCache、Mooncake、LMCache 与 PD 分离</a>
+<a href="../03-kv-cache/implementations/vllm/integration.html">KV Cache 专题：vLLM、LMCache 与 Mooncake</a>
+</details>
+<details><summary>04 分布式存储</summary>
+<a href="../04-storage/index.html">04 · 分布式存储：把可复用状态放进共享资源池</a>
+<a href="../04-storage/kv-cache-storage.html">KV Cache 存储详解：数据模型、协议、容量、性能与故障</a>
+<a href="../04-storage/implementations/lmcache/backend-contracts.html">backend-contracts</a>
+<a href="../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake：从一次 KV 保存到下一次请求恢复</a>
+<a href="../04-storage/implementations/mooncake/architecture.html">02 · 知识地图与设计图</a>
+<a href="../04-storage/implementations/mooncake/integrations.html">05 · LMCache 与推理引擎集成</a>
+<a href="../04-storage/implementations/mooncake/internals.html">04 · Mooncake 内核与源码路线</a>
+<a href="../04-storage/implementations/mooncake/overview.html">Mooncake：KV 对象怎样共享、怎样安全地高速搬运</a>
+</details>
+<details><summary>05 数据传输</summary>
+<a href="../05-transfer/index.html">05 · 数据传输：搬得动、搬得快，还要搬得安全</a>
+<a href="../05-transfer/implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine：字节移动的实现案例</a>
+</details>
+<details><summary>06 Serving 与性能</summary>
+<a href="../06-serving/index.html">06 · Serving 与性能：让整条链路满足服务目标</a>
+<a href="../06-serving/component-selection.html">Serving 组件选型：在同一技术问题下比较实现</a>
+<a href="../06-serving/implementations/lmcache/observability.html">observability</a>
+<a href="../06-serving/implementations/vllm/performance-and-parallelism.html">性能、分布式与服务工程教材</a>
+</details>
+<details><summary>07 实验与验证</summary>
+<a href="../07-practice/index.html">07 · 实验与验证：用证据回答系统问题</a>
+<a href="../07-practice/implementations/lmcache/labs.html">labs</a>
+<a href="../07-practice/implementations/mooncake/labs.html">06 · 实验与性能诊断</a>
+<a href="../07-practice/implementations/sglang/labs.html">实验手册：从单机基线到共享缓存与 PD</a>
+<a href="../07-practice/implementations/vllm/experiments.html">实验与项目：从原理到可复现证据</a>
+<a href="../07-practice/implementations/vllm/walkthrough.html">实践教材：运行步骤、源码作业与参考答案</a>
+</details>
+<details open><summary>08 专家能力与面试</summary>
+<a href="index.html">08 · 岗位、学习计划与面试：按能力组织成果</a>
+<a href="coverage-and-review.html">资料结构与覆盖范围审阅</a>
+<a href="expert-interview-guide.html">LLM 推理 Infra 专家面试总纲：P7–P8 能力参考，重点 KV Cache 存储</a>
+<a href="expert-qa.html">P7–P8 KV Cache 存储深挖问答</a>
+<a href="interview-and-design.html">面试与项目：能解释、能算账、能处理失败</a>
+<a href="references.html">按问题查资料：专题索引与版本基线</a>
+<a href="roles.html">按岗位方向学习：什么必须熟练，什么可以后学</a>
+<a href="study-plan.html" aria-current="page">统一 28 天学习计划：基础只学一次，后面按岗位分流</a>
+<a href="implementations/lmcache/index.html">index</a>
+<a href="implementations/lmcache/questions.html">questions</a>
+<a href="implementations/lmcache/study-plan.html">study-plan</a>
+<a href="implementations/lmcache/system-design.html">system-design</a>
+<a href="implementations/mooncake/index.html">Mooncake 与 KV Cache 存储：28 天学习手册</a>
+<a href="implementations/mooncake/questions.html">07 · 面试题与参考回答</a>
+<a href="implementations/mooncake/study-plan.html">01 · 28 天学习计划</a>
+<a href="implementations/mooncake/system-design.html">08 · 系统设计、毕业项目与参考资料</a>
+<a href="implementations/sglang/assessment.html">参考资料、实验报告与最终验收</a>
+<a href="implementations/sglang/questions.html">推理 Infra 面试：36 道题与系统设计</a>
+<a href="implementations/sglang/study-plan.html">28 天学习计划</a>
+<a href="implementations/vllm/questions.html">推理 Infra 面试：60 个问题与参考回答</a>
+<a href="implementations/vllm/references.html">官方资料与版本说明</a>
+<a href="implementations/vllm/study-plan.html">28 天学习大纲与每日计划</a>
+</details>
+<a href="coverage-and-review.html">覆盖范围与审阅</a>
+</nav></aside>
+<main id="content"><div class="breadcrumbs">08 专家能力与面试 · 专注 KV Cache 存储</div>
+<article><h1 id="统一-28-天学习计划基础只学一次后面按岗位分流">统一 28 天学习计划：基础只学一次，后面按岗位分流</h1>
+<p><a href="index.html">返回主题</a> · <a href="roles.html">上一篇：岗位路线</a> · <a href="interview-and-design.html">下一篇：面试与项目</a></p>
+<p>这是按技术主题推进的主计划：每天先回答一个系统问题，再选框架验证。原有四份 28 天计划放在本主题的实现资料中，作为深读备选，不要求逐份执行。</p>
+<p><strong>专家岗位定位</strong>：这 28 天是查漏和整理作品的节奏，不保证从零达到 P7/P8。先按<a href="expert-interview-guide.html">专家能力总纲</a>自评；已有经验者整合设计、实验与复盘证据，缺少子系统实践者应延长相应阶段。第一周配合<a href="../01-foundations/design-atlas.html">设计图册</a>，KV 路线重点深读<a href="../04-storage/kv-cache-storage.html">存储教材</a>和<a href="../04-storage/implementations/lmcache/mooncake-walkthrough.html">联合实现</a>。</p>
+<p>默认具备 Python、基本 C++、Linux 进程/线程和网络基础。工作日 2 小时、周末 4 小时，共 <code>4 × (5 × 2 + 2 × 4) = 72</code> 小时。它用于建立主线和完成一个有边界的项目，不保证一个月精通四套系统。</p>
+<p>每天约 30 分钟读概念、60 分钟读代码或实验、30 分钟闭卷输出。周末增加实验与复盘。明显缺乏基础时延长计划，不为赶日程跳过正确性。</p>
+<h2 id="第一周所有方向共同完成">第一周：所有方向共同完成</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>天</th>
+<th>阅读与任务</th>
+<th>当天交付</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D1 / 2h</td>
+<td><a href="../01-foundations/overview.html">总体介绍</a>：从请求看系统分层</td>
+<td>一张数据流图，标出计算、缓存、存储与传输</td>
+</tr>
+<tr>
+<td>D2 / 2h</td>
+<td><a href="../01-foundations/concepts.html">公共基础</a>第 1–3 节</td>
+<td>从 K/V 解释复用，独立算 8K 请求容量</td>
+</tr>
+<tr>
+<td>D3 / 2h</td>
+<td><a href="../02-runtime/index.html">运行时</a>：请求、调度、预算；选择一个引擎追踪</td>
+<td>请求路径图、一个 token 预算例子</td>
+</tr>
+<tr>
+<td>D4 / 2h</td>
+<td><a href="../03-kv-cache/index.html">KV 管理</a>：分页、前缀、分层与发布</td>
+<td>共享块图、两个错误命中反例</td>
+</tr>
+<tr>
+<td>D5 / 2h</td>
+<td><a href="../04-storage/index.html">分布式存储</a>：对象、副本、租约与回收</td>
+<td>Put/Get 状态图，标出数据和目录所有者</td>
+</tr>
+<tr>
+<td>D6 / 4h</td>
+<td><a href="../05-transfer/index.html">数据传输</a>，运行 CPU 练习</td>
+<td>lookup→load→ready 图、传输下界与安全释放条件</td>
+</tr>
+<tr>
+<td>D7 / 4h</td>
+<td><a href="../06-serving/index.html">Serving 与性能</a>，做闭卷检查</td>
+<td>分段延迟模型、主方向、错题表和项目问题</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>验收</strong>：算出 128 KiB/token、8,192 token 为 1 GiB；解释 TP 除法前提；区分查询命中与 GPU ready；说清 PD 与共享缓存的区别。</p>
+<p>CPU 教学脚本在 <a href="../07-practice/cpu/inference_lab.py">07-practice/cpu/inference_lab.py</a>，包含 attention/KV、前缀 hash、调度和容量练习。需要 Python 3.9+，建议使用 Python 3.12 虚拟环境；确认下面的 <code>python</code> 指向该环境，再从资料库根目录执行：</p>
+<pre><code class="language-bash">python --version
+python 07-practice/cpu/inference_lab.py all
+</code></pre>
+<p>它是教学模型，不代表某个框架的真实调度策略，也不替代 GPU 正确性验证。</p>
+<h2 id="第二周沿一个方向追通数据与状态">第二周：沿一个方向追通数据与状态</h2>
+<p>每天选择自己方向所在列，<strong>不用把四列全部完成</strong>。</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>天</th>
+<th>引擎方向</th>
+<th>KV 存储方向</th>
+<th>通信/GPU 方向</th>
+<th>平台方向</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D8 / 2h</td>
+<td>请求对象与状态</td>
+<td>Connector 的调度/worker 契约</td>
+<td>源/目标 buffer 与设备依赖</td>
+<td>请求时间线与指标口径</td>
+</tr>
+<tr>
+<td>D9 / 2h</td>
+<td>Scheduler 预算和队列</td>
+<td>LMCache key、group 与连续前缀</td>
+<td>注册内存/传输完成，或 kernel shape</td>
+<td>到达率、并发、队列与服务率</td>
+</tr>
+<tr>
+<td>D10 / 2h</td>
+<td>KV 分配、引用与回收</td>
+<td>L1 staging、发布、读保留</td>
+<td>CPU/GPU/NIC 拓扑或 Roofline</td>
+<td>本地/host/远端缓存资源预算</td>
+</tr>
+<tr>
+<td>D11 / 2h</td>
+<td>Runner 与模型输入布局</td>
+<td>Store PutStart→写入→PutEnd</td>
+<td>TE 批量路径或 attention backend</td>
+<td>路由：缓存热度与排队代价</td>
+</tr>
+<tr>
+<td>D12 / 2h</td>
+<td>取消、抢占与异步执行</td>
+<td>Get、lease、失败 buffer 和回收</td>
+<td>异步取消、同步与安全释放</td>
+<td>重试、限流、缓存失效回源</td>
+</tr>
+<tr>
+<td>D13 / 4h</td>
+<td>追一条真实代码链；有 GPU 做执行基线</td>
+<td>TCP 对象实验；无 Linux 做状态与失败推演</td>
+<td>有硬件做传输/前向基线；否则做成本模型</td>
+<td>准备工作负载与压测方案</td>
+</tr>
+<tr>
+<td>D14 / 4h</td>
+<td>讲解请求全过程</td>
+<td>讲解一条加载和一条写入全过程</td>
+<td>讲解瓶颈、测量边界与依赖</td>
+<td>讲解容量和故障场景</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>统一产物</strong>：一份“函数/状态—资源所有者—何时可用—何时释放—失败怎么办”的表。只画正常路径不通过验收。</p>
+<p>对应阅读：</p>
+<ul>
+<li>引擎：<a href="../02-runtime/implementations/vllm/request-walkthrough.html">vLLM 源码教材</a>或 <a href="../02-runtime/implementations/sglang/runtime.html">SGLang Runtime</a>。</li>
+<li>KV：<a href="../03-kv-cache/implementations/lmcache/internals.html">LMCache 内核</a>、<a href="../04-storage/implementations/mooncake/internals.html">Mooncake 内核</a>。</li>
+<li>通信/GPU：<a href="../06-serving/implementations/vllm/performance-and-parallelism.html">性能教材</a>、<a href="../07-practice/implementations/mooncake/labs.html">TE 与 Store 分层测量</a>。</li>
+<li>平台：<a href="../06-serving/implementations/lmcache/observability.html">性能运维</a>、<a href="implementations/mooncake/system-design.html">系统设计</a>。</li>
+</ul>
+<h2 id="第三周做对照而不是堆功能">第三周：做对照，而不是堆功能</h2>
+<p>本周时间仍是工作日 2h、周末 4h。所有方向采用相同实验步骤，改变被研究的对象。</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>天</th>
+<th>通用任务</th>
+<th>KV 存储方向的具体例子</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D15</td>
+<td>写一个能被证伪的假设，冻结版本与变量</td>
+<td>长共享前缀下，远端加载关键路径低于省下的 Prefill</td>
+</tr>
+<tr>
+<td>D16</td>
+<td>选择一个最小可跑路径，核对格式与资源</td>
+<td>只选原生 Store、HiCache 或 LMCache 中一条</td>
+</tr>
+<tr>
+<td>D17</td>
+<td>正确性与冷基线</td>
+<td>改前缀、改 namespace、部分缺失时不错误复用</td>
+</tr>
+<tr>
+<td>D18</td>
+<td>热负载对照</td>
+<td>分清本地命中与远端实际加载，记录省下的 token</td>
+</tr>
+<tr>
+<td>D19</td>
+<td>低收益反例</td>
+<td>短输入、低复用、热点切换，观察额外查询/写入</td>
+</tr>
+<tr>
+<td>D20 / 4h</td>
+<td>扫描一个关键变量，保留原始数据</td>
+<td>chunk、并发或预取预算三选一</td>
+</tr>
+<tr>
+<td>D21 / 4h</td>
+<td>解释曲线，确认瓶颈和收益边界</td>
+<td>命中率、搬运量、TTFT/ITL、goodput 联合分析</td>
+</tr>
+</tbody>
+</table></div>
+<p>其他方向选题：引擎研究长短请求混合下的 token 预算；通信研究对象大小与并发；GPU 研究代表性 shape 下的一个瓶颈；平台研究固定到达率与突发流量下的 SLO。</p>
+<p><strong>验收</strong>：至少有一个正向结果、一个不收益或退化的条件，并能解释。没有真实硬件时产出推导/模拟结果，标出未测指标，不填写虚构曲线。</p>
+<h2 id="第四周故障系统设计与面试">第四周：故障、系统设计与面试</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>天</th>
+<th style="text-align:right">时间</th>
+<th>任务</th>
+<th>交付</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D22</td>
+<td style="text-align:right">2h</td>
+<td>做容量、网络、对象数与在途预算</td>
+<td>一页计算表，单位和假设齐全</td>
+</tr>
+<tr>
+<td>D23</td>
+<td style="text-align:right">2h</td>
+<td>测/推演部分失败、超时和取消</td>
+<td>安全回收、重算与拒绝消费的规则</td>
+</tr>
+<tr>
+<td>D24</td>
+<td style="text-align:right">2h</td>
+<td>测/推演节点退出、热点和回源压力</td>
+<td>故障矩阵与降级顺序</td>
+</tr>
+<tr>
+<td>D25</td>
+<td style="text-align:right">2h</td>
+<td>完成一个系统设计题</td>
+<td>需求→估算→数据路径→故障→验证</td>
+</tr>
+<tr>
+<td>D26</td>
+<td style="text-align:right">2h</td>
+<td>整理项目材料</td>
+<td>配置、版本、基线、结果、边界、未验证项</td>
+</tr>
+<tr>
+<td>D27</td>
+<td style="text-align:right">4h</td>
+<td>模拟面试；重点追问不确定处</td>
+<td>30 分钟录音、错题与补证据清单</td>
+</tr>
+<tr>
+<td>D28</td>
+<td style="text-align:right">4h</td>
+<td>按<a href="interview-and-design.html">验收标准</a>自评</td>
+<td>5 分钟项目讲述、10 分钟系统设计、后续专题</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="只有两周怎么裁剪">只有两周怎么裁剪</h2>
+<p>保留第一周公共主线，用第二周选择一个方向，至少完成一次路径追踪、一个算例、一份失败表和项目提纲。优先删高级后端、MoE、非前缀复用等选修，不能删缓存正确性和实验条件。</p>
+<h2 id="不同硬件能完成什么">不同硬件能完成什么</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>环境</th>
+<th>可以完成</th>
+<th>不能据此声称</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>macOS / 普通 CPU</td>
+<td>概念、容量、代码阅读、教学脚本、策略模拟</td>
+<td>GPU 推理或 RDMA 的实测收益</td>
+</tr>
+<tr>
+<td>Linux CPU/TCP</td>
+<td>适用的对象协议实验、字节正确性、部分失败</td>
+<td>GPU 布局、GDR、真实 TTFT 改善</td>
+</tr>
+<tr>
+<td>Linux 单 GPU</td>
+<td>推理、host 加载、局部性能与正确性</td>
+<td>跨机吞吐、真实网络故障域</td>
+</tr>
+<tr>
+<td>多 GPU / 多节点 RDMA</td>
+<td>并行一致性、远端共享、拓扑与故障实验</td>
+<td>未测模型/负载上的普遍最优</td>
+</tr>
+</tbody>
+</table></div>
+<p>每阶段都可以有有效产物，但产物的结论必须和证据匹配。</p>
+</article>
+<footer><a href="../index.html">返回总目录</a>
+<p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#第一周所有方向共同完成">第一周：所有方向共同完成</a><a class="level-2" href="#第二周沿一个方向追通数据与状态">第二周：沿一个方向追通数据与状态</a><a class="level-2" href="#第三周做对照而不是堆功能">第三周：做对照，而不是堆功能</a><a class="level-2" href="#第四周故障系统设计与面试">第四周：故障、系统设计与面试</a><a class="level-2" href="#只有两周怎么裁剪">只有两周怎么裁剪</a><a class="level-2" href="#不同硬件能完成什么">不同硬件能完成什么</a></aside>
+<dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
+<button id="search-close" aria-label="关闭搜索">关闭</button></div>
+<input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">
+<p id="search-status" role="status">输入主题、术语或问题</p><ol id="search-results"></ol></dialog>
+</body></html>

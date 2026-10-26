@@ -1,0 +1,21 @@
+digraph G {
+  graph [rankdir=LR, bgcolor="white", pad=0.3, nodesep=0.4, ranksep=0.6, fontname="Arial Unicode MS", fontsize=20, label="D4 · 请求与资源收尾状态（教学模型）", labelloc=t];
+  node [shape=box, style="rounded,filled", fillcolor="#EAF2FF", color="#57799F", fontname="Arial Unicode MS", fontsize=14, margin="0.18,0.12"];
+  edge [fontname="Arial Unicode MS", fontsize=12, color="#52657A"];
+  queued [label="等待准入"];
+  prepare [label="准备空间 / 外部依赖"];
+  running [label="可执行 / 正在推进"];
+  paused [label="抢占后等待恢复"];
+  drain [label="停止新增任务\n排空或确认终止在途工作", fillcolor="#FFF3D6"];
+  release [label="释放引用、保留和 buffer\n结束请求；缓存可按策略保留", fillcolor="#E6F4EA"];
+  queued -> prepare [label="预算允许"];
+  prepare -> running [label="消费依赖满足"];
+  running -> running [label="下一轮"];
+  running -> paused [label="协调设备后抢占"];
+  paused -> prepare [label="恢复 / 重算"];
+  queued -> drain [label="取消"];
+  prepare -> drain [label="取消 / 失败"];
+  running -> drain [label="完成 / 取消 / 失败"];
+  paused -> drain [label="取消"];
+  drain -> release [label="确认不会再访问旧资源"];
+}

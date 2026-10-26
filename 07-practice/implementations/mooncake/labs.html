@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>06 · 实验与性能诊断 · LLM Infra</title>
+<title>Mooncake：实验与性能诊断 · LLM Infra</title>
 <link rel="stylesheet" href="../../../assets/site.css">
 <script defer src="../../../assets/search-index.js"></script>
 <script defer src="../../../assets/site.js"></script></head>
@@ -13,6 +13,7 @@
 <aside id="sidebar"><nav aria-label="学习主题">
 <a href="../../../index.html">总目录</a>
 <div class="featured">
+<a href="../../../01-foundations/interactive.html">互动演示：算一算、点一点</a>
 <a href="../../../01-foundations/design-atlas.html">设计图册</a>
 <a href="../../../08-career/expert-interview-guide.html">P7–P8 专家面试</a>
 <a href="../../../08-career/expert-qa.html">KV 存储深挖问答</a>
@@ -20,89 +21,92 @@
 <a href="../../../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake</a>
 </div>
 <details><summary>01 基础与设计图</summary>
-<a href="../../../01-foundations/index.html">01 · 基础与全景：先理解计算、资源和请求</a>
-<a href="../../../01-foundations/attention-and-inference.html">推理基础教材：从 Transformer 到服务成本</a>
-<a href="../../../01-foundations/compute-and-memory.html">推理基础、调度、GPU 优化与分布式</a>
-<a href="../../../01-foundations/concepts.html">公共基础：推理、KV Cache、内存和性能</a>
+<a href="../../../01-foundations/index.html">01 基础与全景：先理解计算、资源和请求</a>
+<a href="../../../01-foundations/overview.html">全景导读：先把一次请求的整条链路想明白</a>
+<a href="../../../01-foundations/concepts.html">公共概念：推理、KV Cache、内存和性能指标</a>
+<a href="../../../01-foundations/attention-and-inference.html">推理基础：从 Transformer 到服务成本</a>
+<a href="../../../01-foundations/compute-and-memory.html">计算与显存：调度、GPU 优化与分布式基础</a>
 <a href="../../../01-foundations/design-atlas.html">设计图册：从请求执行到共享 KV 存储</a>
-<a href="../../../01-foundations/overview.html">LLM Infra 总体介绍：先把整条链路想明白</a>
+<a href="../../../01-foundations/interactive.html">互动演示：容量、盈亏、命中折叠与超时</a>
 </details>
 <details><summary>02 推理运行时</summary>
-<a href="../../../02-runtime/index.html">02 · 推理运行时：把请求变成每一轮 GPU 工作</a>
-<a href="../../../02-runtime/implementations/sglang/knowledge-map.html">学习大纲与完整知识地图</a>
-<a href="../../../02-runtime/implementations/sglang/overview.html">SGLang：把请求调度、前缀复用与分层缓存连起来</a>
-<a href="../../../02-runtime/implementations/sglang/runtime.html">SGLang 架构、运行图与源码路线</a>
-<a href="../../../02-runtime/implementations/vllm/architecture.html">知识地图与 vLLM 设计图</a>
+<a href="../../../02-runtime/index.html">02 推理运行时：把请求变成每一轮 GPU 工作</a>
 <a href="../../../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
-<a href="../../../02-runtime/implementations/vllm/request-walkthrough.html">vLLM 源码教材：跟踪一条请求及其资源</a>
+<a href="../../../02-runtime/implementations/vllm/architecture.html">vLLM：知识地图与设计图</a>
+<a href="../../../02-runtime/implementations/vllm/request-walkthrough.html">vLLM：跟踪一条请求的源码与资源</a>
+<a href="../../../02-runtime/implementations/sglang/overview.html">SGLang：请求调度、前缀复用与分层缓存</a>
+<a href="../../../02-runtime/implementations/sglang/knowledge-map.html">SGLang：学习大纲与知识地图</a>
+<a href="../../../02-runtime/implementations/sglang/runtime.html">SGLang：架构、运行图与源码路线</a>
 </details>
 <details><summary>03 KV Cache 管理</summary>
-<a href="../../../03-kv-cache/index.html">03 · KV Cache 管理：让正确的状态在正确的时间可用</a>
-<a href="../../../03-kv-cache/capacity-and-reuse.html">03 · KV Cache 基础与性能模型</a>
-<a href="../../../03-kv-cache/semantics-and-costs.html">semantics-and-costs</a>
-<a href="../../../03-kv-cache/implementations/lmcache/internals.html">internals</a>
+<a href="../../../03-kv-cache/index.html">03 KV Cache 管理：让正确的状态在正确的时间可用</a>
+<a href="../../../03-kv-cache/semantics-and-costs.html">KV Cache 原理：复用条件与容量推导</a>
+<a href="../../../03-kv-cache/capacity-and-reuse.html">KV Cache 基础：容量与性能模型</a>
+<a href="../../../03-kv-cache/implementations/vllm/integration.html">vLLM：外部 KV 接入（LMCache 与 Mooncake）</a>
+<a href="../../../03-kv-cache/implementations/sglang/prefix-cache.html">SGLang：KV 原理、分页与前缀复用</a>
+<a href="../../../03-kv-cache/implementations/sglang/tiered-cache.html">SGLang：HiCache 分层缓存与 PD 分离</a>
 <a href="../../../03-kv-cache/implementations/lmcache/overview.html">LMCache：把 KV 的保存、查找、加载和回收管起来</a>
-<a href="../../../03-kv-cache/implementations/lmcache/state-diagrams.html">state-diagrams</a>
-<a href="../../../03-kv-cache/implementations/sglang/prefix-cache.html">KV Cache：原理、容量、分页、前缀复用与正确性</a>
-<a href="../../../03-kv-cache/implementations/sglang/tiered-cache.html">HiCache、Mooncake、LMCache 与 PD 分离</a>
-<a href="../../../03-kv-cache/implementations/vllm/integration.html">KV Cache 专题：vLLM、LMCache 与 Mooncake</a>
+<a href="../../../03-kv-cache/implementations/lmcache/state-diagrams.html">LMCache：知识地图、架构与时序图</a>
+<a href="../../../03-kv-cache/implementations/lmcache/internals.html">LMCache：架构与源码主线</a>
 </details>
 <details><summary>04 分布式存储</summary>
-<a href="../../../04-storage/index.html">04 · 分布式存储：把可复用状态放进共享资源池</a>
+<a href="../../../04-storage/index.html">04 分布式存储：把可复用状态放进共享资源池</a>
 <a href="../../../04-storage/kv-cache-storage.html">KV Cache 存储详解：数据模型、协议、容量、性能与故障</a>
-<a href="../../../04-storage/implementations/lmcache/backend-contracts.html">backend-contracts</a>
-<a href="../../../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake：从一次 KV 保存到下一次请求恢复</a>
-<a href="../../../04-storage/implementations/mooncake/architecture.html">02 · 知识地图与设计图</a>
-<a href="../../../04-storage/implementations/mooncake/integrations.html">05 · LMCache 与推理引擎集成</a>
-<a href="../../../04-storage/implementations/mooncake/internals.html">04 · Mooncake 内核与源码路线</a>
 <a href="../../../04-storage/implementations/mooncake/overview.html">Mooncake：KV 对象怎样共享、怎样安全地高速搬运</a>
+<a href="../../../04-storage/implementations/mooncake/architecture.html">Mooncake：知识地图与设计图</a>
+<a href="../../../04-storage/implementations/mooncake/internals.html">Mooncake：Store 内核与源码路线</a>
+<a href="../../../04-storage/implementations/mooncake/integrations.html">Mooncake：与 LMCache 和推理引擎集成</a>
+<a href="../../../04-storage/implementations/lmcache/backend-contracts.html">LMCache：存储后端契约与 Mooncake 接入</a>
+<a href="../../../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake：从一次保存到下一次恢复</a>
 </details>
 <details><summary>05 数据传输</summary>
-<a href="../../../05-transfer/index.html">05 · 数据传输：搬得动、搬得快，还要搬得安全</a>
+<a href="../../../05-transfer/index.html">05 数据传输：搬得动、搬得快，还要搬得安全</a>
 <a href="../../../05-transfer/implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine：字节移动的实现案例</a>
 </details>
 <details><summary>06 Serving 与性能</summary>
-<a href="../../../06-serving/index.html">06 · Serving 与性能：让整条链路满足服务目标</a>
-<a href="../../../06-serving/component-selection.html">Serving 组件选型：在同一技术问题下比较实现</a>
-<a href="../../../06-serving/implementations/lmcache/observability.html">observability</a>
-<a href="../../../06-serving/implementations/vllm/performance-and-parallelism.html">性能、分布式与服务工程教材</a>
+<a href="../../../06-serving/index.html">06 Serving 与性能：让整条链路满足服务目标</a>
+<a href="../../../06-serving/component-selection.html">组件选型：在同一技术问题下比较实现</a>
+<a href="../../../06-serving/implementations/vllm/performance-and-parallelism.html">vLLM：性能、分布式与服务工程</a>
+<a href="../../../06-serving/implementations/lmcache/observability.html">LMCache：优化、可观测与生产设计</a>
 </details>
 <details open><summary>07 实验与验证</summary>
-<a href="../../index.html">07 · 实验与验证：用证据回答系统问题</a>
-<a href="../lmcache/labs.html">labs</a>
-<a href="labs.html" aria-current="page">06 · 实验与性能诊断</a>
-<a href="../sglang/labs.html">实验手册：从单机基线到共享缓存与 PD</a>
-<a href="../vllm/experiments.html">实验与项目：从原理到可复现证据</a>
-<a href="../vllm/walkthrough.html">实践教材：运行步骤、源码作业与参考答案</a>
+<a href="../../index.html">07 实验与验证：用证据回答系统问题</a>
+<a href="../vllm/walkthrough.html">vLLM：运行步骤、源码作业与参考答案</a>
+<a href="../vllm/experiments.html">vLLM：实验与项目</a>
+<a href="../sglang/labs.html">SGLang：从单机基线到共享缓存与 PD</a>
+<a href="../lmcache/labs.html">LMCache：实验、基准与验收</a>
+<a href="labs.html" aria-current="page">Mooncake：实验与性能诊断</a>
 </details>
 <details><summary>08 专家能力与面试</summary>
-<a href="../../../08-career/index.html">08 · 岗位、学习计划与面试：按能力组织成果</a>
-<a href="../../../08-career/coverage-and-review.html">资料结构与覆盖范围审阅</a>
-<a href="../../../08-career/expert-interview-guide.html">LLM 推理 Infra 专家面试总纲：P7–P8 能力参考，重点 KV Cache 存储</a>
+<a href="../../../08-career/index.html">08 岗位、计划与面试：按能力组织成果</a>
+<a href="../../../08-career/expert-interview-guide.html">P7–P8 专家面试总纲：重点 KV Cache 存储</a>
 <a href="../../../08-career/expert-qa.html">P7–P8 KV Cache 存储深挖问答</a>
-<a href="../../../08-career/interview-and-design.html">面试与项目：能解释、能算账、能处理失败</a>
-<a href="../../../08-career/references.html">按问题查资料：专题索引与版本基线</a>
-<a href="../../../08-career/roles.html">按岗位方向学习：什么必须熟练，什么可以后学</a>
-<a href="../../../08-career/study-plan.html">统一 28 天学习计划：基础只学一次，后面按岗位分流</a>
-<a href="../../../08-career/implementations/lmcache/index.html">index</a>
-<a href="../../../08-career/implementations/lmcache/questions.html">questions</a>
-<a href="../../../08-career/implementations/lmcache/study-plan.html">study-plan</a>
-<a href="../../../08-career/implementations/lmcache/system-design.html">system-design</a>
-<a href="../../../08-career/implementations/mooncake/index.html">Mooncake 与 KV Cache 存储：28 天学习手册</a>
-<a href="../../../08-career/implementations/mooncake/questions.html">07 · 面试题与参考回答</a>
-<a href="../../../08-career/implementations/mooncake/study-plan.html">01 · 28 天学习计划</a>
-<a href="../../../08-career/implementations/mooncake/system-design.html">08 · 系统设计、毕业项目与参考资料</a>
-<a href="../../../08-career/implementations/sglang/assessment.html">参考资料、实验报告与最终验收</a>
-<a href="../../../08-career/implementations/sglang/questions.html">推理 Infra 面试：36 道题与系统设计</a>
-<a href="../../../08-career/implementations/sglang/study-plan.html">28 天学习计划</a>
-<a href="../../../08-career/implementations/vllm/questions.html">推理 Infra 面试：60 个问题与参考回答</a>
-<a href="../../../08-career/implementations/vllm/references.html">官方资料与版本说明</a>
-<a href="../../../08-career/implementations/vllm/study-plan.html">28 天学习大纲与每日计划</a>
+<a href="../../../08-career/interview-and-design.html">基础面试与算例：能解释、能算账、能处理失败</a>
+<a href="../../../08-career/roles.html">岗位方向：什么必须熟练，什么可以后学</a>
+<a href="../../../08-career/study-plan.html">统一 28 天计划：基础只学一次，后面按岗位分流</a>
+<a href="../../../08-career/references.html">资料索引与版本基线</a>
+<a href="../../../08-career/coverage-and-review.html">资料结构与覆盖范围审阅</a>
 </details>
-<a href="../../../08-career/coverage-and-review.html">覆盖范围与审阅</a>
+<details><summary>专项题库与计划（按项目）</summary>
+<a href="../../../08-career/implementations/lmcache/questions.html">LMCache 专项：60 道面试题与参考回答</a>
+<a href="../../../08-career/implementations/lmcache/system-design.html">LMCache 专项：系统设计题与源码阅读</a>
+<a href="../../../08-career/implementations/lmcache/study-plan.html">LMCache 专项：28 天计划</a>
+<a href="../../../08-career/implementations/lmcache/index.html">LMCache 专项：学习指南目录</a>
+<a href="../../../08-career/implementations/mooncake/questions.html">Mooncake 专项：面试题与参考回答</a>
+<a href="../../../08-career/implementations/mooncake/system-design.html">Mooncake 专项：系统设计与毕业项目</a>
+<a href="../../../08-career/implementations/mooncake/study-plan.html">Mooncake 专项：28 天计划</a>
+<a href="../../../08-career/implementations/mooncake/index.html">Mooncake 专项：学习手册目录</a>
+<a href="../../../08-career/implementations/vllm/questions.html">vLLM 专项：60 道面试题与参考回答</a>
+<a href="../../../08-career/implementations/vllm/study-plan.html">vLLM 专项：28 天计划</a>
+<a href="../../../08-career/implementations/vllm/references.html">vLLM 专项：官方资料与版本说明</a>
+<a href="../../../08-career/implementations/sglang/questions.html">SGLang 专项：36 道面试题与系统设计</a>
+<a href="../../../08-career/implementations/sglang/study-plan.html">SGLang 专项：28 天计划</a>
+<a href="../../../08-career/implementations/sglang/assessment.html">SGLang 专项：参考资料与最终验收</a>
+</details>
+<a href="../../../tools/index.html">维护说明：怎样直接修改 HTML</a>
 </nav></aside>
 <main id="content"><div class="breadcrumbs">07 实验与验证 · 专注 KV Cache 存储</div>
-<article><h1 id="06--实验与性能诊断">06 · 实验与性能诊断</h1>
+<article><h1 id="06--实验与性能诊断">Mooncake：实验与性能诊断</h1>
 <p>实验按硬件分层：A/G 可在当前 macOS 运行；B 需要 Linux 和 Mooncake 原生包；C 的 RDMA 部分需要真实网络；D/E/F 的推理部分需要匹配模型的 GPU。以下步骤是学习实验说明，除纯 Python 算例外，不代表已在此工作区完成部署或获得性能数据。</p>
 <h2 id="实验-a容量与带宽预算">实验 A：容量与带宽预算</h2>
 <p><strong>目标</strong>：从配置得到可检查的数量级；仅使用 Python 标准库。</p>

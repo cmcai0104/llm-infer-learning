@@ -1,0 +1,21 @@
+digraph G {
+  graph [rankdir=TB, bgcolor="white", pad=0.3, nodesep=0.4, ranksep=0.5, fontname="Arial Unicode MS", fontsize=20, label="D5 · 从 token 前缀到物理对象（映射示意）", labelloc=t];
+  node [shape=box, style="rounded,filled", fillcolor="#EAF2FF", color="#57799F", fontname="Arial Unicode MS", fontsize=14, margin="0.18,0.12"];
+  edge [fontname="Arial Unicode MS", fontsize=12, color="#52657A"];
+  identity [label="语义身份\n模型 / 前缀 / 位置 / namespace", fillcolor="#FFF3D6"];
+  h0 [label="chunk 0\nhash(prefix 0)"];
+  h1 [label="chunk 1\nhash(parent, tokens)"];
+  h2 [label="chunk 2\nhash(parent, tokens)"];
+  {rank=same; h0; h1; h2;}
+  identity -> h0;
+  h0 -> h1 -> h2 [label="依赖前缀"];
+  blocks [label="引擎物理页\nblock table；页不必连续"];
+  grouped [label="对象维度\nchunk × group × KV rank\n布局与 dtype 另需兼容", fillcolor="#E6F4EA"];
+  objects [label="逻辑 key → bytes\n一个 chunk 可对应多个对象", fillcolor="#E6F4EA"];
+  locations [label="副本位置\nsegment / offset / length / 状态", fillcolor="#E6F4EA"];
+  h1 -> grouped [label="内容身份"];
+  blocks -> grouped [label="收集 / 转换"];
+  grouped -> objects -> locations;
+  note [label="page、chunk、object、segment\n不是同一种单位，也不保证一一对应", fillcolor="#FFF3D6"];
+  note -> grouped [style=dashed, arrowhead=none];
+}

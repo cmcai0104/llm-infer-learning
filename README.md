@@ -1,5 +1,7 @@
 # LLM Infra 学习资料库
 
+**阅读入口：[直接打开 HTML 首页](index.html)。** 后续正式内容在 `site/` 中直接维护，打开即可阅读，无需 Python、安装依赖或执行构建。主题目录中的 Markdown/RST 与站点 `_sources/` 留作参考笔记。
+
 这套资料围绕一个问题展开：**怎样让大模型在有限的 GPU、内存和网络资源上，正确、稳定、低成本地服务更多请求？**
 
 资料按 **LLM Infra 的技术问题**组织：先理解共同原理和系统取舍，再比较具体实现，最后通过实验验证。vLLM、SGLang、LMCache、Mooncake 是深入源码的案例，放在各主题内部，不作为全库的学习分区。重点方向是 KV Cache 管理、分布式存储与数据传输。
@@ -16,7 +18,7 @@
 
 ![推理 Infra 架构总图](01-foundations/diagrams/d01-system.svg)
 
-图片与详细说明集中在设计图册。HTML 学习版从原文自动生成，提供主题导航、页内目录、搜索和图片展示；构建方式见[站点工具说明](tools/README.md)。
+图片与详细说明集中在设计图册。HTML 学习版提供主题导航、页内目录、主题搜索和图片展示；直接编辑 HTML 的方式见[维护说明](site/tools/index.html)。
 
 ## 一、沿系统链路学习
 
@@ -74,5 +76,5 @@
 - 主线使用普通自回归、causal full-attention 模型解释机制；GQA、MLA、滑窗和混合模型会单独说明边界。
 - 源码事实以[版本基线](08-career/references.md)为准，公式示例不等于实测。部署时重新核对匹配的框架、Connector、模型与后端版本。
 - `implementations/` 中保存学习笔记与源码阅读路线，上游源码链接固定到相应提交。
-- 原有 Markdown、reStructuredText 教材均保留。Markdown 可直接阅读；RST 中的 Mermaid、数学和 Sphinx 指令需要相应渲染支持，也可阅读源文本。统一主线使用 Markdown。
+- 正式学习与后续维护以 HTML 为主，图表和公式可直接查看。原有 Markdown、reStructuredText 教材保留为参考笔记。
 - 本机没有 GPU/RDMA 也能做推导、源码练习和 CPU 模拟。真实性能、GPU 正确性与分布式故障结论，需要在对应硬件环境中验证。

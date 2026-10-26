@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>backend-contracts · LLM Infra</title>
+<link rel="stylesheet" href="../../../assets/site.css">
+<script defer src="../../../assets/search-index.js"></script>
+<script defer src="../../../assets/site.js"></script></head>
+<body data-root="../../..">
+<a class="skip" href="#content">跳到正文</a>
+<header class="topbar"><button id="nav-toggle" aria-controls="sidebar" aria-expanded="false">目录</button>
+<a class="brand" href="../../../index.html">LLM Infra <span>学习资料库</span></a>
+<button id="search-open">搜索内容 <kbd>/</kbd></button></header>
+<aside id="sidebar"><nav aria-label="学习主题">
+<a href="../../../index.html">总目录</a>
+<div class="featured">
+<a href="../../../01-foundations/design-atlas.html">设计图册</a>
+<a href="../../../08-career/expert-interview-guide.html">P7–P8 专家面试</a>
+<a href="../../kv-cache-storage.html">KV 存储详解</a>
+<a href="mooncake-walkthrough.html">LMCache + Mooncake</a>
+</div>
+<details><summary>01 基础与设计图</summary>
+<a href="../../../01-foundations/index.html">01 · 基础与全景：先理解计算、资源和请求</a>
+<a href="../../../01-foundations/attention-and-inference.html">推理基础教材：从 Transformer 到服务成本</a>
+<a href="../../../01-foundations/compute-and-memory.html">推理基础、调度、GPU 优化与分布式</a>
+<a href="../../../01-foundations/concepts.html">公共基础：推理、KV Cache、内存和性能</a>
+<a href="../../../01-foundations/design-atlas.html">设计图册：从请求执行到共享 KV 存储</a>
+<a href="../../../01-foundations/overview.html">LLM Infra 总体介绍：先把整条链路想明白</a>
+</details>
+<details><summary>02 推理运行时</summary>
+<a href="../../../02-runtime/index.html">02 · 推理运行时：把请求变成每一轮 GPU 工作</a>
+<a href="../../../02-runtime/implementations/sglang/knowledge-map.html">学习大纲与完整知识地图</a>
+<a href="../../../02-runtime/implementations/sglang/overview.html">SGLang：把请求调度、前缀复用与分层缓存连起来</a>
+<a href="../../../02-runtime/implementations/sglang/runtime.html">SGLang 架构、运行图与源码路线</a>
+<a href="../../../02-runtime/implementations/vllm/architecture.html">知识地图与 vLLM 设计图</a>
+<a href="../../../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
+<a href="../../../02-runtime/implementations/vllm/request-walkthrough.html">vLLM 源码教材：跟踪一条请求及其资源</a>
+</details>
+<details><summary>03 KV Cache 管理</summary>
+<a href="../../../03-kv-cache/index.html">03 · KV Cache 管理：让正确的状态在正确的时间可用</a>
+<a href="../../../03-kv-cache/capacity-and-reuse.html">03 · KV Cache 基础与性能模型</a>
+<a href="../../../03-kv-cache/semantics-and-costs.html">semantics-and-costs</a>
+<a href="../../../03-kv-cache/implementations/lmcache/internals.html">internals</a>
+<a href="../../../03-kv-cache/implementations/lmcache/overview.html">LMCache：把 KV 的保存、查找、加载和回收管起来</a>
+<a href="../../../03-kv-cache/implementations/lmcache/state-diagrams.html">state-diagrams</a>
+<a href="../../../03-kv-cache/implementations/sglang/prefix-cache.html">KV Cache：原理、容量、分页、前缀复用与正确性</a>
+<a href="../../../03-kv-cache/implementations/sglang/tiered-cache.html">HiCache、Mooncake、LMCache 与 PD 分离</a>
+<a href="../../../03-kv-cache/implementations/vllm/integration.html">KV Cache 专题：vLLM、LMCache 与 Mooncake</a>
+</details>
+<details open><summary>04 分布式存储</summary>
+<a href="../../index.html">04 · 分布式存储：把可复用状态放进共享资源池</a>
+<a href="../../kv-cache-storage.html">KV Cache 存储详解：数据模型、协议、容量、性能与故障</a>
+<a href="backend-contracts.html" aria-current="page">backend-contracts</a>
+<a href="mooncake-walkthrough.html">LMCache + Mooncake：从一次 KV 保存到下一次请求恢复</a>
+<a href="../mooncake/architecture.html">02 · 知识地图与设计图</a>
+<a href="../mooncake/integrations.html">05 · LMCache 与推理引擎集成</a>
+<a href="../mooncake/internals.html">04 · Mooncake 内核与源码路线</a>
+<a href="../mooncake/overview.html">Mooncake：KV 对象怎样共享、怎样安全地高速搬运</a>
+</details>
+<details><summary>05 数据传输</summary>
+<a href="../../../05-transfer/index.html">05 · 数据传输：搬得动、搬得快，还要搬得安全</a>
+<a href="../../../05-transfer/implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine：字节移动的实现案例</a>
+</details>
+<details><summary>06 Serving 与性能</summary>
+<a href="../../../06-serving/index.html">06 · Serving 与性能：让整条链路满足服务目标</a>
+<a href="../../../06-serving/component-selection.html">Serving 组件选型：在同一技术问题下比较实现</a>
+<a href="../../../06-serving/implementations/lmcache/observability.html">observability</a>
+<a href="../../../06-serving/implementations/vllm/performance-and-parallelism.html">性能、分布式与服务工程教材</a>
+</details>
+<details><summary>07 实验与验证</summary>
+<a href="../../../07-practice/index.html">07 · 实验与验证：用证据回答系统问题</a>
+<a href="../../../07-practice/implementations/lmcache/labs.html">labs</a>
+<a href="../../../07-practice/implementations/mooncake/labs.html">06 · 实验与性能诊断</a>
+<a href="../../../07-practice/implementations/sglang/labs.html">实验手册：从单机基线到共享缓存与 PD</a>
+<a href="../../../07-practice/implementations/vllm/experiments.html">实验与项目：从原理到可复现证据</a>
+<a href="../../../07-practice/implementations/vllm/walkthrough.html">实践教材：运行步骤、源码作业与参考答案</a>
+</details>
+<details><summary>08 专家能力与面试</summary>
+<a href="../../../08-career/index.html">08 · 岗位、学习计划与面试：按能力组织成果</a>
+<a href="../../../08-career/coverage-and-review.html">资料结构与覆盖范围审阅</a>
+<a href="../../../08-career/expert-interview-guide.html">LLM 推理 Infra 专家面试总纲：P7–P8 能力参考，重点 KV Cache 存储</a>
+<a href="../../../08-career/interview-and-design.html">面试与项目：能解释、能算账、能处理失败</a>
+<a href="../../../08-career/references.html">按问题查资料：专题索引与版本基线</a>
+<a href="../../../08-career/roles.html">按岗位方向学习：什么必须熟练，什么可以后学</a>
+<a href="../../../08-career/study-plan.html">统一 28 天学习计划：基础只学一次，后面按岗位分流</a>
+<a href="../../../08-career/implementations/lmcache/index.html">index</a>
+<a href="../../../08-career/implementations/lmcache/questions.html">questions</a>
+<a href="../../../08-career/implementations/lmcache/study-plan.html">study-plan</a>
+<a href="../../../08-career/implementations/lmcache/system-design.html">system-design</a>
+<a href="../../../08-career/implementations/mooncake/index.html">Mooncake 与 KV Cache 存储：28 天学习手册</a>
+<a href="../../../08-career/implementations/mooncake/questions.html">07 · 面试题与参考回答</a>
+<a href="../../../08-career/implementations/mooncake/study-plan.html">01 · 28 天学习计划</a>
+<a href="../../../08-career/implementations/mooncake/system-design.html">08 · 系统设计、毕业项目与参考资料</a>
+<a href="../../../08-career/implementations/sglang/assessment.html">参考资料、实验报告与最终验收</a>
+<a href="../../../08-career/implementations/sglang/questions.html">推理 Infra 面试：36 道题与系统设计</a>
+<a href="../../../08-career/implementations/sglang/study-plan.html">28 天学习计划</a>
+<a href="../../../08-career/implementations/vllm/questions.html">推理 Infra 面试：60 个问题与参考回答</a>
+<a href="../../../08-career/implementations/vllm/references.html">官方资料与版本说明</a>
+<a href="../../../08-career/implementations/vllm/study-plan.html">28 天学习大纲与每日计划</a>
+</details>
+<a href="../../../08-career/coverage-and-review.html">覆盖范围与审阅</a>
+</nav></aside>
+<main id="content"><div class="breadcrumbs">04 分布式存储 · 专注 KV Cache 存储</div>
+<article><section id="kv">
+<h2 id="heading-从普通-kv-存储到推理状态存储">从普通 KV 存储到推理状态存储</h2>
+<p>普通 key-value 服务关心 key/value 的一致性与读写延迟；
+LLM KV Cache 还要求理解上层的 <strong>前缀依赖、张量布局、分片完整性和设备生命周期</strong>。
+对象很大、访问有强烈前缀与会话局部性，可重算但错误命中不可接受。
+存储层可以不理解 attention，但集成层必须将这些语义编码为可靠契约。</p>
+<p>例如一个 256-token chunk 可能有数十 MiB，且同一个逻辑 chunk 分成多个 rank/group
+对象。Redis 风格的小对象每秒操作数不等价于这种 workload 的性能。
+还需要量化大对象带宽、batch 开销、内存拷贝次数、查找放大和尾延迟。</p>
+</section>
+<section id="section-1">
+<h2 id="heading-存储层级如何选">存储层级如何选</h2>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 18%" />
+<col style="width: 25%" />
+<col style="width: 27%" />
+<col style="width: 30%" />
+</colgroup>
+<thead>
+<tr><th class="head"><p>层级</p></th>
+<th class="head"><p>优点</p></th>
+<th class="head"><p>代价/风险</p></th>
+<th class="head"><p>适用场景</p></th>
+</tr>
+</thead>
+<tbody>
+<tr><td><p>GPU HBM / APC</p></td>
+<td><p>可直接供 attention 使用</p></td>
+<td><p>容量贵，与权重和运行时争显存</p></td>
+<td><p>最近使用、即将 decode 的 KV</p></td>
+</tr>
+<tr><td><p>本机 DRAM</p></td>
+<td><p>容量较大、低网络开销</p></td>
+<td><p>H2D/D2H、NUMA、pinning 与 CPU 内存压力</p></td>
+<td><p>多轮会话、同机跨引擎复用</p></td>
+</tr>
+<tr><td><p>远端 DRAM</p></td>
+<td><p>汇聚内存池、跨节点共享</p></td>
+<td><p>网络和控制服务、故障与热点</p></td>
+<td><p>共享文档、长上下文、弹性计算池</p></td>
+</tr>
+<tr><td><p>本地 NVMe / 文件</p></td>
+<td><p>容量成本较低</p></td>
+<td><p>IOPS、吞吐、写放大、文件元数据及 page cache 干扰</p></td>
+<td><p>次热对象、重启后的复用</p></td>
+</tr>
+<tr><td><p>共享文件/对象存储</p></td>
+<td><p>大容量、跨节点访问、可选耐久性</p></td>
+<td><p>RTT、请求费用、吞吐与恢复流量</p></td>
+<td><p>长尾缓存、预热、可容忍较长加载的场景</p></td>
+</tr>
+</tbody>
+</table></div>
+<p>“远端”未必比“磁盘”慢，“本地”也未必最快；有效速度由对象大小、
+排队、介质、拓扑与软件路径共同决定。直接给所有层级固定性能排名会误导选型。
+L2 可配置多个 adapter，但默认策略不是一个自动学习最快层的智能层级系统。</p>
+</section>
+<section id="section-2">
+<h2 id="heading-必须分开的三类策略">必须分开的三类策略</h2>
+<p><strong>准入（admission）</strong>：值不值得存？一次性长 prompt 会占满缓存，可能挤掉高复用前缀。
+<strong>淘汰（eviction）</strong>：空间不够时删谁？LRU 易实现，但忽略对象大小、重算成本和未来价值。
+<strong>放置/路由（placement/routing）</strong>：存在哪、请求去哪？能减少搬运，但会与计算负载均衡冲突。</p>
+<p>用于讨论的价值密度可以写为：</p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+  <msub>
+    <mi>V</mi>
+    <mi>i</mi>
+  </msub>
+  <mo>=</mo>
+  <mfrac>
+    <mrow>
+      <msub>
+        <mi>P</mi>
+        <mi>i</mi>
+      </msub>
+      <mo stretchy="false">(</mo>
+      <mi mathvariant="normal">reuse</mi>
+      <mo stretchy="false">)</mo>
+      <mo>⋅</mo>
+      <mrow>
+        <mo>(</mo>
+        <msub>
+          <mi>T</mi>
+          <mi>i</mi>
+        </msub>
+        <mo stretchy="false">(</mo>
+        <mi mathvariant="normal">recompute</mi>
+        <mo stretchy="false">)</mo>
+        <mo>−</mo>
+        <msub>
+          <mi>T</mi>
+          <mi>i</mi>
+        </msub>
+        <mo stretchy="false">(</mo>
+        <mi mathvariant="normal">load</mi>
+        <mo stretchy="false">)</mo>
+        <mo>)</mo>
+      </mrow>
+    </mrow>
+    <msub>
+      <mi mathvariant="normal">bytes</mi>
+      <mi>i</mi>
+    </msub>
+  </mfrac>
+</math>
+</div>
+<p>这是启发式设计模型，不是 LMCache 默认算法。还应扣除写入流量、复制成本和
+机会成本。前缀依赖使孤立的后缀 chunk 即使还在也可能无法使用；
+淘汰与存储策略应考虑有效前缀而不只是对象 hit 数。</p>
+<p>Write-through、异步 write-behind 与 eviction-time write-back 是不同策略。
+缓存层允许丢弃可重算对象，不意味着所有写路径都需要数据库级事务；
+但用户必须知道收到“存储完成”时到底完成了哪一层。</p>
+</section>
+<section id="mooncake">
+<h2 id="heading-mooncake-的三个相关层次">Mooncake 的三个相关层次</h2>
+<ol class="arabic simple">
+<li><p><strong>Transfer Engine</strong>：搬运已注册地址范围，提供 segment、batch transfer、
+transport 和完成状态，不负责判断一段 KV 是否能用于某个 prompt。</p></li>
+<li><p><strong>Mooncake Store</strong>：管理 key→对象/副本位置、分配、生命周期、租约和存储池；
+Client 通过 Transfer Engine 直接读写 payload。</p></li>
+<li><p><strong>上层集成/路由</strong>：LMCache、SGLang HiCache、vLLM connector 或 Conductor
+将前缀身份、对象命中、实例位置连接到推理调度。</p></li>
+</ol>
+<p>Mooncake 论文中的完整 KV-centric serving 方案不能和“安装了 Transfer Engine
+库的应用”画等号。当前仓库还有 PG/EP、Reshard 等组件，KV 存储岗位首先掌握
+Store/Transfer Engine 即可，MoE 通信可作为 P2 专项。</p>
+</section>
+<section id="store">
+<h2 id="heading-store-的读写与一致性边界">Store 的读写与一致性边界</h2>
+<p>常规 Put 的概念流程：</p>
+<pre class="code text literal-block"><code>Client -&gt; Master: PutStart，申请空间与副本位置
+Client -&gt; 目标 segment: Transfer Engine 写 payload
+Client -&gt; Master: PutEnd，报告完成
+Reader -&gt; Master: GetReplicaList，获得可读副本与保护条件
+Reader &lt;- 目标 segment: 直接读取数据</code></pre>
+<p>Master 不转发大对象。元数据服务不可用可能阻止新查找或分配，但不是因为所有字节
+必须经过 Master 的网卡。Transfer Engine 的 metadata 与 Store Master 的对象目录
+也不是同一个职责。</p>
+<p>普通 Put 以不可变缓存对象为主要模型；本基线还存在 <span class="docutils literal">Upsert</span> 路径，因此不要说
+“Mooncake 永远不能改值”。对于内容寻址的 KV 复用，应使用清晰的模型版本和对象身份，
+不要覆盖旧 key 让在途读者读取另一版本。</p>
+<p>需要区分：</p>
+<ul class="simple">
+<li><p><strong>读租约</strong>：在限定时间内保护读取所需副本，解决并发淘汰/删除风险。
+超出租约的读取可能失败；不能把它当对象固定生存 TTL。</p></li>
+<li><p><strong>soft pin</strong>：影响淘汰优先级/允许条件，不是永远不丢；本基线读操作不延长其固定生命周期。</p></li>
+<li><p><strong>副本</strong>：提高容错与热点带宽，但容量与写流量增加，实际副本状态仍需确认。</p></li>
+<li><p><strong>持久化</strong>：只有满足介质和完成协议时才具备；全内存多副本不防集群断电。</p></li>
+<li><p><strong>HA Master</strong>：需要实际选主与恢复部署；“一个 Master 进程”不会自动变成高可用控制面。</p></li>
+</ul>
+<p>对 grouped objects，Mooncake 可提供共享租约与 best-effort 生命周期处理；
+它不等价于推理引擎对所有 TP/group 的完整性判定，也不自动构成任意多对象事务。</p>
+<p>以上依据 Mooncake 的
+<span class="docutils literal"><span class="pre">docs/source/design/store/mooncake-store.md</span></span>、
+<span class="docutils literal">docs/source/design/architecture.md</span> 与
+<span class="docutils literal"><span class="pre">docs/source/api-reference/python/mooncake-store.md</span></span>。</p>
+</section>
+<section id="lmcache-mooncake">
+<h2 id="heading-lmcache--mooncake-的实际接缝">LMCache + Mooncake 的实际接缝</h2>
+<p>本基线 MP 使用 <span class="docutils literal">mooncake_store</span> native L2 adapter。
+入口为 <span class="docutils literal">lmcache/v1/distributed/l2_adapters/mooncake_store_l2_adapter.py</span>，
+C++ 后端在 <span class="docutils literal">csrc/storage_backends/mooncake/</span>。
+不要将它和旧进程内 remote connector 的 YAML 混用。</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 72%" />
+</colgroup>
+<thead>
+<tr><th class="head"><p>责任</p></th>
+<th class="head"><p>边界</p></th>
+</tr>
+</thead>
+<tbody>
+<tr><td><p>LMCache</p></td>
+<td><p>引擎侧语义、chunk/group/key、L1 buffer、预取/存储任务和设备完成</p></td>
+</tr>
+<tr><td><p>native adapter</p></td>
+<td><p>把 L2 请求转换为 Mooncake 操作，管理异步任务与操作线程池</p></td>
+</tr>
+<tr><td><p>Mooncake Store</p></td>
+<td><p>对象位置、副本、segment 空间、读写保护与对象生命周期</p></td>
+</tr>
+<tr><td><p>Transfer Engine</p></td>
+<td><p>在可访问 buffer 之间传输 bytes，报告实际完成/失败</p></td>
+</tr>
+<tr><td><p>部署者</p></td>
+<td><p>模型/分片/layout 一致性，租户授权，容量、拓扑、ABI 和服务可达性</p></td>
+</tr>
+</tbody>
+</table></div>
+<p><span class="docutils literal">type</span>、<span class="docutils literal">num_workers</span>、<span class="docutils literal">per_op_workers</span>、<span class="docutils literal">eviction</span> 由 LMCache 消费，
+其余配置作为字符串值传给 Mooncake 的 <span class="docutils literal">setup_internal(ConfigDict)</span>。
+LMCache 不替 Mooncake 自动填齐所有参数。操作线程池可分 lookup/retrieve/store/delete，
+防止大流量写占满查询队列，但线程更多不一定提高带宽。</p>
+<p>RDMA 模式要求有效的连续 L1 内存描述符；缺失时初始化报错，而非悄悄退到 TCP。
+文档建议 <span class="docutils literal"><span class="pre">--no-l1-use-lazy</span></span>，使注册前 L1 已完成分配。
+常见路径为 GPU↔LMCache 主机 L1↔远端 segment；
+即使 Store 支持设备内存，也不能据此宣称这个集成路径自动消除了 H2D/D2H。</p>
+<p>完整配置与构建前提见 <a class="reference external" href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/mp/l2_storage/mooncake_store.rst">Mooncake adapter 指南</a>；
+可控实验见 <a class="reference external" href="../../../07-practice/implementations/lmcache/labs.html">实验手册</a>。安装 Mooncake Python wheel 不代表 LMCache 的
+C++ Mooncake 扩展已经构建，后者有独立的 <span class="docutils literal">BUILD_MOONCAKE=1</span> 开关与头文件/库依赖。</p>
+</section>
+<section id="rdma">
+<h2 id="heading-rdma-面试必须说清的内容">RDMA 面试必须说清的内容</h2>
+<p><strong>MR 与注册</strong>：NIC 需要可 DMA 的内存区域及访问权限。注册通常涉及页固定、
+地址映射和设备资源，不宜每个小对象反复注册。复用注册 slab 能摊销开销，
+但要控制 pin 住的内存总量，避免宿主机内存压力。</p>
+<p><strong>QP/CQ 与异步完成</strong>：发送工作请求不等于工作完成；完成队列报告传输状态。
+本地 buffer、远端地址及相关 key 的有效期必须覆盖整个传输。
+应用还要把传输完成与“对象正式可读”关联起来。</p>
+<p><strong>单边与双边</strong>：RDMA READ/WRITE 可以让远端 CPU 不逐次参与 payload 拷贝；
+连接管理、元数据、分配、完成处理和故障恢复仍需要软件。
+零拷贝应说明省掉了哪一次 bounce-buffer copy，而不是“数据完全不移动”。</p>
+<p><strong>GPUDirect RDMA</strong>：NIC 可直接访问满足条件的 GPU memory，
+受驱动、硬件、IOMMU/PCIe 拓扑、注册方式和 transport 支持限制。
+GDS 是存储到 GPU 的数据路径，NVLink 是互连，不是三个可互换的名字。</p>
+<p><strong>NUMA 与多网卡</strong>：GPU、NIC、DRAM 跨 socket 会增加路径长度与争用。
+多 NIC 聚合需要足够并发、合理 striping 和拓扑选择，不保证单对象无限线性扩展。
+小对象更受 RTT/提交开销影响，大对象更受有效带宽影响。</p>
+<p><strong>可靠性</strong>：连接恢复、超时和路径重试不能暴露部分写；
+failover 也不保证 exactly-once。正确做法是可识别任务状态、幂等或安全去重，
+并确保未知/失败的 buffer 不作为有效 KV 返回。</p>
+</section>
+<section id="section-3">
+<h2 id="heading-与其他框架如何对比">与其他框架如何对比</h2>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 38%" />
+<col style="width: 42%" />
+</colgroup>
+<thead>
+<tr><th class="head"><p>组件</p></th>
+<th class="head"><p>主要职责</p></th>
+<th class="head"><p>与 LMCache/Mooncake 的关系</p></th>
+</tr>
+</thead>
+<tbody>
+<tr><td><p>vLLM APC</p></td>
+<td><p>引擎内 GPU 前缀复用</p></td>
+<td><p>和 LMCache 互补；实验要防止把 APC 收益算给外部 cache</p></td>
+</tr>
+<tr><td><p>SGLang RadixCache / HiCache</p></td>
+<td><p>radix 前缀索引及分层 KV 管理</p></td>
+<td><p>可接 Mooncake Store；不同路径不应同时无规划地重复 offload</p></td>
+</tr>
+<tr><td><p>LMCache</p></td>
+<td><p>跨引擎集成、KV 生命周期与分层复用</p></td>
+<td><p>可以把 Mooncake Store 作为 L2，不替代整个推理引擎</p></td>
+</tr>
+<tr><td><p>Mooncake Store</p></td>
+<td><p>分布式对象池与生命周期</p></td>
+<td><p>可以为 LMCache 或其他上层缓存系统服务</p></td>
+</tr>
+<tr><td><p>Mooncake Transfer Engine</p></td>
+<td><p>地址/segment 层的数据传输</p></td>
+<td><p>可直接用于 P/D，也用于 Store 数据面；不等于 Store</p></td>
+</tr>
+<tr><td><p>NIXL</p></td>
+<td><p>可插拔数据传输抽象及后端</p></td>
+<td><p>可用于 P/D 或 LMCache 某些 L2 路径；不自动提供前缀缓存语义</p></td>
+</tr>
+<tr><td><p>缓存感知 router / Conductor / Coordinator</p></td>
+<td><p>利用命中位置做路由或协调</p></td>
+<td><p>索引可陈旧，实际加载必须验证；不应成为 payload 中转站</p></td>
+</tr>
+</tbody>
+</table></div>
+<p>SGLang HiCache 的常见文档命名为 GPU L1、host L2、外部存储 L3，
+LMCache MP 常见命名为 host L1、后端 L2。
+面试时先说明物理介质，再说层号，避免把同一个“L2”误当同一个位置。</p>
+</section>
+<section id="section-4">
+<h2 id="heading-延伸阅读">延伸阅读</h2>
+<ul class="simple">
+<li><p>LMCache：<a class="reference external" href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/mp/l2_storage/index.rst">L2 存储</a>、
+<a class="reference external" href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/mp/p2p.rst">P2P</a>、
+<a class="reference external" href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/mp/coordinator.rst">Coordinator</a>、
+<a class="reference external" href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/mp/disaggregated_prefill.rst">PD 分离</a>。</p></li>
+<li><p>Mooncake 基线：
+<a class="reference external" href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/docs/source/design/architecture.md">架构</a>、
+<a class="reference external" href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/docs/source/design/store/mooncake-store.md">Store</a>、
+<a class="reference external" href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/docs/source/design/hicache-design.md">HiCache</a>。</p></li>
+</ul>
+</section>
+</article>
+<footer><a href="../../../_sources/04-storage/implementations/lmcache/backend-contracts.rst">原始参考笔记</a> · <a href="../../../index.html">返回总目录</a>
+<p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#heading-从普通-kv-存储到推理状态存储">从普通 KV 存储到推理状态存储</a><a class="level-2" href="#heading-存储层级如何选">存储层级如何选</a><a class="level-2" href="#heading-必须分开的三类策略">必须分开的三类策略</a><a class="level-2" href="#heading-mooncake-的三个相关层次">Mooncake 的三个相关层次</a><a class="level-2" href="#heading-store-的读写与一致性边界">Store 的读写与一致性边界</a><a class="level-2" href="#heading-lmcache--mooncake-的实际接缝">LMCache + Mooncake 的实际接缝</a><a class="level-2" href="#heading-rdma-面试必须说清的内容">RDMA 面试必须说清的内容</a><a class="level-2" href="#heading-与其他框架如何对比">与其他框架如何对比</a><a class="level-2" href="#heading-延伸阅读">延伸阅读</a></aside>
+<dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
+<button id="search-close" aria-label="关闭搜索">关闭</button></div>
+<input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">
+<p id="search-status" role="status">输入主题、术语或问题</p><ol id="search-results"></ol></dialog>
+</body></html>

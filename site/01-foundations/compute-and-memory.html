@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>推理基础、调度、GPU 优化与分布式 · LLM Infra</title>
+<link rel="stylesheet" href="../assets/site.css">
+<script defer src="../assets/search-index.js"></script>
+<script defer src="../assets/site.js"></script></head>
+<body data-root="..">
+<a class="skip" href="#content">跳到正文</a>
+<header class="topbar"><button id="nav-toggle" aria-controls="sidebar" aria-expanded="false">目录</button>
+<a class="brand" href="../index.html">LLM Infra <span>学习资料库</span></a>
+<button id="search-open">搜索内容 <kbd>/</kbd></button></header>
+<aside id="sidebar"><nav aria-label="学习主题">
+<a href="../index.html">总目录</a>
+<div class="featured">
+<a href="design-atlas.html">设计图册</a>
+<a href="../08-career/expert-interview-guide.html">P7–P8 专家面试</a>
+<a href="../04-storage/kv-cache-storage.html">KV 存储详解</a>
+<a href="../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake</a>
+</div>
+<details open><summary>01 基础与设计图</summary>
+<a href="index.html">01 · 基础与全景：先理解计算、资源和请求</a>
+<a href="attention-and-inference.html">推理基础教材：从 Transformer 到服务成本</a>
+<a href="compute-and-memory.html" aria-current="page">推理基础、调度、GPU 优化与分布式</a>
+<a href="concepts.html">公共基础：推理、KV Cache、内存和性能</a>
+<a href="design-atlas.html">设计图册：从请求执行到共享 KV 存储</a>
+<a href="overview.html">LLM Infra 总体介绍：先把整条链路想明白</a>
+</details>
+<details><summary>02 推理运行时</summary>
+<a href="../02-runtime/index.html">02 · 推理运行时：把请求变成每一轮 GPU 工作</a>
+<a href="../02-runtime/implementations/sglang/knowledge-map.html">学习大纲与完整知识地图</a>
+<a href="../02-runtime/implementations/sglang/overview.html">SGLang：把请求调度、前缀复用与分层缓存连起来</a>
+<a href="../02-runtime/implementations/sglang/runtime.html">SGLang 架构、运行图与源码路线</a>
+<a href="../02-runtime/implementations/vllm/architecture.html">知识地图与 vLLM 设计图</a>
+<a href="../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
+<a href="../02-runtime/implementations/vllm/request-walkthrough.html">vLLM 源码教材：跟踪一条请求及其资源</a>
+</details>
+<details><summary>03 KV Cache 管理</summary>
+<a href="../03-kv-cache/index.html">03 · KV Cache 管理：让正确的状态在正确的时间可用</a>
+<a href="../03-kv-cache/capacity-and-reuse.html">03 · KV Cache 基础与性能模型</a>
+<a href="../03-kv-cache/semantics-and-costs.html">semantics-and-costs</a>
+<a href="../03-kv-cache/implementations/lmcache/internals.html">internals</a>
+<a href="../03-kv-cache/implementations/lmcache/overview.html">LMCache：把 KV 的保存、查找、加载和回收管起来</a>
+<a href="../03-kv-cache/implementations/lmcache/state-diagrams.html">state-diagrams</a>
+<a href="../03-kv-cache/implementations/sglang/prefix-cache.html">KV Cache：原理、容量、分页、前缀复用与正确性</a>
+<a href="../03-kv-cache/implementations/sglang/tiered-cache.html">HiCache、Mooncake、LMCache 与 PD 分离</a>
+<a href="../03-kv-cache/implementations/vllm/integration.html">KV Cache 专题：vLLM、LMCache 与 Mooncake</a>
+</details>
+<details><summary>04 分布式存储</summary>
+<a href="../04-storage/index.html">04 · 分布式存储：把可复用状态放进共享资源池</a>
+<a href="../04-storage/kv-cache-storage.html">KV Cache 存储详解：数据模型、协议、容量、性能与故障</a>
+<a href="../04-storage/implementations/lmcache/backend-contracts.html">backend-contracts</a>
+<a href="../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake：从一次 KV 保存到下一次请求恢复</a>
+<a href="../04-storage/implementations/mooncake/architecture.html">02 · 知识地图与设计图</a>
+<a href="../04-storage/implementations/mooncake/integrations.html">05 · LMCache 与推理引擎集成</a>
+<a href="../04-storage/implementations/mooncake/internals.html">04 · Mooncake 内核与源码路线</a>
+<a href="../04-storage/implementations/mooncake/overview.html">Mooncake：KV 对象怎样共享、怎样安全地高速搬运</a>
+</details>
+<details><summary>05 数据传输</summary>
+<a href="../05-transfer/index.html">05 · 数据传输：搬得动、搬得快，还要搬得安全</a>
+<a href="../05-transfer/implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine：字节移动的实现案例</a>
+</details>
+<details><summary>06 Serving 与性能</summary>
+<a href="../06-serving/index.html">06 · Serving 与性能：让整条链路满足服务目标</a>
+<a href="../06-serving/component-selection.html">Serving 组件选型：在同一技术问题下比较实现</a>
+<a href="../06-serving/implementations/lmcache/observability.html">observability</a>
+<a href="../06-serving/implementations/vllm/performance-and-parallelism.html">性能、分布式与服务工程教材</a>
+</details>
+<details><summary>07 实验与验证</summary>
+<a href="../07-practice/index.html">07 · 实验与验证：用证据回答系统问题</a>
+<a href="../07-practice/implementations/lmcache/labs.html">labs</a>
+<a href="../07-practice/implementations/mooncake/labs.html">06 · 实验与性能诊断</a>
+<a href="../07-practice/implementations/sglang/labs.html">实验手册：从单机基线到共享缓存与 PD</a>
+<a href="../07-practice/implementations/vllm/experiments.html">实验与项目：从原理到可复现证据</a>
+<a href="../07-practice/implementations/vllm/walkthrough.html">实践教材：运行步骤、源码作业与参考答案</a>
+</details>
+<details><summary>08 专家能力与面试</summary>
+<a href="../08-career/index.html">08 · 岗位、学习计划与面试：按能力组织成果</a>
+<a href="../08-career/coverage-and-review.html">资料结构与覆盖范围审阅</a>
+<a href="../08-career/expert-interview-guide.html">LLM 推理 Infra 专家面试总纲：P7–P8 能力参考，重点 KV Cache 存储</a>
+<a href="../08-career/interview-and-design.html">面试与项目：能解释、能算账、能处理失败</a>
+<a href="../08-career/references.html">按问题查资料：专题索引与版本基线</a>
+<a href="../08-career/roles.html">按岗位方向学习：什么必须熟练，什么可以后学</a>
+<a href="../08-career/study-plan.html">统一 28 天学习计划：基础只学一次，后面按岗位分流</a>
+<a href="../08-career/implementations/lmcache/index.html">index</a>
+<a href="../08-career/implementations/lmcache/questions.html">questions</a>
+<a href="../08-career/implementations/lmcache/study-plan.html">study-plan</a>
+<a href="../08-career/implementations/lmcache/system-design.html">system-design</a>
+<a href="../08-career/implementations/mooncake/index.html">Mooncake 与 KV Cache 存储：28 天学习手册</a>
+<a href="../08-career/implementations/mooncake/questions.html">07 · 面试题与参考回答</a>
+<a href="../08-career/implementations/mooncake/study-plan.html">01 · 28 天学习计划</a>
+<a href="../08-career/implementations/mooncake/system-design.html">08 · 系统设计、毕业项目与参考资料</a>
+<a href="../08-career/implementations/sglang/assessment.html">参考资料、实验报告与最终验收</a>
+<a href="../08-career/implementations/sglang/questions.html">推理 Infra 面试：36 道题与系统设计</a>
+<a href="../08-career/implementations/sglang/study-plan.html">28 天学习计划</a>
+<a href="../08-career/implementations/vllm/questions.html">推理 Infra 面试：60 个问题与参考回答</a>
+<a href="../08-career/implementations/vllm/references.html">官方资料与版本说明</a>
+<a href="../08-career/implementations/vllm/study-plan.html">28 天学习大纲与每日计划</a>
+</details>
+<a href="../08-career/coverage-and-review.html">覆盖范围与审阅</a>
+</nav></aside>
+<main id="content"><div class="breadcrumbs">01 基础与设计图 · 专注 KV Cache 存储</div>
+<article><h1 id="推理基础调度gpu-优化与分布式">推理基础、调度、GPU 优化与分布式</h1>
+<p><a href="index.html">返回基础主题</a> · <a href="../03-kv-cache/index.html">KV Cache 主题</a> · <a href="../07-practice/index.html">实验主题</a></p>
+<h2 id="1-attention-与自回归生成">1. Attention 与自回归生成</h2>
+<p>标准 Attention 的基本形式：</p>
+<div class="math block">
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+  <mi>Q</mi>
+  <mo>=</mo>
+  <mi>X</mi>
+  <msub>
+    <mi>W</mi>
+    <mi>Q</mi>
+  </msub>
+  <mo>,</mo>
+  <mspace width="2em">
+  </mspace>
+  <mi>K</mi>
+  <mo>=</mo>
+  <mi>X</mi>
+  <msub>
+    <mi>W</mi>
+    <mi>K</mi>
+  </msub>
+  <mo>,</mo>
+  <mspace width="2em">
+  </mspace>
+  <mi>V</mi>
+  <mo>=</mo>
+  <mi>X</mi>
+  <msub>
+    <mi>W</mi>
+    <mi>V</mi>
+  </msub>
+</math>
+</div>
+<div class="math block">
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+  <mi>O</mi>
+  <mo>=</mo>
+  <mi mathvariant="normal">softmax</mi>
+  <mo>&ApplyFunction;</mo>
+  <mrow>
+    <mo>(</mo>
+    <mfrac>
+      <mrow>
+        <mi>Q</mi>
+        <msup>
+          <mi>K</mi>
+          <mo>⊤</mo>
+        </msup>
+      </mrow>
+      <msqrt>
+        <mi>d</mi>
+      </msqrt>
+    </mfrac>
+    <mo>+</mo>
+    <mi>M</mi>
+    <mo>)</mo>
+  </mrow>
+  <mi>V</mi>
+</math>
+</div>
+<p>其中因果 mask (M) 阻止当前位置读取未来位置。各层还包含位置编码、归一化、残差、MLP 等计算。</p>
+<p>生成过程：</p>
+<ol>
+<li>对 Prompt 做 Prefill，计算各层状态和末位置的 logits。</li>
+<li>按采样规则选择首个输出 token。</li>
+<li>将新 token 输入下一次前向，读取已有 KV，产生下一个 token。</li>
+<li>达到 EOS、停止条件、长度预算或取消条件后结束。</li>
+</ol>
+<p>RoPE 让位置参与 Q/K 的变换；缓存兼容性不仅取决于文字，还取决于位置与模型配置。</p>
+<h2 id="2-prefill-与-decode-的性能差异">2. Prefill 与 Decode 的性能差异</h2>
+<p>Prefill 一次处理多个输入 token，线性层容易形成较大的矩阵乘法。Decode 每个活跃请求通常只新增一个 token，需要读取权重与历史 KV。</p>
+<ul>
+<li>Prefill 经常有较高算术强度，但长上下文 Attention、通信、小 batch 也可能成为瓶颈。</li>
+<li>小 batch Decode 常受权重读取带宽限制。</li>
+<li>大 batch 和长上下文会提高计算量与 KV 流量，瓶颈可能转移。</li>
+<li>多卡部署还要考虑通信和 rank 间等待。</li>
+</ul>
+<p>“Prefill 一定算力受限、Decode 一定带宽受限”只是粗略直觉，不能作为实测结论。</p>
+<p>对 Dense 模型，线性层计算量可用：</p>
+<div class="math block">
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+  <msub>
+    <mi>F</mi>
+    <mtext>linear</mtext>
+  </msub>
+  <mo>≈</mo>
+  <mn>2</mn>
+  <mo>×</mo>
+  <mi>P</mi>
+  <mo>×</mo>
+  <msub>
+    <mi>N</mi>
+    <mtext>tokens</mtext>
+  </msub>
+</math>
+</div>
+<p>这里 (P) 是参与这些线性层计算的参数量。该近似没有完整包含 Attention 的序列长度相关开销，也不能直接套用到所有 MoE 模型。</p>
+<h2 id="3-roofline-与资源模型">3. Roofline 与资源模型</h2>
+<p>算术强度：</p>
+<div class="math block">
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+  <mi>I</mi>
+  <mo>=</mo>
+  <mfrac>
+    <mtext>FLOPs</mtext>
+    <mtext>访问字节数</mtext>
+  </mfrac>
+</math>
+</div>
+<p>粗略上界：</p>
+<div class="math block">
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+  <mtext>可达性能</mtext>
+  <mo>≤</mo>
+  <mo>min</mo>
+  <mo stretchy="false">(</mo>
+  <mtext>峰值算力</mtext>
+  <mo>,</mo>
+  <mi>I</mi>
+  <mo>×</mo>
+  <mtext>有效带宽</mtext>
+  <mo stretchy="false">)</mo>
+</math>
+</div>
+<p>使用时要注意：</p>
+<ol>
+<li>理论 HBM 带宽不是所有访问模式的可达带宽。</li>
+<li>小矩阵可能无法充分使用 Tensor Core。</li>
+<li>Kernel launch、同步、CPU 调度不直接包含在简单 Roofline 中。</li>
+<li>通信与数据拷贝可能处于关键路径。</li>
+<li>GPU 利用率不是“算力利用率”的同义词。</li>
+</ol>
+<h2 id="4-指标与测量边界">4. 指标与测量边界</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>指标</th>
+<th>定义</th>
+<th>易错点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TTFT</td>
+<td>客户端发出请求到收到首个输出 token</td>
+<td>只统计 GPU Prefill，遗漏排队、分词、加载</td>
+</tr>
+<tr>
+<td>ITL</td>
+<td>相邻输出 token 到达间隔</td>
+<td>网络缓冲和流式合并可能影响观测</td>
+</tr>
+<tr>
+<td>TPOT</td>
+<td>单请求首 token 后的平均每 token 时间</td>
+<td>不等同于跨请求 ITL 分位数</td>
+</tr>
+<tr>
+<td>E2E</td>
+<td>请求发出到输出结束</td>
+<td>只比较均值，忽视尾延迟</td>
+</tr>
+<tr>
+<td>Output throughput</td>
+<td>单位时间完成的输出 token 数</td>
+<td>与输入加输出总吞吐混用</td>
+</tr>
+<tr>
+<td>Goodput</td>
+<td>满足规定 SLO 的请求或 token 吞吐</td>
+<td>只看成功请求而忽略拒绝与超时</td>
+</tr>
+</tbody>
+</table></div>
+<p>对 (N&gt;1) 的单请求：</p>
+<div class="math block">
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+  <mi>T</mi>
+  <mi>P</mi>
+  <mi>O</mi>
+  <mi>T</mi>
+  <mo>=</mo>
+  <mfrac>
+    <mrow>
+      <mi>E</mi>
+      <mn>2</mn>
+      <mi>E</mi>
+      <mo>−</mo>
+      <mi>T</mi>
+      <mi>T</mi>
+      <mi>F</mi>
+      <mi>T</mi>
+    </mrow>
+    <mrow>
+      <mi>N</mi>
+      <mo>−</mo>
+      <mn>1</mn>
+    </mrow>
+  </mfrac>
+</math>
+</div>
+<p>TTFT 的关键路径可以拆为：</p>
+<div class="math block">
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+  <msub>
+    <mi>T</mi>
+    <mtext>TTFT</mtext>
+  </msub>
+  <mo>≈</mo>
+  <msub>
+    <mi>T</mi>
+    <mtext>排队</mtext>
+  </msub>
+  <mo>+</mo>
+  <msub>
+    <mi>T</mi>
+    <mtext>输入处理</mtext>
+  </msub>
+  <mo>+</mo>
+  <msub>
+    <mi>T</mi>
+    <mtext>未隐藏的缓存加载</mtext>
+  </msub>
+  <mo>+</mo>
+  <msub>
+    <mi>T</mi>
+    <mtext>剩余 Prefill</mtext>
+  </msub>
+  <mo>+</mo>
+  <msub>
+    <mi>T</mi>
+    <mtext>采样与返回</mtext>
+  </msub>
+</math>
+</div>
+<p>实际存在重叠，不能把所有 trace 区间简单相加。</p>
+<p>推荐报告 p50/p95/p99 TTFT、ITL，以及错误率、拒绝率和 Goodput。SLO 的定义必须固定，例如每请求 TTFT 与 TPOT 均达标，或对流式 ITL 使用额外约束。</p>
+<h2 id="5-到达率并发与排队">5. 到达率、并发与排队</h2>
+<ul>
+<li>固定并发测试适合观察稳态吞吐与资源效率。</li>
+<li>固定到达率测试适合观察服务容量和排队增长。</li>
+<li>同时设置到达率和并发上限时，客户端可能被并发上限反压，实际 offered rate 低于目标。</li>
+<li>突发流量、长度长尾和热点变化往往比平均输入更能暴露问题。</li>
+</ul>
+<p>在稳定系统与一致统计边界下，Little 定律：</p>
+<div class="math block">
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+  <mi>N</mi>
+  <mo>=</mo>
+  <mi>λ</mi>
+  <mi>W</mi>
+</math>
+</div>
+<p>其中 (N) 是平均在系统中的请求数，(\lambda) 是有效到达率，(W) 是平均停留时间。这是容量思考工具，不是无条件适用的显存计算公式。</p>
+<h2 id="6-continuous-batching">6. Continuous batching</h2>
+<p>静态 batch 常需等待整体结束；不同输出长度会造成空闲。Continuous batching 在迭代边界加入新请求、移除完成请求，提高资源利用。</p>
+<p>调度要考虑：</p>
+<ol>
+<li>当前 Prefill token 预算。</li>
+<li>活跃请求数。</li>
+<li>当前与未来增长所需 KV。</li>
+<li>已有缓存的复用收益。</li>
+<li>队列等待与公平性。</li>
+<li>Prefill 对 Decode 的干扰。</li>
+</ol>
+<p>缓存友好策略可以提高复用，但若无限优先处理热点前缀，也可能造成长尾请求饥饿。应明确公平性与 SLO 约束。</p>
+<h2 id="7-chunked-prefill">7. Chunked prefill</h2>
+<p>把长 Prompt 分成多个块，控制单次 Prefill 的执行时间：</p>
+<pre><code class="language-text">不分块：
+GPU： [很长的 Prefill....................][Decode][Decode]
+
+分块的概念表示：
+GPU： [Prefill chunk][Decode][Prefill chunk][Decode]...
+</code></pre>
+<p>真实实现也可能采用混合批次。分块不会自动减少需要处理的 Prompt 内容，主要改变调度粒度和干扰。</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Chunk 更小</th>
+<th>Chunk 更大</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>降低一次占用 GPU 的时间</td>
+<td>更大的矩阵，计算效率可能更好</td>
+</tr>
+<tr>
+<td>更多调度与 kernel 开销</td>
+<td>可能增加 Decode 的 ITL</td>
+</tr>
+<tr>
+<td>有利于细粒度交错</td>
+<td>可能有更高临时内存需求</td>
+</tr>
+</tbody>
+</table></div>
+<p>实验应使用长输入和活跃 Decode 混合负载，不能只跑单个长 Prompt。</p>
+<h2 id="8-准入回退与取消">8. 准入、回退与取消</h2>
+<p>请求能否运行，不只看“当前空闲显存”：</p>
+<ul>
+<li>是否存在可淘汰的空闲前缀。</li>
+<li>是否有锁定或传输中的 KV。</li>
+<li>Decode 继续增长需要多少空间。</li>
+<li>回退请求要重算，还是可以从其他层恢复。</li>
+<li>取消后 GPU、网络与存储任务是否仍在运行。</li>
+</ul>
+<p>取消不是简单删除一个队列对象。必须保证仍在执行的异步操作不会访问已经回收的内存。</p>
+<h2 id="9-gpu-执行优化">9. GPU 执行优化</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>技术</th>
+<th>主要优化对象</th>
+<th>代价与限制</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CUDA Graph</td>
+<td>CPU 发射大量 kernel 的开销</td>
+<td>shape、地址与控制流约束；capture 与额外内存</td>
+</tr>
+<tr>
+<td>CPU/GPU overlap</td>
+<td>调度与结果处理产生的 GPU 空隙</td>
+<td>依赖和资源生命周期更复杂</td>
+</tr>
+<tr>
+<td>算子融合</td>
+<td>中间张量读写与 launch</td>
+<td>寄存器压力、可维护性与 shape 适用范围</td>
+</tr>
+<tr>
+<td>FlashAttention</td>
+<td>Attention 的 HBM 流量与中间矩阵</td>
+<td>硬件、dtype、head dimension 与 backend 限制</td>
+</tr>
+<tr>
+<td>高效 Attention backend</td>
+<td>针对 Prefill/Decode 的算法与 kernel</td>
+<td>不同模型、形状和模式的兼容性</td>
+</tr>
+</tbody>
+</table></div>
+<p>FlashAttention 使用分块与在线 softmax 等方法，避免完整 Attention 矩阵落地，数学上保持原 Attention。浮点计算顺序变化可能导致数值差异，不应默认 bitwise 一致。</p>
+<p>FlashInfer 等库提供一系列推理 kernel；在 SGLang 中应区分上层接口、backend 选择和底层 kernel。</p>
+<p>Kernel 学习路线：shape 与布局 → 数据流量 → launch → 向量化/分块 → 融合 → 数值验证 → 端到端验证。</p>
+<h2 id="10-量化与投机解码">10. 量化与投机解码</h2>
+<h3 id="101-量化">10.1 量化</h3>
+<ul>
+<li>权重量化减少权重容量与读取流量。</li>
+<li>激活量化改变算子路径和数值范围。</li>
+<li>KV 量化减少缓存容量与读取字节。</li>
+<li>实际收益取决于硬件、kernel、反量化成本和 batch。</li>
+</ul>
+<p>验证至少包括任务质量、logprob 或合理的数值检查、显存、吞吐和尾延迟。压缩倍率不等于速度倍率。</p>
+<h3 id="102-投机解码">10.2 投机解码</h3>
+<p>Draft 产生候选，目标模型批量验证，争取一次目标执行产生多个有效 token。</p>
+<p>收益取决于：</p>
+<ul>
+<li>候选接受率。</li>
+<li>Draft 的计算与权重成本。</li>
+<li>验证的 batch 与 kernel 效率。</li>
+<li>额外 KV、通信、调度开销。</li>
+</ul>
+<p>只有正确实现验证与采样校正规则的算法才能保证目标分布。高接受率也不一定意味着端到端加速。</p>
+<h2 id="11-分布式并行">11. 分布式并行</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>技术</th>
+<th>切分对象</th>
+<th>主要代价</th>
+<th>常见动机</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TP</td>
+<td>单层张量与计算</td>
+<td>高频 collective</td>
+<td>单模型容量和单请求计算</td>
+</tr>
+<tr>
+<td>PP</td>
+<td>模型层</td>
+<td>流水线气泡与阶段传输</td>
+<td>大模型、跨节点放置</td>
+</tr>
+<tr>
+<td>Replica DP</td>
+<td>完整推理实例</td>
+<td>权重复制、缓存分散</td>
+<td>提高整体服务吞吐</td>
+</tr>
+<tr>
+<td>EP</td>
+<td>MoE experts</td>
+<td>Dispatch/combine、All-to-All</td>
+<td>分布专家权重与计算</td>
+</tr>
+<tr>
+<td>CP/DCP</td>
+<td>上下文或 KV 工作</td>
+<td>Attention/KV 相关通信</td>
+<td>长上下文容量与带宽</td>
+</tr>
+</tbody>
+</table></div>
+<p>SGLang 中的 Attention DP 与“复制整个模型的服务副本”不是同一个概念，需要按实际 group 和模型层布局理解。</p>
+<p>扩展性分析顺序：</p>
+<ol>
+<li>单卡是否能容纳模型与必要状态。</li>
+<li>单请求延迟是否满足要求。</li>
+<li>每层通信频率和数据量。</li>
+<li>GPU/NIC/NUMA 拓扑与跨节点比例。</li>
+<li>扩大并行后是否减少单卡计算却增加等待。</li>
+<li>同等 GPU 预算下，增加副本是否更有效。</li>
+</ol>
+<h2 id="12-moe">12. MoE</h2>
+<p>MoE 的激活参数少，降低的是每 token 的部分计算量；以下成本仍存在：</p>
+<ul>
+<li>专家权重的总体驻留与分布。</li>
+<li>Token 路由和专家负载偏斜。</li>
+<li>跨 GPU dispatch/combine。</li>
+<li>All-to-All 与拓扑影响。</li>
+<li>较小专家 batch 导致的 GEMM 效率问题。</li>
+</ul>
+<p>面试时要同时解释激活参数、总参数、专家并行、路由负载和通信。</p>
+<h2 id="13-生产系统能力">13. 生产系统能力</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>能力</th>
+<th>需要解决的问题</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>限流与背压</td>
+<td>防止排队失控与资源耗尽</td>
+</tr>
+<tr>
+<td>超时与取消</td>
+<td>保证用户离开后资源仍能正确清理</td>
+</tr>
+<tr>
+<td>路由</td>
+<td>平衡缓存局部性、排队时间和负载</td>
+</tr>
+<tr>
+<td>可观测性</td>
+<td>请求、调度、缓存、模型、网络的统一关联</td>
+</tr>
+<tr>
+<td>灰度与版本</td>
+<td>模型升级后旧缓存不能误复用</td>
+</tr>
+<tr>
+<td>多租户</td>
+<td>访问控制、配额、缓存命名空间与隐私</td>
+</tr>
+<tr>
+<td>故障恢复</td>
+<td>区分可重算前缀与丢失的活跃状态</td>
+</tr>
+<tr>
+<td>容量规划</td>
+<td>围绕 SLO 和 Goodput，而不是只看 GPU 利用率</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="14-常用排查顺序">14. 常用排查顺序</h2>
+<ol>
+<li>固定版本、输入和负载，复现问题。</li>
+<li>检查请求是否充足、是否被客户端限流。</li>
+<li>分解 TTFT、ITL 与队列时间。</li>
+<li>看 CPU、GPU、拷贝、通信是否在等待。</li>
+<li>检查缓存命中来自哪一层，以及实际节省多少计算。</li>
+<li>只改变一个主要变量。</li>
+<li>比较端到端指标与正确性。</li>
+</ol>
+<p>具体实践见 <a href="../07-practice/implementations/sglang/labs.html#9-%E5%AE%9E%E9%AA%8C%E4%B8%83%E5%88%86%E6%9E%90-trace-%E5%B9%B6%E5%86%99%E6%8A%A5%E5%91%8A">实验七</a>。</p>
+</article>
+<footer><a href="../_sources/01-foundations/compute-and-memory.md">原始参考笔记</a> · <a href="../index.html">返回总目录</a>
+<p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-attention-与自回归生成">1. Attention 与自回归生成</a><a class="level-2" href="#2-prefill-与-decode-的性能差异">2. Prefill 与 Decode 的性能差异</a><a class="level-2" href="#3-roofline-与资源模型">3. Roofline 与资源模型</a><a class="level-2" href="#4-指标与测量边界">4. 指标与测量边界</a><a class="level-2" href="#5-到达率并发与排队">5. 到达率、并发与排队</a><a class="level-2" href="#6-continuous-batching">6. Continuous batching</a><a class="level-2" href="#7-chunked-prefill">7. Chunked prefill</a><a class="level-2" href="#8-准入回退与取消">8. 准入、回退与取消</a><a class="level-2" href="#9-gpu-执行优化">9. GPU 执行优化</a><a class="level-2" href="#10-量化与投机解码">10. 量化与投机解码</a><a class="level-3" href="#101-量化">10.1 量化</a><a class="level-3" href="#102-投机解码">10.2 投机解码</a><a class="level-2" href="#11-分布式并行">11. 分布式并行</a><a class="level-2" href="#12-moe">12. MoE</a><a class="level-2" href="#13-生产系统能力">13. 生产系统能力</a><a class="level-2" href="#14-常用排查顺序">14. 常用排查顺序</a></aside>
+<dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
+<button id="search-close" aria-label="关闭搜索">关闭</button></div>
+<input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">
+<p id="search-status" role="status">输入主题、术语或问题</p><ol id="search-results"></ol></dialog>
+</body></html>

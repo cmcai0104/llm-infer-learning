@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>08 · 系统设计、毕业项目与参考资料 · LLM Infra</title>
+<link rel="stylesheet" href="../../../assets/site.css">
+<script defer src="../../../assets/search-index.js"></script><script defer src="../../../assets/mermaid.min.js"></script>
+<script defer src="../../../assets/site.js"></script></head>
+<body data-root="../../..">
+<a class="skip" href="#content">跳到正文</a>
+<header class="topbar"><button id="nav-toggle" aria-controls="sidebar" aria-expanded="false">目录</button>
+<a class="brand" href="../../../index.html">LLM Infra <span>学习资料库</span></a>
+<button id="search-open">搜索内容 <kbd>/</kbd></button></header>
+<aside id="sidebar"><nav aria-label="学习主题">
+<a href="../../../index.html">总目录</a>
+<div class="featured">
+<a href="../../../01-foundations/design-atlas.html">设计图册</a>
+<a href="../../expert-interview-guide.html">P7–P8 专家面试</a>
+<a href="../../../04-storage/kv-cache-storage.html">KV 存储详解</a>
+<a href="../../../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake</a>
+</div>
+<details><summary>01 基础与设计图</summary>
+<a href="../../../01-foundations/index.html">01 · 基础与全景：先理解计算、资源和请求</a>
+<a href="../../../01-foundations/attention-and-inference.html">推理基础教材：从 Transformer 到服务成本</a>
+<a href="../../../01-foundations/compute-and-memory.html">推理基础、调度、GPU 优化与分布式</a>
+<a href="../../../01-foundations/concepts.html">公共基础：推理、KV Cache、内存和性能</a>
+<a href="../../../01-foundations/design-atlas.html">设计图册：从请求执行到共享 KV 存储</a>
+<a href="../../../01-foundations/overview.html">LLM Infra 总体介绍：先把整条链路想明白</a>
+</details>
+<details><summary>02 推理运行时</summary>
+<a href="../../../02-runtime/index.html">02 · 推理运行时：把请求变成每一轮 GPU 工作</a>
+<a href="../../../02-runtime/implementations/sglang/knowledge-map.html">学习大纲与完整知识地图</a>
+<a href="../../../02-runtime/implementations/sglang/overview.html">SGLang：把请求调度、前缀复用与分层缓存连起来</a>
+<a href="../../../02-runtime/implementations/sglang/runtime.html">SGLang 架构、运行图与源码路线</a>
+<a href="../../../02-runtime/implementations/vllm/architecture.html">知识地图与 vLLM 设计图</a>
+<a href="../../../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
+<a href="../../../02-runtime/implementations/vllm/request-walkthrough.html">vLLM 源码教材：跟踪一条请求及其资源</a>
+</details>
+<details><summary>03 KV Cache 管理</summary>
+<a href="../../../03-kv-cache/index.html">03 · KV Cache 管理：让正确的状态在正确的时间可用</a>
+<a href="../../../03-kv-cache/capacity-and-reuse.html">03 · KV Cache 基础与性能模型</a>
+<a href="../../../03-kv-cache/semantics-and-costs.html">semantics-and-costs</a>
+<a href="../../../03-kv-cache/implementations/lmcache/internals.html">internals</a>
+<a href="../../../03-kv-cache/implementations/lmcache/overview.html">LMCache：把 KV 的保存、查找、加载和回收管起来</a>
+<a href="../../../03-kv-cache/implementations/lmcache/state-diagrams.html">state-diagrams</a>
+<a href="../../../03-kv-cache/implementations/sglang/prefix-cache.html">KV Cache：原理、容量、分页、前缀复用与正确性</a>
+<a href="../../../03-kv-cache/implementations/sglang/tiered-cache.html">HiCache、Mooncake、LMCache 与 PD 分离</a>
+<a href="../../../03-kv-cache/implementations/vllm/integration.html">KV Cache 专题：vLLM、LMCache 与 Mooncake</a>
+</details>
+<details><summary>04 分布式存储</summary>
+<a href="../../../04-storage/index.html">04 · 分布式存储：把可复用状态放进共享资源池</a>
+<a href="../../../04-storage/kv-cache-storage.html">KV Cache 存储详解：数据模型、协议、容量、性能与故障</a>
+<a href="../../../04-storage/implementations/lmcache/backend-contracts.html">backend-contracts</a>
+<a href="../../../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake：从一次 KV 保存到下一次请求恢复</a>
+<a href="../../../04-storage/implementations/mooncake/architecture.html">02 · 知识地图与设计图</a>
+<a href="../../../04-storage/implementations/mooncake/integrations.html">05 · LMCache 与推理引擎集成</a>
+<a href="../../../04-storage/implementations/mooncake/internals.html">04 · Mooncake 内核与源码路线</a>
+<a href="../../../04-storage/implementations/mooncake/overview.html">Mooncake：KV 对象怎样共享、怎样安全地高速搬运</a>
+</details>
+<details><summary>05 数据传输</summary>
+<a href="../../../05-transfer/index.html">05 · 数据传输：搬得动、搬得快，还要搬得安全</a>
+<a href="../../../05-transfer/implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine：字节移动的实现案例</a>
+</details>
+<details><summary>06 Serving 与性能</summary>
+<a href="../../../06-serving/index.html">06 · Serving 与性能：让整条链路满足服务目标</a>
+<a href="../../../06-serving/component-selection.html">Serving 组件选型：在同一技术问题下比较实现</a>
+<a href="../../../06-serving/implementations/lmcache/observability.html">observability</a>
+<a href="../../../06-serving/implementations/vllm/performance-and-parallelism.html">性能、分布式与服务工程教材</a>
+</details>
+<details><summary>07 实验与验证</summary>
+<a href="../../../07-practice/index.html">07 · 实验与验证：用证据回答系统问题</a>
+<a href="../../../07-practice/implementations/lmcache/labs.html">labs</a>
+<a href="../../../07-practice/implementations/mooncake/labs.html">06 · 实验与性能诊断</a>
+<a href="../../../07-practice/implementations/sglang/labs.html">实验手册：从单机基线到共享缓存与 PD</a>
+<a href="../../../07-practice/implementations/vllm/experiments.html">实验与项目：从原理到可复现证据</a>
+<a href="../../../07-practice/implementations/vllm/walkthrough.html">实践教材：运行步骤、源码作业与参考答案</a>
+</details>
+<details open><summary>08 专家能力与面试</summary>
+<a href="../../index.html">08 · 岗位、学习计划与面试：按能力组织成果</a>
+<a href="../../coverage-and-review.html">资料结构与覆盖范围审阅</a>
+<a href="../../expert-interview-guide.html">LLM 推理 Infra 专家面试总纲：P7–P8 能力参考，重点 KV Cache 存储</a>
+<a href="../../interview-and-design.html">面试与项目：能解释、能算账、能处理失败</a>
+<a href="../../references.html">按问题查资料：专题索引与版本基线</a>
+<a href="../../roles.html">按岗位方向学习：什么必须熟练，什么可以后学</a>
+<a href="../../study-plan.html">统一 28 天学习计划：基础只学一次，后面按岗位分流</a>
+<a href="../lmcache/index.html">index</a>
+<a href="../lmcache/questions.html">questions</a>
+<a href="../lmcache/study-plan.html">study-plan</a>
+<a href="../lmcache/system-design.html">system-design</a>
+<a href="index.html">Mooncake 与 KV Cache 存储：28 天学习手册</a>
+<a href="questions.html">07 · 面试题与参考回答</a>
+<a href="study-plan.html">01 · 28 天学习计划</a>
+<a href="system-design.html" aria-current="page">08 · 系统设计、毕业项目与参考资料</a>
+<a href="../sglang/assessment.html">参考资料、实验报告与最终验收</a>
+<a href="../sglang/questions.html">推理 Infra 面试：36 道题与系统设计</a>
+<a href="../sglang/study-plan.html">28 天学习计划</a>
+<a href="../vllm/questions.html">推理 Infra 面试：60 个问题与参考回答</a>
+<a href="../vllm/references.html">官方资料与版本说明</a>
+<a href="../vllm/study-plan.html">28 天学习大纲与每日计划</a>
+</details>
+<a href="../../coverage-and-review.html">覆盖范围与审阅</a>
+</nav></aside>
+<main id="content"><div class="breadcrumbs">08 专家能力与面试 · 专注 KV Cache 存储</div>
+<article><h1 id="08--系统设计毕业项目与参考资料">08 · 系统设计、毕业项目与参考资料</h1>
+<h2 id="1-设计题为长上下文服务建设共享-kv-cache">1. 设计题：为长上下文服务建设共享 KV Cache</h2>
+<p>先把需求问清楚：模型与版本数、平均/尾部输入输出长度、请求到达模式、前缀复用分布、TP/PP、TTFT/ITL SLO、硬件、数据丢失后的重算能力、租户隔离和成本上限。</p>
+<p>下面用一组<strong>教学假设</strong>演算，所有数字都是规划示例：</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>输入</th>
+<th>假设</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>模型 KV</td>
+<td><code>L=32, Hkv=8, d=128, BF16</code>，每 token 128 KiB</td>
+</tr>
+<tr>
+<td>请求</td>
+<td>100 req/s，每个 prompt 8192 tokens</td>
+</tr>
+<tr>
+<td>复用</td>
+<td>为简化，80% 请求复用完整 prompt，20% 产生全新上下文</td>
+</tr>
+<tr>
+<td>KV 大小</td>
+<td>每请求 1 GiB；暂不计输出增长及 full-hit 的末 token 处理</td>
+</tr>
+<tr>
+<td>保留目标</td>
+<td>新增唯一上下文保留 300 秒；这是容量假设，不是读 lease TTL</td>
+</tr>
+<tr>
+<td>副本</td>
+<td>实际获得 2 份，且满足预设 host 故障域约束</td>
+</tr>
+<tr>
+<td>存储节点预算</td>
+<td>每节点可分配给 Store segment 512 GiB，目标使用率不超过 70%</td>
+</tr>
+<tr>
+<td>带宽示例</td>
+<td>每个参与传输端实测有效 payload 上限暂按 20 GiB/s</td>
+</tr>
+<tr>
+<td>TP</td>
+<td>TP=8，假设 KV 均匀分片；存储可按 rank 分对象</td>
+</tr>
+</tbody>
+</table></div>
+<p>真实系统会有部分前缀复用、输出 KV、新旧版本并存、异步写入和冷热层，这些需在下一轮规划中加入。</p>
+<h2 id="2-容量带宽与元数据演算">2. 容量、带宽与元数据演算</h2>
+<h3 id="21-容量">2.1 容量</h3>
+<pre><code class="language-text">新增唯一 KV = 100 × 20% × 1 GiB = 20 GiB/s
+300 秒工作集 = 20 × 300 = 6000 GiB
+两副本物理容量 = 12000 GiB
+每节点目标使用容量 = 512 × 70% = 358.4 GiB
+容量下界节点数 = ceil(12000 / 358.4) = 34
+</code></pre>
+<p>34 是该组假设下的容量下界，不是生产建议。512 GiB 指已扣除 OS/LMCache/staging 等资源后的 segment 预算；若它只是机器总内存，就必须重算。还需要预留节点故障、重建、碎片和工作集增长空间。</p>
+<p>如果按同样副本数让更多冷数据下沉 SSD，可以减少 DRAM 容量需求，但会增加读取延迟、冷层带宽与元数据恢复复杂性。存储空间便宜不等于满足在线 SLO。</p>
+<h3 id="22-网络">2.2 网络</h3>
+<pre><code class="language-text">远端命中读流量 = 100 × 80% × 1 GiB = 80 GiB/s
+新增写入的两份副本 = 20 × 1 × 2 = 40 GiB/s
+示例 aggregate payload 流量 = 120 GiB/s
+</code></pre>
+<p>这里为简化假定命中都从远端拉取、两份写均跨网络，且逻辑传输只计一次，不把 sender TX 和 receiver RX 再相加。实际 local hit/同机副本能减少网络，prefetch、重试、重建与其他业务会增加网络。</p>
+<p>仅服务 80 GiB/s 的读，在单端 20 GiB/s 假设下至少需要 4 个等效饱和服务端；这只是带宽算术下界，还需考虑负载偏斜、接收端、拓扑、双向竞争和尾延迟。容量下界与带宽下界分别算，最后取同时满足所有约束的部署。</p>
+<p>PD 交接是否额外增加一份流量，要画实际路径：消费者读 Store 可能就是这次交接，直接 P→D 则可能独立发生。不要既把一次读取算成远端命中，又把同一字节重复算一次 PD。</p>
+<h3 id="23-对象数">2.3 对象数</h3>
+<p>若 chunk=256 tokens，则全模型 chunk 为 <code>256 × 128 KiB = 32 MiB</code>：</p>
+<pre><code class="language-text">6000 GiB / 32 MiB = 192000 个逻辑 chunk
+若 TP=8 且每个 rank 独立对象：1536000 个对象键
+两个副本增加 descriptor 和 payload，不一定使 key 数翻倍
+</code></pre>
+<p>假设每对象完整元数据的粗略估计为 512 bytes：</p>
+<pre><code class="language-text">1536000 × 512 bytes ≈ 0.73 GiB
+</code></pre>
+<p>512 bytes 只是占位参数，真实值必须通过内存 profile 测量；字符串、hash buckets、锁索引、组关系、复制任务和 allocator 都可能使总开销明显上升。增加 layer-wise 对象还可能进一步放大 key 数与 RPC。</p>
+<h2 id="3-架构方案">3. 架构方案</h2>
+<figure class="diagram" data-status="pending"><div class="mermaid-target" aria-label="设计图"></div><details open><summary>查看图源</summary><pre class="mermaid-source"><code>flowchart TB
+    U[&quot;请求：tenant / model revision / token IDs&quot;]
+    U --&gt; R[&quot;Router + 准入 / 队列预算&quot;]
+    C[&quot;Conductor：缓存位置索引&quot;] --&gt; R
+    R --&gt; P[&quot;Prefill workers&quot;]
+    R --&gt; D[&quot;Decode workers&quot;]
+    P &lt;--&gt; L[&quot;LMCache MP 或引擎原生分层管理&quot;]
+    D &lt;--&gt; L
+    L -. &quot;对象控制 RPC&quot; .-&gt; M[&quot;Store Master + 已验证的 HA&quot;]
+    L &lt;--&gt; MEM[&quot;共享 DRAM 池&lt;br/&gt;放置、副本、配额&quot;]
+    MEM &lt;--&gt; COLD[&quot;可选 SSD / 其他冷层&quot;]
+    P -. &quot;所选 Connector 支持的直接交接路径&quot; .-&gt; D
+    M -. &quot;事件&quot; .-&gt; C
+    P -. &quot;事件&quot; .-&gt; C
+    D -. &quot;事件&quot; .-&gt; C
+    O[&quot;监控：用户 SLO、缓存、队列、网络、资源&quot;]
+    R --&gt; O
+    M --&gt; O
+    L --&gt; O
+</code></pre></details></figure><p>图表示设计选项，不要求同时部署所有数据路径。先选一条端到端路径验证，再增加冷层和 HA，减少定位变量。</p>
+<h2 id="4-六项关键决策与取舍">4. 六项关键决策与取舍</h2>
+<h3 id="41-一致性与失败">4.1 一致性与失败</h3>
+<p>采用模型 revision 和前缀语义构造不可变内容键。写时先分配、完成数据后发布；读时保护位置并校验完成条件。对象丢失降级重算；模型、布局或 checksum 不一致时拒绝使用该缓存。</p>
+<p>对正在进行的读取，删除/淘汰要遵守保护条件；超时不直接触发 buffer free。Master 切换要有已验证的旧主隔离和恢复流程。</p>
+<h3 id="42-缓存准入">4.2 缓存准入</h3>
+<p>不把所有新 KV 都无条件写入冷层。结合长度、预估复用次数、计算收益和写成本做准入。保护高价值系统前缀，限制一次性长请求污染。准入策略可以放在上层，必须说明与 Store 回收策略的职责差异。</p>
+<h3 id="43-副本与热点">4.3 副本与热点</h3>
+<p>目标是实际跨故障域的副本，而不是只设置一个数。热点可动态加副本或提升到本地，冷对象减少冗余。需要限制复制带宽，否则故障重建和热点扩散反而冲击在线流量。</p>
+<h3 id="44-预取和路由">4.4 预取和路由</h3>
+<p>先估算 <code>queue + load + suffix prefill + handoff</code>，再根据 decode SLO 选节点。给每次预取 deadline；部分成功只能复用有效连续前缀，多 rank 必须一致。过期索引触发重新查询或重算，不成为正确性依据。</p>
+<h3 id="45-背压">4.5 背压</h3>
+<p>分别为 lookup、fetch、write-back、复制和 GPU 加载设置有限在途量。到达率超过服务能力时明确准入/拒绝，而非无界积压。失败重试共享原请求预算，避免重试风暴。</p>
+<h3 id="46-隔离与成本">4.6 隔离与成本</h3>
+<p>namespace 解决复用边界，tenant quota 解决资源公平，认证授权解决访问边界。共享组内复用可以节省资源，但对敏感租户要考虑跨请求 timing 信息。成本评估需计入 CPU 内存、网卡、网络、存储、运维和命中不足时额外 GPU 重算。</p>
+<h2 id="5-故障设计矩阵">5. 故障设计矩阵</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>故障</th>
+<th>保护行为</th>
+<th>恢复路径</th>
+<th>需要的证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Master 失联</td>
+<td>有界等待/重连，避免无限占用 GPU buffer</td>
+<td>已配置 HA 发现新主，或恢复单 Master</td>
+<td>切换时间、错误分布、旧主行为</td>
+</tr>
+<tr>
+<td>数据节点退出</td>
+<td>读取失败不消费 buffer</td>
+<td>查询其他副本或重算，后台补副本</td>
+<td>实际副本位置、回退成功率</td>
+</tr>
+<tr>
+<td>单网卡故障</td>
+<td>按当前 TE/TENT 能力重试/换路径</td>
+<td>路径恢复、隔离坏设备</td>
+<td>无损坏、带宽下降与尾延迟</td>
+</tr>
+<tr>
+<td>冷层超时</td>
+<td>到 deadline 停止等待并安全处理在途任务</td>
+<td>改走热层/重算，限制后台积压</td>
+<td>TTFT、在途内存、取消/drain 行为</td>
+</tr>
+<tr>
+<td>元数据事件滞后</td>
+<td>路由预测不能直接消费数据</td>
+<td>真实查找校验、索引恢复</td>
+<td>false-hit、路由偏差、恢复时长</td>
+</tr>
+<tr>
+<td>namespace 配错</td>
+<td>拒绝不兼容布局或停止共享</td>
+<td>修正 key/version，重新预热</td>
+<td>负面兼容性用例不误命中</td>
+</tr>
+</tbody>
+</table></div>
+<p>缓存系统允许“缓存不可用”，但要保证回退不会迅速耗尽 GPU。故障期间可能需要降低准入率或缩短等待预算。</p>
+<h2 id="6-毕业项目验收">6. 毕业项目验收</h2>
+<p>题目：<strong>一个可解释的 Mooncake 共享 KV 缓存评估与设计报告</strong>。</p>
+<p>最终交付 6–10 页报告和可复现配置，至少包含：</p>
+<ol>
+<li>需求、硬件、版本、模型及兼容性边界。</li>
+<li>架构、读写、PD/缓存运行图与 buffer 所有权。</li>
+<li>KV 容量、流量、对象数和 Master 预算。</li>
+<li>一条完整集成路径；没有 GPU 时用 TCP 和模拟替代，并清楚标注。</li>
+<li>冷/热及本地/远端消融；原始数据与样本量。</li>
+<li>一次失败路径及正确回退的证据。</li>
+<li>解释一个负结果，例如远端命中不值得、batch 太大拖慢 P99。</li>
+<li>结论的适用范围、当前瓶颈和下一步验证计划。</li>
+</ol>
+<p>面试介绍结构可以是：“问题与约束 30 秒、架构 60 秒、正确性 60 秒、实验与负结果 90 秒、局限与取舍 60 秒”。</p>
+<h2 id="7-阅读资料与证据索引">7. 阅读资料与证据索引</h2>
+<p>外部资料核对日期为 2026-10-24；<code>latest</code> 页面会变化。源码学习以本手册 commit 为基线，部署时另外锁定实际版本。优先阅读论文、官方设计和当前 API，博客用于解释背景。</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>来源</th>
+<th>链接</th>
+<th>读什么 / 用来支持什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>S1 · FAST '25 正式论文</td>
+<td><a href="https://www.usenix.org/conference/fast25/presentation/qin">USENIX 页面</a>、<a href="https://www.usenix.org/system/files/fast25-qin.pdf">PDF</a></td>
+<td>问题、KV-centric 架构、SLO 调度、评估假设</td>
+</tr>
+<tr>
+<td>S2 · arXiv 技术报告</td>
+<td><a href="https://arxiv.org/abs/2407.00079">2407.00079</a></td>
+<td>版本演进；不要与 FAST 版混用性能数字</td>
+</tr>
+<tr>
+<td>S3 · 当前 Mooncake 架构</td>
+<td><a href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/docs/source/design/architecture.md">Architecture</a></td>
+<td>开源组件的职责与生态关系</td>
+</tr>
+<tr>
+<td>S4 · Store 设计</td>
+<td><a href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/docs/source/design/store/mooncake-store.md">Store</a>、<a href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/docs/source/design/store/metadata-management.md">Metadata</a></td>
+<td>Put/Get、租约、副本、淘汰与元数据位置</td>
+</tr>
+<tr>
+<td>S5 · Store 源码基线</td>
+<td><a href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/mooncake-store/src/client_service.cpp">client_service.cpp</a></td>
+<td>当前重复 Put、Get 检查和批写完成规则</td>
+</tr>
+<tr>
+<td>S6 · TE 设计/API</td>
+<td><a href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/docs/source/design/transfer-engine/index.md">设计</a>、<a href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/docs/source/api-reference/python/transfer-engine.md">Python API</a></td>
+<td>segment、注册、batch、协议与拓扑</td>
+</tr>
+<tr>
+<td>S7 · Store Python API</td>
+<td><a href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/docs/source/api-reference/python/mooncake-store.md">API</a></td>
+<td>setup、返回值、BufferPool、pin 与后端差异</td>
+</tr>
+<tr>
+<td>S8 · 部署/HA</td>
+<td><a href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/docs/source/deployment/mooncake-store-deployment-guide.md">Deployment</a></td>
+<td>master/client、HA、snapshot/OpLog、观测和配置</td>
+</tr>
+<tr>
+<td>S9 · 缓存共享边界</td>
+<td><a href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/docs/source/deployment/kv-cache-sharing-and-isolation.md">Sharing and Isolation</a></td>
+<td>namespace、model/release、cache salt、tenant</td>
+</tr>
+<tr>
+<td>S10 · vLLM 前缀缓存</td>
+<td><a href="https://docs.vllm.ai/en/latest/design/prefix_caching/">设计</a></td>
+<td>链式哈希、完整块、额外身份信息和隔离</td>
+</tr>
+<tr>
+<td>S11 · PagedAttention</td>
+<td><a href="https://arxiv.org/abs/2309.06180">论文</a></td>
+<td>分页、共享、copy-on-write 与 GPU KV 管理</td>
+</tr>
+<tr>
+<td>S12 · FlashAttention</td>
+<td><a href="https://arxiv.org/abs/2205.14135">论文</a></td>
+<td>IO-aware attention，与 KV 存储的职责区别</td>
+</tr>
+<tr>
+<td>S13 · LMCache 总体架构</td>
+<td><a href="https://docs.lmcache.ai/developer_guide/architecture.html">官方架构</a></td>
+<td>引擎接口、分层与组件背景；结合 MP 文档读</td>
+</tr>
+<tr>
+<td>S14 · LMCache MP L2</td>
+<td><a href="https://docs.lmcache.ai/mp/l2_storage/index.html">Secondary KV Storage</a></td>
+<td>L1/L2、StoreController、PrefetchController</td>
+</tr>
+<tr>
+<td>S15 · LMCache MP Mooncake</td>
+<td><a href="https://docs.lmcache.ai/mp/l2_storage/mooncake_store.html">Adapter</a></td>
+<td>native 扩展、RDMA 的 L1 描述符要求</td>
+</tr>
+<tr>
+<td>S16 · 仓库 MP 集成</td>
+<td><a href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/docs/source/deployment/integrations/lmcache/vllmv1-lmcache-mp-integration.md">MP 指南</a></td>
+<td>完整服务顺序、Connector、版本要求</td>
+</tr>
+<tr>
+<td>S17 · LMCache 旧模式</td>
+<td><a href="https://docs.lmcache.ai/kv_cache/storage_backends/mooncake.html">Mooncake backend</a>、<a href="https://blog.lmcache.ai/en/2025/04/22/extending-lmcache-remote-connectors-mooncakestore-as-an-example/">历史 connector 博客</a></td>
+<td>解释旧组件；不直接作为 MP 启动说明</td>
+</tr>
+<tr>
+<td>S18 · CacheBlend</td>
+<td><a href="https://docs.lmcache.ai/kv_cache_optimizations/cacheblend.html">当前文档</a>、<a href="https://arxiv.org/abs/2405.16444">论文</a></td>
+<td>非前缀复用、选择性重算与质量</td>
+</tr>
+<tr>
+<td>S19 · HiCache</td>
+<td><a href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/docs/source/design/hicache-design.md">设计</a>、<a href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/docs/source/deployment/integrations/sglang/hicache-quick-start.md">快速部署</a></td>
+<td>预取、写回、TP 同步、布局</td>
+</tr>
+<tr>
+<td>S20 · Conductor</td>
+<td><a href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/docs/source/design/conductor/conductor-architecture-design.md">设计</a></td>
+<td>缓存事件、全局索引与路由职责</td>
+</tr>
+<tr>
+<td>S21 · 性能与调优</td>
+<td><a href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/docs/source/performance/mooncake/storage-benchmark.md">Store benchmark</a>、<a href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/docs/source/design/transfer-engine/transfer-engine-bench-tuning.md">TE 调优</a></td>
+<td>原始测量方式和硬件/工作负载前提</td>
+</tr>
+<tr>
+<td>S22 · 后续进阶</td>
+<td><a href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/docs/source/design/tent/overview.md">TENT</a>、<a href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/docs/source/design/store/store-rs/index.md">Store-RS</a></td>
+<td>研究当前实现分支的差异，避免套用经典 TE/Store 细节</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="建议阅读顺序">建议阅读顺序</h3>
+<p>第一遍：S3 → 本手册 KV 基础 → S1 → S4 → S6。第二遍：S5/S7 对照代码 → S10 → S14/S15/S16 → S19。项目阶段：S8/S9/S20/S21。P2 进阶留在核心验收之后。</p>
+<h3 id="读论文的四个问题">读论文的四个问题</h3>
+<ol>
+<li><strong>它解决的是哪个瓶颈？</strong> 计算、容量、通信、调度还是过载？</li>
+<li><strong>依赖哪些假设？</strong> 模型、重复前缀、硬件、SLO、可重算数据。</li>
+<li><strong>实验有没有排除其他解释？</strong> 相同硬件/预算、相同命中条件、负载与基线是否公平。</li>
+<li><strong>如何落到代码和当前工作负载？</strong> 找到对应模块；不能把论文模拟效果直接当自己的实测结论。</li>
+</ol>
+<h2 id="8-面向岗位的最终优先级">8. 面向岗位的最终优先级</h2>
+<p>KV Cache 存储岗位应把最多时间放在 <strong>对象正确性、buffer 生命周期、资源池与分配、分层 I/O、网络成本、兼容性和端到端收益</strong>。推理 Infra 综合岗位在此基础上强化调度、PD、GPU execution 和 SLO。高性能通信岗位则进一步深入 verbs、QP/CQ、拓扑、NUMA、GPU 可见性和故障恢复。</p>
+<p>基础算法能力也不能遗漏：哈希表/树、LRU、并发队列、引用计数、状态机、时间/空间复杂度，以及 C++ RAII、锁顺序、原子操作与 Python/native 边界。面试中能把这些基础与真实数据路径联系起来，比孤立背诵框架名更有说服力。</p>
+</article>
+<footer><a href="../../../_sources/08-career/implementations/mooncake/system-design.md">原始参考笔记</a> · <a href="../../../index.html">返回总目录</a>
+<p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-设计题为长上下文服务建设共享-kv-cache">1. 设计题：为长上下文服务建设共享 KV Cache</a><a class="level-2" href="#2-容量带宽与元数据演算">2. 容量、带宽与元数据演算</a><a class="level-3" href="#21-容量">2.1 容量</a><a class="level-3" href="#22-网络">2.2 网络</a><a class="level-3" href="#23-对象数">2.3 对象数</a><a class="level-2" href="#3-架构方案">3. 架构方案</a><a class="level-2" href="#4-六项关键决策与取舍">4. 六项关键决策与取舍</a><a class="level-3" href="#41-一致性与失败">4.1 一致性与失败</a><a class="level-3" href="#42-缓存准入">4.2 缓存准入</a><a class="level-3" href="#43-副本与热点">4.3 副本与热点</a><a class="level-3" href="#44-预取和路由">4.4 预取和路由</a><a class="level-3" href="#45-背压">4.5 背压</a><a class="level-3" href="#46-隔离与成本">4.6 隔离与成本</a><a class="level-2" href="#5-故障设计矩阵">5. 故障设计矩阵</a><a class="level-2" href="#6-毕业项目验收">6. 毕业项目验收</a><a class="level-2" href="#7-阅读资料与证据索引">7. 阅读资料与证据索引</a><a class="level-3" href="#建议阅读顺序">建议阅读顺序</a><a class="level-3" href="#读论文的四个问题">读论文的四个问题</a><a class="level-2" href="#8-面向岗位的最终优先级">8. 面向岗位的最终优先级</a></aside>
+<dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
+<button id="search-close" aria-label="关闭搜索">关闭</button></div>
+<input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">
+<p id="search-status" role="status">输入主题、术语或问题</p><ol id="search-results"></ol></dialog>
+</body></html>

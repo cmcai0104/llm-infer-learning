@@ -1,0 +1,21 @@
+digraph G {
+  graph [rankdir=TB, bgcolor="white", pad=0.3, nodesep=0.4, ranksep=0.5, fontname="Arial Unicode MS", fontsize=20, label="D1 · 推理 Infra 职责架构（教学模型）", labelloc=t];
+  node [shape=box, style="rounded,filled", fillcolor="#EAF2FF", color="#57799F", fontname="Arial Unicode MS", fontsize=14, margin="0.18,0.12"];
+  edge [fontname="Arial Unicode MS", fontsize=12, color="#52657A"];
+  user [label="请求 / 输入长度 / 输出目标"];
+  service [label="入口与路由\n配额、准入、队列、SLO"];
+  runtime [label="推理运行时\n每轮 token 预算、执行进度、取消"];
+  gpu [label="模型执行 / GPU\nPrefill、Decode、活跃 KV"];
+  cache [label="KV 管理\n前缀、布局、页引用、分层与预取", fillcolor="#E6F4EA"];
+  store [label="共享对象存储\n位置、副本、发布、租约、淘汰", fillcolor="#E6F4EA"];
+  transfer [label="数据传输\n地址、注册、在途任务、完成", fillcolor="#E6F4EA"];
+  metrics [label="端到端观测\n正确性、TTFT、ITL、goodput、成本", fillcolor="#FFF3D6"];
+  user -> service -> runtime -> gpu [label="执行决策"];
+  runtime -> cache [label="可用范围与加载依赖"];
+  cache -> store [label="对象保存 / 查询 / 加载"];
+  store -> transfer [label="搬运需求"];
+  transfer -> gpu [label="经适用路径恢复状态"];
+  service -> metrics [style=dashed, label="入口 / 排队"];
+  gpu -> metrics [style=dashed, label="执行 / 完成"];
+  cache -> metrics [style=dashed, label="命中 / 等待"];
+}

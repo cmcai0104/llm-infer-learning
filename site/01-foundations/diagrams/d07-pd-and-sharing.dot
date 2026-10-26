@@ -1,0 +1,22 @@
+digraph G {
+  graph [rankdir=LR, bgcolor="white", pad=0.3, nodesep=0.6, ranksep=0.65, fontname="Arial Unicode MS", fontsize=20, label="D7 · PD 状态交接与跨请求共享是两个问题", labelloc=t];
+  node [shape=box, style="rounded,filled", fillcolor="#EAF2FF", color="#57799F", fontname="Arial Unicode MS", fontsize=14, margin="0.18,0.12"];
+  edge [fontname="Arial Unicode MS", fontsize=12, color="#52657A"];
+  subgraph cluster_pd {
+    label="同一次请求的阶段交接"; fontname="Arial Unicode MS"; color="#9BB7D4";
+    request [label="请求 X"];
+    prefill [label="Prefill 资源池"];
+    decode [label="Decode 资源池"];
+    request -> prefill;
+    prefill -> decode [label="X 的 KV + 完成协议"];
+  }
+  subgraph cluster_shared {
+    label="不同请求的计算复用"; fontname="Arial Unicode MS"; color="#9BC9AF";
+    writer [label="请求 A 产生可复用 KV"];
+    store [label="共享缓存 / 对象存储", fillcolor="#E6F4EA"];
+    reader [label="请求 B 验证前缀并加载"];
+    writer -> store [label="可选发布"];
+    store -> reader [label="后续复用"];
+  }
+  decode -> writer [style=invis];
+}

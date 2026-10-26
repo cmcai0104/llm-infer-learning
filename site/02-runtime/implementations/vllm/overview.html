@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vLLM：请求怎样变成高效的 GPU 执行 · LLM Infra</title>
+<link rel="stylesheet" href="../../../assets/site.css">
+<script defer src="../../../assets/search-index.js"></script>
+<script defer src="../../../assets/site.js"></script></head>
+<body data-root="../../..">
+<a class="skip" href="#content">跳到正文</a>
+<header class="topbar"><button id="nav-toggle" aria-controls="sidebar" aria-expanded="false">目录</button>
+<a class="brand" href="../../../index.html">LLM Infra <span>学习资料库</span></a>
+<button id="search-open">搜索内容 <kbd>/</kbd></button></header>
+<aside id="sidebar"><nav aria-label="学习主题">
+<a href="../../../index.html">总目录</a>
+<div class="featured">
+<a href="../../../01-foundations/design-atlas.html">设计图册</a>
+<a href="../../../08-career/expert-interview-guide.html">P7–P8 专家面试</a>
+<a href="../../../04-storage/kv-cache-storage.html">KV 存储详解</a>
+<a href="../../../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake</a>
+</div>
+<details><summary>01 基础与设计图</summary>
+<a href="../../../01-foundations/index.html">01 · 基础与全景：先理解计算、资源和请求</a>
+<a href="../../../01-foundations/attention-and-inference.html">推理基础教材：从 Transformer 到服务成本</a>
+<a href="../../../01-foundations/compute-and-memory.html">推理基础、调度、GPU 优化与分布式</a>
+<a href="../../../01-foundations/concepts.html">公共基础：推理、KV Cache、内存和性能</a>
+<a href="../../../01-foundations/design-atlas.html">设计图册：从请求执行到共享 KV 存储</a>
+<a href="../../../01-foundations/overview.html">LLM Infra 总体介绍：先把整条链路想明白</a>
+</details>
+<details open><summary>02 推理运行时</summary>
+<a href="../../index.html">02 · 推理运行时：把请求变成每一轮 GPU 工作</a>
+<a href="../sglang/knowledge-map.html">学习大纲与完整知识地图</a>
+<a href="../sglang/overview.html">SGLang：把请求调度、前缀复用与分层缓存连起来</a>
+<a href="../sglang/runtime.html">SGLang 架构、运行图与源码路线</a>
+<a href="architecture.html">知识地图与 vLLM 设计图</a>
+<a href="overview.html" aria-current="page">vLLM：请求怎样变成高效的 GPU 执行</a>
+<a href="request-walkthrough.html">vLLM 源码教材：跟踪一条请求及其资源</a>
+</details>
+<details><summary>03 KV Cache 管理</summary>
+<a href="../../../03-kv-cache/index.html">03 · KV Cache 管理：让正确的状态在正确的时间可用</a>
+<a href="../../../03-kv-cache/capacity-and-reuse.html">03 · KV Cache 基础与性能模型</a>
+<a href="../../../03-kv-cache/semantics-and-costs.html">semantics-and-costs</a>
+<a href="../../../03-kv-cache/implementations/lmcache/internals.html">internals</a>
+<a href="../../../03-kv-cache/implementations/lmcache/overview.html">LMCache：把 KV 的保存、查找、加载和回收管起来</a>
+<a href="../../../03-kv-cache/implementations/lmcache/state-diagrams.html">state-diagrams</a>
+<a href="../../../03-kv-cache/implementations/sglang/prefix-cache.html">KV Cache：原理、容量、分页、前缀复用与正确性</a>
+<a href="../../../03-kv-cache/implementations/sglang/tiered-cache.html">HiCache、Mooncake、LMCache 与 PD 分离</a>
+<a href="../../../03-kv-cache/implementations/vllm/integration.html">KV Cache 专题：vLLM、LMCache 与 Mooncake</a>
+</details>
+<details><summary>04 分布式存储</summary>
+<a href="../../../04-storage/index.html">04 · 分布式存储：把可复用状态放进共享资源池</a>
+<a href="../../../04-storage/kv-cache-storage.html">KV Cache 存储详解：数据模型、协议、容量、性能与故障</a>
+<a href="../../../04-storage/implementations/lmcache/backend-contracts.html">backend-contracts</a>
+<a href="../../../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake：从一次 KV 保存到下一次请求恢复</a>
+<a href="../../../04-storage/implementations/mooncake/architecture.html">02 · 知识地图与设计图</a>
+<a href="../../../04-storage/implementations/mooncake/integrations.html">05 · LMCache 与推理引擎集成</a>
+<a href="../../../04-storage/implementations/mooncake/internals.html">04 · Mooncake 内核与源码路线</a>
+<a href="../../../04-storage/implementations/mooncake/overview.html">Mooncake：KV 对象怎样共享、怎样安全地高速搬运</a>
+</details>
+<details><summary>05 数据传输</summary>
+<a href="../../../05-transfer/index.html">05 · 数据传输：搬得动、搬得快，还要搬得安全</a>
+<a href="../../../05-transfer/implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine：字节移动的实现案例</a>
+</details>
+<details><summary>06 Serving 与性能</summary>
+<a href="../../../06-serving/index.html">06 · Serving 与性能：让整条链路满足服务目标</a>
+<a href="../../../06-serving/component-selection.html">Serving 组件选型：在同一技术问题下比较实现</a>
+<a href="../../../06-serving/implementations/lmcache/observability.html">observability</a>
+<a href="../../../06-serving/implementations/vllm/performance-and-parallelism.html">性能、分布式与服务工程教材</a>
+</details>
+<details><summary>07 实验与验证</summary>
+<a href="../../../07-practice/index.html">07 · 实验与验证：用证据回答系统问题</a>
+<a href="../../../07-practice/implementations/lmcache/labs.html">labs</a>
+<a href="../../../07-practice/implementations/mooncake/labs.html">06 · 实验与性能诊断</a>
+<a href="../../../07-practice/implementations/sglang/labs.html">实验手册：从单机基线到共享缓存与 PD</a>
+<a href="../../../07-practice/implementations/vllm/experiments.html">实验与项目：从原理到可复现证据</a>
+<a href="../../../07-practice/implementations/vllm/walkthrough.html">实践教材：运行步骤、源码作业与参考答案</a>
+</details>
+<details><summary>08 专家能力与面试</summary>
+<a href="../../../08-career/index.html">08 · 岗位、学习计划与面试：按能力组织成果</a>
+<a href="../../../08-career/coverage-and-review.html">资料结构与覆盖范围审阅</a>
+<a href="../../../08-career/expert-interview-guide.html">LLM 推理 Infra 专家面试总纲：P7–P8 能力参考，重点 KV Cache 存储</a>
+<a href="../../../08-career/interview-and-design.html">面试与项目：能解释、能算账、能处理失败</a>
+<a href="../../../08-career/references.html">按问题查资料：专题索引与版本基线</a>
+<a href="../../../08-career/roles.html">按岗位方向学习：什么必须熟练，什么可以后学</a>
+<a href="../../../08-career/study-plan.html">统一 28 天学习计划：基础只学一次，后面按岗位分流</a>
+<a href="../../../08-career/implementations/lmcache/index.html">index</a>
+<a href="../../../08-career/implementations/lmcache/questions.html">questions</a>
+<a href="../../../08-career/implementations/lmcache/study-plan.html">study-plan</a>
+<a href="../../../08-career/implementations/lmcache/system-design.html">system-design</a>
+<a href="../../../08-career/implementations/mooncake/index.html">Mooncake 与 KV Cache 存储：28 天学习手册</a>
+<a href="../../../08-career/implementations/mooncake/questions.html">07 · 面试题与参考回答</a>
+<a href="../../../08-career/implementations/mooncake/study-plan.html">01 · 28 天学习计划</a>
+<a href="../../../08-career/implementations/mooncake/system-design.html">08 · 系统设计、毕业项目与参考资料</a>
+<a href="../../../08-career/implementations/sglang/assessment.html">参考资料、实验报告与最终验收</a>
+<a href="../../../08-career/implementations/sglang/questions.html">推理 Infra 面试：36 道题与系统设计</a>
+<a href="../../../08-career/implementations/sglang/study-plan.html">28 天学习计划</a>
+<a href="../../../08-career/implementations/vllm/questions.html">推理 Infra 面试：60 个问题与参考回答</a>
+<a href="../../../08-career/implementations/vllm/references.html">官方资料与版本说明</a>
+<a href="../../../08-career/implementations/vllm/study-plan.html">28 天学习大纲与每日计划</a>
+</details>
+<a href="../../../08-career/coverage-and-review.html">覆盖范围与审阅</a>
+</nav></aside>
+<main id="content"><div class="breadcrumbs">02 推理运行时 · 专注 KV Cache 存储</div>
+<article><h1 id="vllm请求怎样变成高效的-gpu-执行">vLLM：请求怎样变成高效的 GPU 执行</h1>
+<p><a href="../../index.html">返回运行时主题</a> · <a href="../../../01-foundations/concepts.html">前置基础</a> · <a href="../sglang/overview.html">同主题对照：SGLang</a></p>
+<p>vLLM 的核心工作是：<strong>把许多处于不同生成阶段的请求，组织成 GPU 能高效执行的任务，同时管好 KV 和请求生命周期。</strong> 它既是推理服务系统，也是一条学习调度、内存、kernel 和缓存集成的完整路径。</p>
+<h2 id="1-从一个实际问题开始">1. 从一个实际问题开始</h2>
+<p>假设同时来了三个请求：A 已经开始生成，B 刚提交 100-token 输入，C 提交了 20,000-token 长文档。如果每次只处理一个请求，GPU 可能用不满；如果 C 一次算完才服务 A，A 的流式输出会卡住。</p>
+<p>vLLM 需要每轮决定：A 生成多少新 token，B/C 各处理多少输入，显存能否容纳，哪些前缀已算过，是否需要等待外部 KV。</p>
+<p>这里的 batch 不是用户提交的固定 Python list。<strong>Continuous Batching</strong> 允许请求完成后退出，新请求在后续轮次进入；活跃集合会持续变化。</p>
+<h2 id="2-先理解五个主要角色">2. 先理解五个主要角色</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>角色</th>
+<th>白话解释</th>
+<th>读代码时要追的问题</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>入口与 Engine Client</td>
+<td>把输入变成引擎请求，接收输出</td>
+<td>请求何时进入队列、取消消息如何到达？</td>
+</tr>
+<tr>
+<td>EngineCore</td>
+<td>驱动每一轮调度和执行</td>
+<td>是否同步等待，哪里维护在途 batch？</td>
+</tr>
+<tr>
+<td>Scheduler</td>
+<td>决定本轮推进哪些请求、多少 token</td>
+<td>token、请求数、KV 容量分别怎样限制？</td>
+</tr>
+<tr>
+<td>KVCacheManager / BlockPool</td>
+<td>管 GPU KV 的分配、命中、引用、回收</td>
+<td>逻辑位置怎么映射物理块，哪些块不能淘汰？</td>
+</tr>
+<tr>
+<td>Worker / Model Runner</td>
+<td>准备 GPU 输入并执行模型</td>
+<td>索引与布局如何传给 attention，何时取回结果？</td>
+</tr>
+</tbody>
+</table></div>
+<pre><code class="language-text">请求
+→ 输入处理 / Engine Client
+→ EngineCore
+→ Scheduler ↔ KVCacheManager
+→ Worker / Model Runner
+→ 模型层与 attention backend
+→ 采样 / 状态更新 / 输出返回
+</code></pre>
+<p>这是一张职责图。真实部署可能跨进程，异步路径也不保证严格逐步等待。当前基线的 V1 引擎有原 runner 与 Model Runner V2 两条执行器路径；MRV2 不是另一套“vLLM V2 引擎”。</p>
+<h2 id="3-四个常见优化分别解决什么">3. 四个常见优化分别解决什么</h2>
+<h3 id="pagedattention让-kv-不必占一整块连续显存">PagedAttention：让 KV 不必占一整块连续显存</h3>
+<p>KV 按 block 存放，attention 通过映射找到所需位置。请求增长时追加块，结束后归还可回收块；共享前缀可以引用同一组只读块。</p>
+<p>收益是降低碎片和过度预留、支持更灵活的共享。代价包括 block table、索引处理与适配这种布局的 kernel。它没有把 GPU 变成无限内存。</p>
+<h3 id="prefix-caching以前算过的前缀尽量不重算">Prefix caching：以前算过的前缀尽量不重算</h3>
+<p>同样模型和兼容配置下，链式块哈希用于识别可复用的完整前缀。匹配成功并满足可用性条件后，调度器减少需要重新计算的输入范围。</p>
+<p>这与分页是两件事：分页解决“放在哪里”，前缀缓存解决“是不是已经算过”。只讨论分页无法解释缓存命中的正确性。</p>
+<h3 id="chunked-prefill别让一个长输入长时间挡住其他请求">Chunked Prefill：别让一个长输入长时间挡住其他请求</h3>
+<p>将长 Prefill 分成多轮推进。教学例子：token 预算为 8，A/B 各做一个 Decode token，C 本轮处理 6 个输入 token。下一轮再决定 C 的剩余工作。</p>
+<p>块越小不一定越好。过小会降低 kernel 效率、增加调度开销；过大可能伤害 Decode ITL。真实策略还受优先级、预算、模型与 KV 资源影响。</p>
+<h3 id="flashattention减少-attention-中间结果的显存访问">FlashAttention：减少 attention 中间结果的显存访问</h3>
+<p>FlashAttention 通过分块和在线 softmax 等方法，减少大中间张量的 HBM 读写。它处理一次 attention 计算内部的效率。它与请求调度、分页管理、跨请求复用可以同时存在。</p>
+<h2 id="4-一次外部缓存命中怎样接回执行">4. 一次外部缓存命中怎样接回执行</h2>
+<p>假设输入长 8,192 token，外部缓存可能覆盖前 6,144 token：</p>
+<ol>
+<li>Scheduler/Connector 确认本地已命中的范围，查询额外可复用范围。</li>
+<li>为目标 KV 准备合适的 GPU block，并传递 block、请求、rank 等元数据。</li>
+<li>Worker 侧通过 Connector 触发加载，处理传输、重排和同步依赖。</li>
+<li>确认实际可用范围后，按协议只计算未覆盖输入。不能把“查询返回命中”直接写成“这些 token 全部完成”。</li>
+<li>新 KV 的保存可能异步进行。请求结束以后，必须等仍引用相关 block 的保存任务满足释放条件。</li>
+</ol>
+<p>Connector 因而是执行协议的一部分，涉及调度器侧和 worker 侧。写一个 <code>put/get</code> 适配器并不代表已经正确接入 vLLM。</p>
+<p><strong>错误例子</strong>：外部查到 6,144 token，加载第 4,096 token 后网络失败，却仍按 6,144 token 跳过 Prefill。Store 可能只是返回了正确的失败状态，但引擎已经消费了缺失或旧数据。</p>
+<h2 id="5-什么时候重点优化-vllm-本身">5. 什么时候重点优化 vLLM 本身</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>现象</th>
+<th>优先检查</th>
+<th>需要的证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>低并发很快，高并发首字慢</td>
+<td>排队、准入、token 预算、长 Prefill</td>
+<td>请求时间线、等待队列、Prefill 分布</td>
+</tr>
+<tr>
+<td>显存够用但 GPU 有空洞</td>
+<td>CPU 准备、同步、执行器、批次组织</td>
+<td>CPU/GPU trace</td>
+</tr>
+<tr>
+<td>上下文越长 Decode 越慢</td>
+<td>KV 读取、attention kernel、batch、并行通信</td>
+<td>固定 batch/长度的前向测量</td>
+</tr>
+<tr>
+<td>开远端缓存后偶尔错误</td>
+<td>key、布局、block 生命周期、加载失败处理</td>
+<td>对照输出、分片状态、完成事件</td>
+</tr>
+<tr>
+<td>频繁抢占/重算</td>
+<td>KV 预算、并发、输出长度、共享情况</td>
+<td>抢占率、活跃 token 数与 block 使用</td>
+</tr>
+</tbody>
+</table></div>
+<p>不要同时修改十个参数。先确定一项瓶颈，建立基线，再做单因素对照。</p>
+<h2 id="6-源码怎么读">6. 源码怎么读</h2>
+<p>以下路径相对于 vLLM 上游源码根目录，具体链接与逐段解释见<a href="request-walkthrough.html">源码教材</a>。</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>顺序</th>
+<th>路径</th>
+<th>阅读产物</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>vllm/entrypoints/llm.py</code></td>
+<td>一次离线生成怎样进入引擎</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>vllm/v1/engine/core.py</code></td>
+<td>一轮调度、提交、等待、更新的图</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>vllm/v1/core/sched/scheduler.py</code></td>
+<td>请求状态和资源预算表</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>vllm/v1/core/kv_cache_manager.py</code>、<code>block_pool.py</code></td>
+<td>匹配、分配、引用与释放路径</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>vllm/v1/worker/gpu_worker.py</code> 及所选 runner</td>
+<td>输入映射到 GPU tensor 的过程</td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>vllm/distributed/kv_transfer/kv_connector/v1/base.py</code></td>
+<td>外部缓存与调度、执行的契约</td>
+</tr>
+</tbody>
+</table></div>
+<p>推理引擎岗要能解释整轮执行；KV 存储岗优先读 3、4、6，同时知道 GPU 数据最终怎样被消费。Kernel 岗再深入 backend 和具体算子。</p>
+<h2 id="7-面试里怎样算掌握了">7. 面试里怎样算“掌握了”</h2>
+<p>能手推一个同时有 Prefill 和 Decode 的小调度例子；能画逻辑 token 到物理 block 的映射；能解释抢占、取消、异步保存时为什么不能立即复用内存；能把一次 TTFT 变慢拆成可观测阶段。</p>
+<p>一句项目介绍可以这样说：“我主要从 vLLM 的请求执行链路理解调度与 KV 管理，再跟踪 Connector 的加载和完成契约。重点验证的是减少了多少实际 Prefill，以及是否引入额外等待或错误回收。”接下来要用自己的源码记录或实验支撑。</p>
+<h2 id="专题深读资料">专题深读资料</h2>
+<p>下面保留原有教材导航，表内编号用于对应原教材。按主题学习使用<a href="../../../08-career/study-plan.html">统一计划</a>；需要持续深入 vLLM 时再使用<a href="../../../08-career/implementations/vllm/study-plan.html">专项计划</a>。</p>
+<h3 id="四本深读教材">四本深读教材</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>教材</th>
+<th>可以直接学到什么</th>
+<th>对应计划</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="../../../01-foundations/attention-and-inference.html">07 推理基础</a></td>
+<td>Transformer shape、Prefill/Decode、KV、显存、Roofline、指标及计算题</td>
+<td>D01～D04</td>
+</tr>
+<tr>
+<td><a href="request-walkthrough.html">08 vLLM 源码精读</a></td>
+<td>入口、请求状态、EngineCore、Scheduler、KV、packed inputs、MRV2、采样、connector</td>
+<td>D05～D12</td>
+</tr>
+<tr>
+<td><a href="../../../06-serving/implementations/vllm/performance-and-parallelism.html">09 性能与分布式</a></td>
+<td>Benchmark、profiling、FlashAttention、kernel、编译、并行、PD、量化和服务工程</td>
+<td>D13～D24</td>
+</tr>
+<tr>
+<td><a href="../../../07-practice/implementations/vllm/walkthrough.html">10 实践与参考答案</a></td>
+<td>CPU 实验、GPU 安装/使用/压测步骤、源码作业、计算题和月末报告</td>
+<td>全程配套</td>
+</tr>
+</tbody>
+</table></div>
+<p>CPU 教学脚本：<a href="../../../07-practice/cpu/inference_lab.py">inference_lab.py</a>，含 Attention/KV 等价、链式前缀 hash、调度、容量四个实验。它不依赖 vLLM 或 PyTorch，不替代真实 GPU benchmark。</p>
+<h3 id="配套资料导航">配套资料导航</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>文档</th>
+<th>内容</th>
+<th>推荐用法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="../../../08-career/implementations/vllm/study-plan.html">01 学习大纲与计划</a></td>
+<td>28 天逐日任务、阅读章节、月内选修、岗位分支和验收标准</td>
+<td>每天执行</td>
+</tr>
+<tr>
+<td><a href="architecture.html">02 知识地图与设计图</a></td>
+<td>核心知识地图、V1 架构、启动流程、请求时序、状态机、调度与部署图</td>
+<td>建立整体认识，读源码时对照</td>
+</tr>
+<tr>
+<td><a href="../../../08-career/implementations/vllm/questions.html">03 面试问题与参考回答</a></td>
+<td>原理、定量分析、引擎、GPU、分布式、缓存、系统设计与排障</td>
+<td>先独立回答，再看参考答案</td>
+</tr>
+<tr>
+<td><a href="../../../03-kv-cache/implementations/vllm/integration.html">04 KV Cache：vLLM、LMCache、Mooncake</a></td>
+<td>内存模型、复用正确性、多级缓存、传输、PD 分离、框架对比、故障处理</td>
+<td>重点专题，建议精读</td>
+</tr>
+<tr>
+<td><a href="../../../07-practice/implementations/vllm/experiments.html">05 实验与项目</a></td>
+<td>基线、调度、缓存、PD、故障实验与结果模板</td>
+<td>将知识转成可展示的项目</td>
+</tr>
+<tr>
+<td><a href="../../../08-career/implementations/vllm/references.html">06 官方资料与版本说明</a></td>
+<td>同版本本地官方资料、论文、源码定位与版本记录</td>
+<td>核对实现和兼容性</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="单项目的三条深读路径">单项目的三条深读路径</h3>
+<ul>
+<li><strong>vLLM 专项路径</strong>：基础计算 → 请求源码 → 性能与分布式，穿插实践作业，再用缓存专题和问答复习；整体学习仍按全库统一计划。</li>
+<li><strong>面试路径</strong>：基础教材的计算 → 源码链路 → 性能取舍 → 问答 → 项目报告。</li>
+<li><strong>KV Cache 专项路径</strong>：基础教材 F4～F6 → 源码教材 R6/R10 → KV 专题 → 实践 L6 → 实验 E4～E9。</li>
+</ul>
+<h2 id="学完需要能够做什么">学完需要能够做什么</h2>
+<ol>
+<li>画出一条请求从 API 到 GPU、再返回客户端的执行过程。</li>
+<li>估算权重与 KV 显存，解释 batch、序列长度和并行方式对容量的影响。</li>
+<li>解释 Continuous Batching、Chunked Prefill、PagedAttention、FlashAttention 的不同作用。</li>
+<li>用负载与 trace 证明瓶颈，并以延迟目标下的 Goodput 评价优化。</li>
+<li>区分 vLLM 本地前缀缓存、LMCache 多级复用、Mooncake 传输与共享存储。</li>
+<li>解释缓存何时可复用、何时可释放，以及读取失败后如何安全回退。</li>
+<li>完成至少一份包含基线、假设、实验、收益边界和正确性验证的报告。</li>
+</ol>
+<h2 id="使用约定">使用约定</h2>
+<ul>
+<li>内容以 <strong>vLLM V1 的架构概念</strong>为主。图中的箭头表示职责与数据依赖，不保证等同于任一版本的逐行调用关系。</li>
+<li>Mermaid 图可在 GitHub 或支持 Mermaid 的 Markdown 阅读器中渲染；原始图代码也可直接编辑。</li>
+<li><code>P0</code>：必须掌握；<code>P1</code>：进阶必学；<code>P2</code>：按岗位选学。</li>
+<li>面试题属于常见考察主题整理，不代表任何公司的真实题库或出现频率统计。</li>
+<li>“参考回答”包含前提与边界。性能问题通常没有脱离硬件、模型、负载和 SLO 的固定答案。</li>
+<li>CPU 教学实验可以在本机运行；GPU/分布式实验中的数值示例是计算示例或待验证的假设，不能当作实测收益。</li>
+</ul>
+<h2 id="资料边界">资料边界</h2>
+<p>首次整理日期：2026-10-23。本次补充时本地源码已经可读，源码教材核对基准为 <code>f3871c3cbf8a608f7ee833ec4c2c5277f77bee41</code>。已核对入口、引擎、调度、KV、runner 和 connector 的关键符号；切换提交后需重新确认实现。</p>
+<p>当前快照存在 V1 引擎中的原 runner 与 Model Runner V2 两条路径，08 专门解释了区别。LMCache/Mooncake 部分依据所列官方资料，未在本机验证所有版本组合。</p>
+<p>在线 <code>stable</code>、<code>latest</code> 和 LMCache 开发文档会更新。尤其是 LMCache 的进程内模式与 MP 模式、vLLM connector 接口、Mooncake 后端能力，不能跨版本混用配置。参考文档中的性能数字也不能直接当作自己的收益预期。</p>
+</article>
+<footer><a href="../../../_sources/02-runtime/implementations/vllm/overview.md">原始参考笔记</a> · <a href="../../../index.html">返回总目录</a>
+<p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-从一个实际问题开始">1. 从一个实际问题开始</a><a class="level-2" href="#2-先理解五个主要角色">2. 先理解五个主要角色</a><a class="level-2" href="#3-四个常见优化分别解决什么">3. 四个常见优化分别解决什么</a><a class="level-3" href="#pagedattention让-kv-不必占一整块连续显存">PagedAttention：让 KV 不必占一整块连续显存</a><a class="level-3" href="#prefix-caching以前算过的前缀尽量不重算">Prefix caching：以前算过的前缀尽量不重算</a><a class="level-3" href="#chunked-prefill别让一个长输入长时间挡住其他请求">Chunked Prefill：别让一个长输入长时间挡住其他请求</a><a class="level-3" href="#flashattention减少-attention-中间结果的显存访问">FlashAttention：减少 attention 中间结果的显存访问</a><a class="level-2" href="#4-一次外部缓存命中怎样接回执行">4. 一次外部缓存命中怎样接回执行</a><a class="level-2" href="#5-什么时候重点优化-vllm-本身">5. 什么时候重点优化 vLLM 本身</a><a class="level-2" href="#6-源码怎么读">6. 源码怎么读</a><a class="level-2" href="#7-面试里怎样算掌握了">7. 面试里怎样算“掌握了”</a><a class="level-2" href="#专题深读资料">专题深读资料</a><a class="level-3" href="#四本深读教材">四本深读教材</a><a class="level-3" href="#配套资料导航">配套资料导航</a><a class="level-3" href="#单项目的三条深读路径">单项目的三条深读路径</a><a class="level-2" href="#学完需要能够做什么">学完需要能够做什么</a><a class="level-2" href="#使用约定">使用约定</a><a class="level-2" href="#资料边界">资料边界</a></aside>
+<dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
+<button id="search-close" aria-label="关闭搜索">关闭</button></div>
+<input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">
+<p id="search-status" role="status">输入主题、术语或问题</p><ol id="search-results"></ol></dialog>
+</body></html>

@@ -1,0 +1,26 @@
+digraph G {
+  graph [rankdir=LR, bgcolor="white", pad=0.3, nodesep=0.4, ranksep=0.7, fontname="Arial Unicode MS", fontsize=20, label="D2 · 计算、缓存与共享存储部署（候选方案）", labelloc=t];
+  node [shape=box, style="rounded,filled", fillcolor="#EAF2FF", color="#57799F", fontname="Arial Unicode MS", fontsize=14, margin="0.18,0.12"];
+  edge [fontname="Arial Unicode MS", fontsize=12, color="#20816B", penwidth=2];
+  router [label="路由 / 准入"];
+  subgraph cluster_compute {
+    label="计算主机 A（进程与资源所有权分别核对）"; fontname="Arial Unicode MS"; color="#9BB7D4";
+    engine [label="引擎进程\nScheduler / Worker"];
+    gpu [label="GPU KV"];
+    host [label="host 缓存 / staging\n可在引擎内或独立进程", fillcolor="#E6F4EA"];
+    engine -> gpu [style=dashed, label="执行", color="#52657A", penwidth=1];
+    gpu -> host [dir=both, label="D2H / H2D"];
+  }
+  directory [label="对象目录 / 控制服务\n位置、发布、租约与配额", fillcolor="#FFF3D6"];
+  subgraph cluster_storage {
+    label="存储故障域（示意为不同主机）"; fontname="Arial Unicode MS"; color="#8DBFA9";
+    one [label="主机 B\nsegment / DRAM", fillcolor="#E6F4EA"];
+    two [label="主机 C\nsegment / DRAM", fillcolor="#E6F4EA"];
+  }
+  router -> engine [style=dashed, label="请求", color="#52657A", penwidth=1];
+  host -> directory [style=dashed, label="分配 / 查位置 / 保护", color="#52657A", penwidth=1];
+  host -> one [dir=both, label="直接传 payload"];
+  host -> two [dir=both, label="副本 / 读取路径"];
+  one -> directory [style=dashed, label="注册与健康", color="#52657A", penwidth=1];
+  two -> directory [style=dashed, color="#52657A", penwidth=1];
+}

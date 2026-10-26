@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>实验手册：从单机基线到共享缓存与 PD · LLM Infra</title>
+<link rel="stylesheet" href="../../../assets/site.css">
+<script defer src="../../../assets/search-index.js"></script>
+<script defer src="../../../assets/site.js"></script></head>
+<body data-root="../../..">
+<a class="skip" href="#content">跳到正文</a>
+<header class="topbar"><button id="nav-toggle" aria-controls="sidebar" aria-expanded="false">目录</button>
+<a class="brand" href="../../../index.html">LLM Infra <span>学习资料库</span></a>
+<button id="search-open">搜索内容 <kbd>/</kbd></button></header>
+<aside id="sidebar"><nav aria-label="学习主题">
+<a href="../../../index.html">总目录</a>
+<div class="featured">
+<a href="../../../01-foundations/design-atlas.html">设计图册</a>
+<a href="../../../08-career/expert-interview-guide.html">P7–P8 专家面试</a>
+<a href="../../../04-storage/kv-cache-storage.html">KV 存储详解</a>
+<a href="../../../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake</a>
+</div>
+<details><summary>01 基础与设计图</summary>
+<a href="../../../01-foundations/index.html">01 · 基础与全景：先理解计算、资源和请求</a>
+<a href="../../../01-foundations/attention-and-inference.html">推理基础教材：从 Transformer 到服务成本</a>
+<a href="../../../01-foundations/compute-and-memory.html">推理基础、调度、GPU 优化与分布式</a>
+<a href="../../../01-foundations/concepts.html">公共基础：推理、KV Cache、内存和性能</a>
+<a href="../../../01-foundations/design-atlas.html">设计图册：从请求执行到共享 KV 存储</a>
+<a href="../../../01-foundations/overview.html">LLM Infra 总体介绍：先把整条链路想明白</a>
+</details>
+<details><summary>02 推理运行时</summary>
+<a href="../../../02-runtime/index.html">02 · 推理运行时：把请求变成每一轮 GPU 工作</a>
+<a href="../../../02-runtime/implementations/sglang/knowledge-map.html">学习大纲与完整知识地图</a>
+<a href="../../../02-runtime/implementations/sglang/overview.html">SGLang：把请求调度、前缀复用与分层缓存连起来</a>
+<a href="../../../02-runtime/implementations/sglang/runtime.html">SGLang 架构、运行图与源码路线</a>
+<a href="../../../02-runtime/implementations/vllm/architecture.html">知识地图与 vLLM 设计图</a>
+<a href="../../../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
+<a href="../../../02-runtime/implementations/vllm/request-walkthrough.html">vLLM 源码教材：跟踪一条请求及其资源</a>
+</details>
+<details><summary>03 KV Cache 管理</summary>
+<a href="../../../03-kv-cache/index.html">03 · KV Cache 管理：让正确的状态在正确的时间可用</a>
+<a href="../../../03-kv-cache/capacity-and-reuse.html">03 · KV Cache 基础与性能模型</a>
+<a href="../../../03-kv-cache/semantics-and-costs.html">semantics-and-costs</a>
+<a href="../../../03-kv-cache/implementations/lmcache/internals.html">internals</a>
+<a href="../../../03-kv-cache/implementations/lmcache/overview.html">LMCache：把 KV 的保存、查找、加载和回收管起来</a>
+<a href="../../../03-kv-cache/implementations/lmcache/state-diagrams.html">state-diagrams</a>
+<a href="../../../03-kv-cache/implementations/sglang/prefix-cache.html">KV Cache：原理、容量、分页、前缀复用与正确性</a>
+<a href="../../../03-kv-cache/implementations/sglang/tiered-cache.html">HiCache、Mooncake、LMCache 与 PD 分离</a>
+<a href="../../../03-kv-cache/implementations/vllm/integration.html">KV Cache 专题：vLLM、LMCache 与 Mooncake</a>
+</details>
+<details><summary>04 分布式存储</summary>
+<a href="../../../04-storage/index.html">04 · 分布式存储：把可复用状态放进共享资源池</a>
+<a href="../../../04-storage/kv-cache-storage.html">KV Cache 存储详解：数据模型、协议、容量、性能与故障</a>
+<a href="../../../04-storage/implementations/lmcache/backend-contracts.html">backend-contracts</a>
+<a href="../../../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake：从一次 KV 保存到下一次请求恢复</a>
+<a href="../../../04-storage/implementations/mooncake/architecture.html">02 · 知识地图与设计图</a>
+<a href="../../../04-storage/implementations/mooncake/integrations.html">05 · LMCache 与推理引擎集成</a>
+<a href="../../../04-storage/implementations/mooncake/internals.html">04 · Mooncake 内核与源码路线</a>
+<a href="../../../04-storage/implementations/mooncake/overview.html">Mooncake：KV 对象怎样共享、怎样安全地高速搬运</a>
+</details>
+<details><summary>05 数据传输</summary>
+<a href="../../../05-transfer/index.html">05 · 数据传输：搬得动、搬得快，还要搬得安全</a>
+<a href="../../../05-transfer/implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine：字节移动的实现案例</a>
+</details>
+<details><summary>06 Serving 与性能</summary>
+<a href="../../../06-serving/index.html">06 · Serving 与性能：让整条链路满足服务目标</a>
+<a href="../../../06-serving/component-selection.html">Serving 组件选型：在同一技术问题下比较实现</a>
+<a href="../../../06-serving/implementations/lmcache/observability.html">observability</a>
+<a href="../../../06-serving/implementations/vllm/performance-and-parallelism.html">性能、分布式与服务工程教材</a>
+</details>
+<details open><summary>07 实验与验证</summary>
+<a href="../../index.html">07 · 实验与验证：用证据回答系统问题</a>
+<a href="../lmcache/labs.html">labs</a>
+<a href="../mooncake/labs.html">06 · 实验与性能诊断</a>
+<a href="labs.html" aria-current="page">实验手册：从单机基线到共享缓存与 PD</a>
+<a href="../vllm/experiments.html">实验与项目：从原理到可复现证据</a>
+<a href="../vllm/walkthrough.html">实践教材：运行步骤、源码作业与参考答案</a>
+</details>
+<details><summary>08 专家能力与面试</summary>
+<a href="../../../08-career/index.html">08 · 岗位、学习计划与面试：按能力组织成果</a>
+<a href="../../../08-career/coverage-and-review.html">资料结构与覆盖范围审阅</a>
+<a href="../../../08-career/expert-interview-guide.html">LLM 推理 Infra 专家面试总纲：P7–P8 能力参考，重点 KV Cache 存储</a>
+<a href="../../../08-career/interview-and-design.html">面试与项目：能解释、能算账、能处理失败</a>
+<a href="../../../08-career/references.html">按问题查资料：专题索引与版本基线</a>
+<a href="../../../08-career/roles.html">按岗位方向学习：什么必须熟练，什么可以后学</a>
+<a href="../../../08-career/study-plan.html">统一 28 天学习计划：基础只学一次，后面按岗位分流</a>
+<a href="../../../08-career/implementations/lmcache/index.html">index</a>
+<a href="../../../08-career/implementations/lmcache/questions.html">questions</a>
+<a href="../../../08-career/implementations/lmcache/study-plan.html">study-plan</a>
+<a href="../../../08-career/implementations/lmcache/system-design.html">system-design</a>
+<a href="../../../08-career/implementations/mooncake/index.html">Mooncake 与 KV Cache 存储：28 天学习手册</a>
+<a href="../../../08-career/implementations/mooncake/questions.html">07 · 面试题与参考回答</a>
+<a href="../../../08-career/implementations/mooncake/study-plan.html">01 · 28 天学习计划</a>
+<a href="../../../08-career/implementations/mooncake/system-design.html">08 · 系统设计、毕业项目与参考资料</a>
+<a href="../../../08-career/implementations/sglang/assessment.html">参考资料、实验报告与最终验收</a>
+<a href="../../../08-career/implementations/sglang/questions.html">推理 Infra 面试：36 道题与系统设计</a>
+<a href="../../../08-career/implementations/sglang/study-plan.html">28 天学习计划</a>
+<a href="../../../08-career/implementations/vllm/questions.html">推理 Infra 面试：60 个问题与参考回答</a>
+<a href="../../../08-career/implementations/vllm/references.html">官方资料与版本说明</a>
+<a href="../../../08-career/implementations/vllm/study-plan.html">28 天学习大纲与每日计划</a>
+</details>
+<a href="../../../08-career/coverage-and-review.html">覆盖范围与审阅</a>
+</nav></aside>
+<main id="content"><div class="breadcrumbs">07 实验与验证 · 专注 KV Cache 存储</div>
+<article><h1 id="实验手册从单机基线到共享缓存与-pd">实验手册：从单机基线到共享缓存与 PD</h1>
+<p><a href="../../../02-runtime/implementations/sglang/overview.html">返回导航</a> · <a href="../../../03-kv-cache/implementations/sglang/tiered-cache.html">理论与选型</a> · <a href="../../../08-career/implementations/sglang/assessment.html">报告模板</a></p>
+<h2 id="1-实验边界与准备">1. 实验边界与准备</h2>
+<p>本文提供七组实验。命令按本手册记录的源码和官方示例静态核对，<strong>本次资料编写未运行 GPU benchmark，不提供虚构实测结果</strong>。</p>
+<h3 id="11-平台与版本">1.1 平台与版本</h3>
+<ul>
+<li>GPU 实验：Linux + 支持所选软件版本的 NVIDIA GPU。</li>
+<li>当前仓库 NVIDIA 安装文档使用 CUDA 13 环境；旧 release 的依赖可能不同。</li>
+<li>固定 SGLang、PyTorch、Attention backend、LMCache、Mooncake 和 Router 版本。</li>
+<li>当前 main 里的集成可能尚未包含在你安装的稳定 wheel 中。</li>
+<li>LMCache 必须与 SGLang 的统一 MP connector 匹配。以 <a href="https://docs.lmcache.ai/getting_started/quickstart.html">官方 Quickstart</a> 的 SGLang 页签核对双方版本要求。</li>
+<li>小模型选 <code>Qwen/Qwen2.5-1.5B-Instruct</code>，使用公开权重，不需要在文档中保存 token。</li>
+<li>所有启动命令分别在前台终端运行；看到服务就绪后再发送请求。</li>
+</ul>
+<p>安装依据：<a href="https://github.com/sgl-project/sglang/blob/30dc2f94303e339431cbd51489b2d1719678b0c1/docs/docs/get-started/install.mdx">上游安装文档</a>。</p>
+<p>不要为了执行示例无条件升级到浮动 <code>latest</code>。选择兼容的固定版本或镜像，并记录模型 revision。</p>
+<h3 id="12-环境记录">1.2 环境记录</h3>
+<p>至少保存：</p>
+<pre><code class="language-text">日期：
+SGLang commit / wheel：
+PyTorch / CUDA runtime / driver：
+LMCache / Mooncake / Router：
+模型 ID / revision：
+GPU 型号、数量、显存：
+CPU / RAM / NUMA：
+网络 / RDMA / NIC：
+TP / PP / DP / EP / CP：
+完整启动命令：
+</code></pre>
+<p>实验中的服务仅用于隔离环境。SGLang 和 Router 绑定回环地址；Mooncake Master、元数据与 Store 的监听范围需要检查并通过网络策略保护。</p>
+<h3 id="13-运行位置">1.3 运行位置</h3>
+<p>启动命令依赖已安装的 Python 模块，可在实验工作目录执行。示例中的 <code>lmcache_config.yaml</code> 与 benchmark 输出使用当前工作目录；如果放到其他目录，请改为实际路径。</p>
+<p>下文每次变更服务配置，都应先正常停止之前对应终端的服务，避免端口占用。不要清理生产缓存，也不要使用共享生产服务做容量压力测试。</p>
+<h2 id="2-对照实验规则">2. 对照实验规则</h2>
+<ol>
+<li>一次只改变一个主要变量。</li>
+<li>分清冷缓存、热缓存和模型/JIT/Graph 预热。</li>
+<li>固定模型、精度、并行、长度分布和资源预算。</li>
+<li>每组重复运行，保留逐请求数据与异常。</li>
+<li>缓存实验使用受控共享前缀，随机输入主要用于压力基线。</li>
+<li>输出长度若受 EOS 影响，记录实际长度；为了固定长度改变生成规则时也要记录。</li>
+<li>不仅测 TTFT，还测 ITL、吞吐、Goodput、资源与质量。</li>
+<li>比较 PD 时保持总 GPU 预算一致。</li>
+</ol>
+<h2 id="3-实验一基线api-与前缀命中">3. 实验一：基线、API 与前缀命中</h2>
+<h3 id="31-启动单-gpu-服务">3.1 启动单 GPU 服务</h3>
+<p>TP=1，模型路径可替换为兼容模型 ID 或本地模型目录。内存参数需要结合实际 GPU 调整：</p>
+<pre><code class="language-bash">python -m sglang.launch_server \
+  --model-path Qwen/Qwen2.5-1.5B-Instruct \
+  --host 127.0.0.1 \
+  --port 30000 \
+  --tp 1 \
+  --context-length 8192 \
+  --max-total-tokens 32768 \
+  --mem-fraction-static 0.7 \
+  --enable-metrics
+</code></pre>
+<p><code>max-total-tokens</code> 限制可用 token 容量；<code>mem-fraction-static</code> 不能视为“KV 单独占整张卡的比例”。启动日志中的实际容量是重要依据。</p>
+<h3 id="32-普通与流式-api">3.2 普通与流式 API</h3>
+<p>普通生成：</p>
+<pre><code class="language-bash">curl http://127.0.0.1:30000/generate \
+  -H &quot;Content-Type: application/json&quot; \
+  -d '{&quot;text&quot;:&quot;Explain what a KV cache stores.&quot;,&quot;sampling_params&quot;:{&quot;temperature&quot;:0,&quot;max_new_tokens&quot;:64},&quot;stream&quot;:false}'
+</code></pre>
+<p>流式生成：</p>
+<pre><code class="language-bash">curl -N http://127.0.0.1:30000/generate \
+  -H &quot;Content-Type: application/json&quot; \
+  -d '{&quot;text&quot;:&quot;Explain what a KV cache stores.&quot;,&quot;sampling_params&quot;:{&quot;temperature&quot;:0,&quot;max_new_tokens&quot;:64},&quot;stream&quot;:true}'
+</code></pre>
+<p>OpenAI-compatible Chat：</p>
+<pre><code class="language-bash">curl http://127.0.0.1:30000/v1/chat/completions \
+  -H &quot;Content-Type: application/json&quot; \
+  -d '{&quot;model&quot;:&quot;Qwen/Qwen2.5-1.5B-Instruct&quot;,&quot;messages&quot;:[{&quot;role&quot;:&quot;user&quot;,&quot;content&quot;:&quot;Explain KV cache briefly.&quot;}],&quot;temperature&quot;:0,&quot;max_tokens&quot;:64,&quot;stream&quot;:false}'
+</code></pre>
+<p>原生生成输入和 Chat 模板处理后的 token 序列未必相同，不要跨两种 API 直接推断命中结果。</p>
+<h3 id="33-共享前缀探测">3.3 共享前缀探测</h3>
+<p>以下 Python 代码仅使用标准库：</p>
+<pre><code class="language-python">import json
+import time
+import urllib.request
+
+url = &quot;http://127.0.0.1:30000/generate&quot;
+prefix = (
+    &quot;SGLang separates scheduling, model execution, &quot;
+    &quot;and KV cache management.\n&quot;
+) * 256
+
+for trial in range(3):
+    payload = {
+        &quot;text&quot;: prefix + f&quot;\nQuestion {trial}: What does the KV cache store?&quot;,
+        &quot;sampling_params&quot;: {
+            &quot;temperature&quot;: 0,
+            &quot;max_new_tokens&quot;: 32,
+        },
+        &quot;stream&quot;: False,
+    }
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode(&quot;utf-8&quot;),
+        headers={&quot;Content-Type&quot;: &quot;application/json&quot;},
+        method=&quot;POST&quot;,
+    )
+    start = time.perf_counter()
+    with urllib.request.urlopen(request, timeout=180) as response:
+        result = json.load(response)
+    meta = result.get(&quot;meta_info&quot;, {})
+    print({
+        &quot;trial&quot;: trial,
+        &quot;e2e_seconds&quot;: round(time.perf_counter() - start, 4),
+        &quot;prompt_tokens&quot;: meta.get(&quot;prompt_tokens&quot;),
+        &quot;cached_tokens&quot;: meta.get(&quot;cached_tokens&quot;),
+        &quot;cached_tokens_details&quot;: meta.get(&quot;cached_tokens_details&quot;),
+    })
+</code></pre>
+<p>这里计时是 E2E，不是 TTFT。字段可能随版本变化，使用服务端日志和指标交叉验证。第一条请求是否为冷缓存取决于服务已有状态，不能只按 trial 编号推断。</p>
+<h3 id="34-压力基准">3.4 压力基准</h3>
+<pre><code class="language-bash">python -m sglang.bench_serving \
+  --backend sglang \
+  --base-url http://127.0.0.1:30000 \
+  --model Qwen/Qwen2.5-1.5B-Instruct \
+  --dataset-name random \
+  --random-input-len 1024 \
+  --random-output-len 128 \
+  --num-prompts 160 \
+  --max-concurrency 16 \
+  --output-file baseline.jsonl
+</code></pre>
+<p>把并发改为 1、4、8、16，保存不同结果文件。请求数至少应足以形成稳态，当前官方指南建议不低于最大并发的 5 倍。</p>
+<p>然后用有限 <code>--request-rate</code> 扫描到达率。若还保留并发上限，记录客户端反压造成的实际 offered rate 变化。</p>
+<p>验收：</p>
+<ul>
+<li>确认服务、模型和指标可用。</li>
+<li>证明共享前缀确实被复用，而不是仅观察总耗时下降。</li>
+<li>区分 JIT/Graph 预热与 KV 复用。</li>
+<li>保存并发与延迟/吞吐曲线。</li>
+</ul>
+<h2 id="4-实验二调度与执行优化">4. 实验二：调度与执行优化</h2>
+<p>分别在基线服务上改变：</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>变量</th>
+<th>示例</th>
+<th>观测目标</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Prefill chunk</td>
+<td><code>--chunked-prefill-size 512</code>、2048、4096</td>
+<td>长输入对活跃 Decode 的干扰</td>
+</tr>
+<tr>
+<td>CPU/GPU overlap</td>
+<td><code>--disable-overlap-schedule</code></td>
+<td>GPU 空隙与 CPU 工作</td>
+</tr>
+<tr>
+<td>CUDA Graph</td>
+<td><code>--disable-cuda-graph</code></td>
+<td>Kernel launch 开销</td>
+</tr>
+<tr>
+<td>前缀复用</td>
+<td><code>--disable-radix-cache</code></td>
+<td>重算量与缓存收益</td>
+</tr>
+</tbody>
+</table></div>
+<p>上述是分别进行的对照实验，不是一次性追加所有参数。使用普通基线，不与不兼容的 LMCache 等配置混合。</p>
+<p>至少准备两种负载：</p>
+<ol>
+<li>同分布短请求。</li>
+<li>少量长输入混入正在 Decode 的请求。</li>
+</ol>
+<p>记录 p50/p95/p99 TTFT、ITL、吞吐、内存与 trace。小 chunk 若改善 ITL 却降低吞吐，应依据 SLO 评价，不简单判定优劣。</p>
+<h2 id="5-实验三hicache-gpu-与-host-命中">5. 实验三：HiCache GPU 与 Host 命中</h2>
+<h3 id="51-启动">5.1 启动</h3>
+<pre><code class="language-bash">python -m sglang.launch_server \
+  --model-path Qwen/Qwen2.5-1.5B-Instruct \
+  --host 127.0.0.1 \
+  --port 30000 \
+  --tp 1 \
+  --context-length 8192 \
+  --max-total-tokens 32768 \
+  --mem-fraction-static 0.7 \
+  --enable-metrics \
+  --enable-hierarchical-cache \
+  --hicache-ratio 2 \
+  --page-size 64 \
+  --hicache-write-policy write_through
+</code></pre>
+<p>实际 Host 内存需求要以所选模型、设备 KV 池、并行和日志为准，不要只看 ratio 数值。</p>
+<h3 id="52-步骤">5.2 步骤</h3>
+<ol>
+<li>发出目标前缀，产生 KV。</li>
+<li>立即重复，验证 GPU 命中。</li>
+<li>等待需要的备份完成。</li>
+<li>发送其他不同前缀，施加足以挤出目标 GPU KV 的压力。</li>
+<li>保证目标仍有 Host 副本，重新请求它。</li>
+<li>用分层指标验证 Host 命中和加载，而不是只比较总时间。</li>
+</ol>
+<p>不能通过重启 SGLang 保留原来的 HiCache L2。若压力太大连 Host 也被淘汰，应降低压力并重新构造。</p>
+<p>比较 <code>write_through</code>、<code>write_through_selective</code>、<code>write_back</code> 时，分别重新建立初始状态，并记录写入量与命中来源。</p>
+<h2 id="6-实验四mooncake-store-外部复用">6. 实验四：Mooncake Store 外部复用</h2>
+<h3 id="61-前置条件">6.1 前置条件</h3>
+<ul>
+<li>安装与当前 SGLang 兼容的 Mooncake。</li>
+<li>为便于功能验证，示例使用 TCP。</li>
+<li>TCP 实验不能代表 RDMA 的性能。</li>
+<li>使用独立 Store 持有数据，避免所有副本随推理进程退出。</li>
+</ul>
+<h3 id="62-终端-1master">6.2 终端 1：Master</h3>
+<pre><code class="language-bash">mooncake_master \
+  --enable_http_metadata_server=true \
+  --http_metadata_server_port=8080 \
+  --eviction_high_watermark_ratio=0.95
+</code></pre>
+<h3 id="63-终端-2独立-store">6.3 终端 2：独立 Store</h3>
+<pre><code class="language-bash">MOONCAKE_LOCAL_HOSTNAME=&quot;localhost&quot; \
+MOONCAKE_TE_META_DATA_SERVER=&quot;http://127.0.0.1:8080/metadata&quot; \
+MOONCAKE_MASTER=&quot;127.0.0.1:50051&quot; \
+MOONCAKE_PROTOCOL=&quot;tcp&quot; \
+MOONCAKE_GLOBAL_SEGMENT_SIZE=&quot;4gb&quot; \
+MOONCAKE_LOCAL_BUFFER_SIZE=0 \
+python -m mooncake.mooncake_store_service --port=8081
+</code></pre>
+<h3 id="64-终端-3sglang">6.4 终端 3：SGLang</h3>
+<pre><code class="language-bash">MOONCAKE_LOCAL_HOSTNAME=&quot;localhost&quot; \
+MOONCAKE_TE_META_DATA_SERVER=&quot;http://127.0.0.1:8080/metadata&quot; \
+MOONCAKE_MASTER=&quot;127.0.0.1:50051&quot; \
+MOONCAKE_PROTOCOL=&quot;tcp&quot; \
+MOONCAKE_GLOBAL_SEGMENT_SIZE=0 \
+python -m sglang.launch_server \
+  --model-path Qwen/Qwen2.5-1.5B-Instruct \
+  --host 127.0.0.1 \
+  --port 30000 \
+  --tp 1 \
+  --context-length 8192 \
+  --max-total-tokens 32768 \
+  --mem-fraction-static 0.7 \
+  --enable-metrics \
+  --enable-hierarchical-cache \
+  --hicache-ratio 2 \
+  --page-size 64 \
+  --hicache-mem-layout page_first_direct \
+  --hicache-io-backend direct \
+  --hicache-write-policy write_through \
+  --hicache-storage-backend mooncake
+</code></pre>
+<h3 id="65-验证">6.5 验证</h3>
+<ol>
+<li>发送共享前缀请求。</li>
+<li>通过后端日志/指标确认写入完成，而不是只等 HTTP 返回。</li>
+<li>仅正常停止并重启 SGLang，保留 Master 和 Store。</li>
+<li>使用相同模型、格式和命名空间重复请求。</li>
+<li>验证外部命中、取回字节、实际少算 token 和 TTFT。</li>
+</ol>
+<p>跨机器时把回环地址替换成各参与进程可访问的地址，配置网络隔离；不能直接把本地命令当作已完成多节点部署。</p>
+<p>如果取回比重算慢，记录对象大小、查询延迟、传输与 H2D 时间。这是有效实验结果。</p>
+<h2 id="7-实验五lmcache-独立服务">7. 实验五：LMCache 独立服务</h2>
+<h3 id="71-配置">7.1 配置</h3>
+<p>在实验工作目录创建 <code>lmcache_config.yaml</code>：</p>
+<pre><code class="language-yaml">mp_host: 127.0.0.1
+mp_port: 5556
+</code></pre>
+<h3 id="72-终端-1lmcache">7.2 终端 1：LMCache</h3>
+<pre><code class="language-bash">lmcache server \
+  --host 127.0.0.1 \
+  --port 5556 \
+  --l1-size-gb 4 \
+  --eviction-policy LRU
+</code></pre>
+<h3 id="73-终端-2sglang">7.3 终端 2：SGLang</h3>
+<pre><code class="language-bash">python -m sglang.launch_server \
+  --model-path Qwen/Qwen2.5-1.5B-Instruct \
+  --host 127.0.0.1 \
+  --port 30000 \
+  --tp 1 \
+  --context-length 8192 \
+  --max-total-tokens 32768 \
+  --mem-fraction-static 0.7 \
+  --enable-lmcache \
+  --lmcache-config-file lmcache_config.yaml
+</code></pre>
+<p>本例不追加 HiCache、PD 或投机解码开关。其他限制见 <a href="../../../03-kv-cache/implementations/sglang/tiered-cache.html">06</a>。</p>
+<h3 id="74-验证">7.4 验证</h3>
+<ol>
+<li>运行共享前缀探测。</li>
+<li>确认外部存储完成。</li>
+<li>仅重启 SGLang，保留 LMCache。</li>
+<li>检查是否取回已有缓存。</li>
+<li>区分推理进程本地 GPU 命中与 LMCache 服务命中。</li>
+</ol>
+<p>与 HiCache 比较前，要统一实际 GPU KV 容量、CPU 缓存预算、数据分布与并发。本文两个入门启动示例不保证 CPU 缓存容量天然相同。</p>
+<p>可选进阶：按 LMCache 官方文档配置 Mooncake Store 后端。需要相应扩展和版本支持；不要仅凭 SGLang 的 Mooncake 环境变量就认定 LMCache 已接入同一后端。</p>
+<h2 id="8-实验六1p1d-功能与性能">8. 实验六：1P1D 功能与性能</h2>
+<h3 id="81-前置条件">8.1 前置条件</h3>
+<ul>
+<li>两张能够容纳模型的 GPU。</li>
+<li>匹配版本的 Mooncake 与 Router。</li>
+<li>TCP 路径先验证功能，RDMA 单独验证。</li>
+<li>所有参与服务使用相同模型及兼容版本。</li>
+</ul>
+<h3 id="82-终端-1prefill">8.2 终端 1：Prefill</h3>
+<pre><code class="language-bash">python -m sglang.launch_server \
+  --model-path Qwen/Qwen2.5-1.5B-Instruct \
+  --host 127.0.0.1 \
+  --port 30000 \
+  --base-gpu-id 0 \
+  --tp 1 \
+  --context-length 8192 \
+  --max-total-tokens 32768 \
+  --disaggregation-mode prefill \
+  --disaggregation-transfer-backend mooncake_tcp
+</code></pre>
+<h3 id="83-终端-2decode">8.3 终端 2：Decode</h3>
+<pre><code class="language-bash">python -m sglang.launch_server \
+  --model-path Qwen/Qwen2.5-1.5B-Instruct \
+  --host 127.0.0.1 \
+  --port 30001 \
+  --base-gpu-id 1 \
+  --tp 1 \
+  --context-length 8192 \
+  --max-total-tokens 32768 \
+  --disaggregation-mode decode \
+  --disaggregation-transfer-backend mooncake_tcp
+</code></pre>
+<h3 id="84-终端-3router">8.4 终端 3：Router</h3>
+<pre><code class="language-bash">python -m sglang_router.launch_router \
+  --pd-disaggregation \
+  --prefill http://127.0.0.1:30000 \
+  --decode http://127.0.0.1:30001 \
+  --host 127.0.0.1 \
+  --port 8000
+</code></pre>
+<p>把实验一 benchmark 的 <code>--base-url</code> 改为 <code>http://127.0.0.1:8000</code>。</p>
+<h3 id="85-对照与验收">8.5 对照与验收</h3>
+<p>比较短输入、长输入、长输出和混合负载。总 GPU 预算相同，固定输出行为与资源设置；不能拿两卡 PD 对单卡服务直接宣称架构提升。</p>
+<p>回答：</p>
+<ul>
+<li>Prefill 干扰减少了多少？</li>
+<li>每请求传输了多少字节？</li>
+<li>KV 传输是否暴露在 TTFT 关键路径？</li>
+<li>P 与 D 是否一侧排队、一侧闲置？</li>
+<li>预留目标 KV 的时机如何影响容量？</li>
+<li>TCP 结果能否支持关于 RDMA 的结论？</li>
+</ul>
+<p>PD 不一定更快。明确收益消失的边界比只展示最好的一组结果更有价值。</p>
+<h2 id="9-实验七分析-trace-并写报告">9. 实验七：分析 trace 并写报告</h2>
+<h3 id="91-采集">9.1 采集</h3>
+<p>在已经就绪的普通基线服务上：</p>
+<pre><code class="language-bash">python -m sglang.bench_serving \
+  --backend sglang \
+  --base-url http://127.0.0.1:30000 \
+  --model Qwen/Qwen2.5-1.5B-Instruct \
+  --dataset-name random \
+  --random-input-len 1024 \
+  --random-output-len 128 \
+  --num-prompts 80 \
+  --max-concurrency 16 \
+  --profile \
+  --profile-output-dir /tmp/sglang-profile
+</code></pre>
+<p>该命令依赖当前版本提供 profiling 接口；生成路径需要对服务端可写。实际文件位置以日志为准。</p>
+<p>PD 模式中 Prefill 与 Decode 应按官方方法分别采集，不要把普通服务的采集命令当作完整 PD trace。</p>
+<p><a href="https://github.com/sgl-project/sglang/blob/30dc2f94303e339431cbd51489b2d1719678b0c1/docs/docs/developer_guide/benchmark_and_profiling.mdx">Benchmark 与 Profiling 指南</a></p>
+<h3 id="92-分析顺序">9.2 分析顺序</h3>
+<ol>
+<li>GPU 空隙：CPU 调度、Tokenizer 或同步是否造成饥饿。</li>
+<li>Kernel：主要时间在 GEMM、Attention、拷贝还是通信。</li>
+<li>Overlap：拷贝与计算是否真正重叠。</li>
+<li>Launch：是否有密集小 kernel 和明显 CPU 发射成本。</li>
+<li>多 rank：是否有慢 rank 或通信等待。</li>
+<li>缓存：加载是否减少了 Prefill，还是仅增加等待。</li>
+<li>端到端：改变后 TTFT、ITL、Goodput 是否改善。</li>
+</ol>
+<p>Profiler 本身有开销，最终性能结论应使用未开启 profiler 的独立 benchmark 确认。</p>
+<h2 id="10-结果表模板">10. 结果表模板</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>场景</th>
+<th>实际缓存来源</th>
+<th style="text-align:right">少算 token</th>
+<th style="text-align:right">传输字节</th>
+<th>TTFT p50/p95/p99</th>
+<th style="text-align:right">ITL p95</th>
+<th style="text-align:right">输出 tok/s</th>
+<th style="text-align:right">Goodput</th>
+<th style="text-align:right">错误率</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>冷缓存</td>
+<td>待测</td>
+<td style="text-align:right">待测</td>
+<td style="text-align:right">待测</td>
+<td>待测</td>
+<td style="text-align:right">待测</td>
+<td style="text-align:right">待测</td>
+<td style="text-align:right">待测</td>
+<td style="text-align:right">待测</td>
+</tr>
+<tr>
+<td>GPU 命中</td>
+<td>待测</td>
+<td style="text-align:right">待测</td>
+<td style="text-align:right">待测</td>
+<td>待测</td>
+<td style="text-align:right">待测</td>
+<td style="text-align:right">待测</td>
+<td style="text-align:right">待测</td>
+<td style="text-align:right">待测</td>
+</tr>
+<tr>
+<td>Host 命中</td>
+<td>待测</td>
+<td style="text-align:right">待测</td>
+<td style="text-align:right">待测</td>
+<td>待测</td>
+<td style="text-align:right">待测</td>
+<td style="text-align:right">待测</td>
+<td style="text-align:right">待测</td>
+<td style="text-align:right">待测</td>
+</tr>
+<tr>
+<td>外部命中</td>
+<td>待测</td>
+<td style="text-align:right">待测</td>
+<td style="text-align:right">待测</td>
+<td>待测</td>
+<td style="text-align:right">待测</td>
+<td style="text-align:right">待测</td>
+<td style="text-align:right">待测</td>
+<td style="text-align:right">待测</td>
+</tr>
+<tr>
+<td>PD</td>
+<td>待测</td>
+<td style="text-align:right">待测</td>
+<td style="text-align:right">待测</td>
+<td>待测</td>
+<td style="text-align:right">待测</td>
+<td style="text-align:right">待测</td>
+<td style="text-align:right">待测</td>
+<td style="text-align:right">待测</td>
+</tr>
+</tbody>
+</table></div>
+<p>“待测”表示需要实际运行，不是缺失的示例成绩。</p>
+<h2 id="11-故障与反例实验">11. 故障与反例实验</h2>
+<p>只在隔离环境中进行：</p>
+<ul>
+<li>检查重复输入、部分前缀、修改中间 token 的命中差异。</li>
+<li>改变兼容命名空间，确认不会错误复用。</li>
+<li>在请求取消后观察资源是否回收。</li>
+<li>正常停止外部缓存服务，观察超时、错误与可用降级行为。</li>
+<li>提高压力，检查 GPU 命中是否转为 Host/外部，是否出现缓存抖动。</li>
+</ul>
+<p>不得假定所有后端都自动 fail-open。记录实际行为，并区分产品当前能力与自己提出的恢复设计。</p>
+<h2 id="12-最终报告">12. 最终报告</h2>
+<p>至少包括环境、workload、配置、结果、trace/缓存证据、正确性、结论与局限。完整模板见 <a href="../../../08-career/implementations/sglang/assessment.html">09</a>。</p>
+</article>
+<footer><a href="../../../_sources/07-practice/implementations/sglang/labs.md">原始参考笔记</a> · <a href="../../../index.html">返回总目录</a>
+<p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-实验边界与准备">1. 实验边界与准备</a><a class="level-3" href="#11-平台与版本">1.1 平台与版本</a><a class="level-3" href="#12-环境记录">1.2 环境记录</a><a class="level-3" href="#13-运行位置">1.3 运行位置</a><a class="level-2" href="#2-对照实验规则">2. 对照实验规则</a><a class="level-2" href="#3-实验一基线api-与前缀命中">3. 实验一：基线、API 与前缀命中</a><a class="level-3" href="#31-启动单-gpu-服务">3.1 启动单 GPU 服务</a><a class="level-3" href="#32-普通与流式-api">3.2 普通与流式 API</a><a class="level-3" href="#33-共享前缀探测">3.3 共享前缀探测</a><a class="level-3" href="#34-压力基准">3.4 压力基准</a><a class="level-2" href="#4-实验二调度与执行优化">4. 实验二：调度与执行优化</a><a class="level-2" href="#5-实验三hicache-gpu-与-host-命中">5. 实验三：HiCache GPU 与 Host 命中</a><a class="level-3" href="#51-启动">5.1 启动</a><a class="level-3" href="#52-步骤">5.2 步骤</a><a class="level-2" href="#6-实验四mooncake-store-外部复用">6. 实验四：Mooncake Store 外部复用</a><a class="level-3" href="#61-前置条件">6.1 前置条件</a><a class="level-3" href="#62-终端-1master">6.2 终端 1：Master</a><a class="level-3" href="#63-终端-2独立-store">6.3 终端 2：独立 Store</a><a class="level-3" href="#64-终端-3sglang">6.4 终端 3：SGLang</a><a class="level-3" href="#65-验证">6.5 验证</a><a class="level-2" href="#7-实验五lmcache-独立服务">7. 实验五：LMCache 独立服务</a><a class="level-3" href="#71-配置">7.1 配置</a><a class="level-3" href="#72-终端-1lmcache">7.2 终端 1：LMCache</a><a class="level-3" href="#73-终端-2sglang">7.3 终端 2：SGLang</a><a class="level-3" href="#74-验证">7.4 验证</a><a class="level-2" href="#8-实验六1p1d-功能与性能">8. 实验六：1P1D 功能与性能</a><a class="level-3" href="#81-前置条件">8.1 前置条件</a><a class="level-3" href="#82-终端-1prefill">8.2 终端 1：Prefill</a><a class="level-3" href="#83-终端-2decode">8.3 终端 2：Decode</a><a class="level-3" href="#84-终端-3router">8.4 终端 3：Router</a><a class="level-3" href="#85-对照与验收">8.5 对照与验收</a><a class="level-2" href="#9-实验七分析-trace-并写报告">9. 实验七：分析 trace 并写报告</a><a class="level-3" href="#91-采集">9.1 采集</a><a class="level-3" href="#92-分析顺序">9.2 分析顺序</a><a class="level-2" href="#10-结果表模板">10. 结果表模板</a><a class="level-2" href="#11-故障与反例实验">11. 故障与反例实验</a><a class="level-2" href="#12-最终报告">12. 最终报告</a></aside>
+<dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
+<button id="search-close" aria-label="关闭搜索">关闭</button></div>
+<input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">
+<p id="search-status" role="status">输入主题、术语或问题</p><ol id="search-results"></ol></dialog>
+</body></html>

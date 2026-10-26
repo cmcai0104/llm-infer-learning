@@ -109,8 +109,19 @@
 <article><h1 id="资料结构与覆盖范围审阅">资料结构与覆盖范围审阅</h1>
 <p><a href="../index.html">总目录</a> · <a href="expert-interview-guide.html">专家面试总纲</a> · <a href="../01-foundations/design-atlas.html">设计图册</a></p>
 <h2 id="1-审阅结论">1. 审阅结论</h2>
-<p><strong>按技术主题组织的结构合理，但上一版的可发现性和专家层总结不足。</strong> 八个入口提供了学习顺序，细节资料也已保留；然而设计图分散在框架目录和 RST 中，KV 存储的跨层链路没有一篇连续正文，面试入口也没有清楚区分常规基础与专家职责。</p>
-<p>本轮补充设计图册、静态图片、KV 存储详解、LMCache/Mooncake 联合实现和 P7–P8 能力总纲。覆盖目标是<strong>在线推理 Infra，重点 KV Cache 存储的学习、设计与面试准备</strong>；这不等于所有 LLM Infra 方向，也不等于已经完成生产或硬件验证。</p>
+<p><strong>结构：按技术主题组织是合理的，问题主要出在“入口好不好找、命名是否统一”。</strong>八个主题负责学习顺序，框架资料放在各主题的 <code>implementations/</code> 中做案例；专家面试、设计图、KV 存储详解、联合链路和互动演示作为快捷入口放在侧栏最上方。</p>
+<p><strong>本轮修正</strong>：</p>
+<ul>
+<li>统一全部页面标题与侧栏命名：主题页用“编号 + 问题”，实现页用“项目：主题”，去掉了 <code>internals</code>、<code>labs</code>、旧章节号等不统一的名字。</li>
+<li>侧栏按“概览 → 原理 → 实现”排序；四个项目的专项题库与 28 天计划单独归为“专项题库与计划”，避免和统一主线混在一起。</li>
+<li>设计图从 9 张补到 13 张，新增超时与租约、主节点切换、容量规划、升级与多租户四张失败与演进类设计图。</li>
+<li>新增 16 道深挖问答，每题给出考察点、回答要点、继续追问、常见失分和 P8 加分方向。</li>
+<li>新增<a href="../01-foundations/interactive.html">互动演示</a>：容量计算、加载与重算盈亏、前缀命中折叠、超时租约时间线和容量规划，用来快速建立“算账”直觉。</li>
+<li>删除旧 Markdown/RST、生成快照、构建脚本和重复图源，只保留 HTML、SVG、样式脚本和 CPU 实验脚本。</li>
+</ul>
+<p><strong>为什么只加少量交互</strong>：交互适合“改参数看结果”的定量问题和“点一下看状态变化”的判断问题；原理讲解、源码导读和面试回答仍以静态正文为主，便于阅读、打印和让 AI 直接修改。所有交互不依赖网络和第三方库。</p>
+<p><strong>知识点核查</strong>：已抽查全库带宽与容量算例（如 1 GiB / 400 Gbit/s ≈ 21.47 ms、200 Gb/s ≈ 23.28 GiB/s、TP 切分前提、串行与流水加载估算），以及 FlashAttention、PagedAttention、RadixAttention、MLA、TTFT/ITL/TPOT、RDMA 零拷贝等易错表述，未发现计算或概念错误。LMCache 与 Mooncake 的实现描述对照了资料中固定版本的源码；版本变化后需要重新核对。</p>
+<p>覆盖目标是<strong>在线推理 Infra，重点 KV Cache 存储的学习、设计与面试准备</strong>；这不等于覆盖所有 LLM Infra 方向，也不等于已经完成生产或硬件验证。</p>
 <h2 id="2-结构边界是否合理">2. 结构边界是否合理</h2>
 <div class="table-scroll"><table>
 <thead>

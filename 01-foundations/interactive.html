@@ -128,6 +128,7 @@
 <p>把“从远端搬回来”的关键路径和“重新算一遍 Prefill”的时间放在一起比。串行模式把网络和 H2D 相加；理想流水取两者较大值，是乐观下界。</p>
 <div class="lab" id="lab-breakeven">
 <div class="lab-inputs">
+<label>硬件预设（公开数据量级） <select data-preset><option value="">自定义</option><option value="200,24">200G 网卡 + PCIe Gen4</option><option value="400,24">400G 网卡 + PCIe Gen4</option><option value="400,48">400G 网卡 + PCIe Gen5</option><option value="800,48">2×400G 网卡 + PCIe Gen5</option></select></label>
 <label>每 token KV（KiB） <input type="number" data-k="kib" value="128" min="1"></label>
 <label>命中 token 数 <input type="number" data-k="tokens" value="8192" min="1"></label>
 <label>网络线速（Gbit/s） <input type="number" data-k="gbps" value="400" min="1"></label>
@@ -138,6 +139,7 @@
 </div>
 <div class="lab-output" aria-live="polite"></div>
 </div>
+<p>预设里的 H2D 取锁页内存的常见实测量级（Gen4 约 24 GiB/s，Gen5 约 48 GiB/s），来源与说明见<a href="../07-practice/measurement-and-drills.html#2-常见场景的公开参考数据">公开参考数据</a>。</p>
 <p><strong>动手试</strong>：把命中 token 降到 256，看固定开销怎样吃掉收益；把重算吞吐调到 80000（GPU 很强、模型很小），看远端缓存何时不再值得。</p>
 
 <h2 id="前缀命中折叠">3. 前缀命中折叠：查到很多，能用多少</h2>

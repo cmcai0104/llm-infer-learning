@@ -103,191 +103,89 @@
 <main id="content"><div class="breadcrumbs">06 Serving 与性能 · 专注 KV Cache 存储</div>
 <article><h1 id="page-title">LMCache：优化、可观测与生产设计</h1>
 <div class="note"><p><strong>白话导读</strong>：讲怎样衡量 LMCache 是否真的带来收益，以及上生产前要准备的指标、故障处理和隔离。</p><ul><li>先定义指标再谈收益：区分查到、加载成功、实际少算的 token，以及 TTFT 的变化。</li><li>实验按阶梯做：无缓存基线 → 引擎自带前缀缓存 → 加 LMCache 冷缓存 → 热缓存 → 更大工作集，一次只改一个变量。</li><li>每项优化都有代价，故障矩阵里要写清“出错时怎样不产生错误输出”。</li></ul><p>动手测量见<a href="../../../07-practice/measurement-and-drills.html">实测与故障演练</a>。</p></div>
-<section id="section-2">
-<h2 id="heading-先定义指标再谈收益">先定义指标再谈收益</h2>
+<h2 id="1-先把指标定义清楚">1. 先把指标定义清楚</h2>
+<p><strong>一句话</strong>：说“缓存有收益”之前，先说清楚用的是哪个指标、怎么算的。同一个“命中率”，不同算法能差好几倍。</p>
 <div class="table-scroll"><table>
-<colgroup>
-<col style="width: 22%" />
-<col style="width: 42%" />
-<col style="width: 36%" />
-</colgroup>
-<thead>
-<tr><th class="head"><p>指标</p></th>
-<th class="head"><p>定义/测量口径</p></th>
-<th class="head"><p>误用</p></th>
-</tr>
-</thead>
+<thead><tr><th>指标</th><th>怎么算</th><th>常见误用</th></tr></thead>
 <tbody>
-<tr><td><p>TTFT</p></td>
-<td><p>从指定起点到首个有效输出 token；注明是否包含网络与排队</p></td>
-<td><p>非流式 HTTP 总耗时当作 TTFT</p></td>
-</tr>
-<tr><td><p>ITL / TPOT</p></td>
-<td><p>token 间延迟；TPOT 是一段生成的平均每 token 时间</p></td>
-<td><p>平均值代替 p99 或掩盖暂停</p></td>
-</tr>
-<tr><td><p>Goodput</p></td>
-<td><p>满足 TTFT/ITL/成功率等 SLO 的有效请求或 token 每秒</p></td>
-<td><p>只统计总吞吐而忽略超时</p></td>
-</tr>
-<tr><td><p>请求命中率</p></td>
-<td><p>至少有可用命中的请求数/请求数，或全命中比例；必须注明定义</p></td>
-<td><p>把一次命中 1 chunk 算成整个请求全命中</p></td>
-</tr>
-<tr><td><p>Token 命中率</p></td>
-<td><p>可复用 token/参与查询的 token；明确 APC 与外部 cache 的分母</p></td>
-<td><p>合并重叠来源的计数导致重复计算</p></td>
-</tr>
-<tr><td><p>实际读取带宽</p></td>
-<td><p>完成传输的 payload bytes/指定时间窗口</p></td>
-<td><p>使用提交字节数、压缩前逻辑大小冒充物理流量</p></td>
-</tr>
-<tr><td><p>缓存成本</p></td>
-<td><p>DRAM/SSD/网络/存储请求费用及省下的 GPU 计算</p></td>
-<td><p>只看命中不计写入与副本流量</p></td>
-</tr>
-</tbody>
-</table></div>
-<p>平均命中率不能说明尾延迟。建议分开报告 cold、L1 hit、L2 hit、partial hit、
-lookup timeout、load failure/recompute；按 prompt 长度、租户与并发分桶。
-监控生产请求时应避免把原文、token 内容或无限 request id 放进指标标签。</p>
-</section>
-<section id="section-3">
-<h2 id="heading-正确的性能实验阶梯">正确的性能实验阶梯</h2>
-<ol class="arabic simple">
-<li><p>无 LMCache 的引擎基线：固定模型、dtype、batch、并发、输入/输出分布。</p></li>
-<li><p>引擎 APC：确认本地前缀复用能带来什么。</p></li>
-<li><p>APC + LMCache 冷缓存：测 store 与集成开销，不能称为“零收益所以失败”。</p></li>
-<li><p>APC + LMCache 热缓存：区分 GPU 命中与真正从 LMCache 读取。</p></li>
-<li><p>新引擎进程连接仍存活的 LMCache：排除旧 GPU APC 的主要干扰。</p></li>
-<li><p>更大工作集/更高并发：测试超过 GPU 或 L1 容量后的实际价值。</p></li>
-<li><p>独立测试失败、取消、抢占和重启；不能只验证 happy path。</p></li>
+<tr><td>TTFT</td><td>从约定的起点到第一个有效输出 token；要写明是否包含网络和排队</td><td>把非流式 HTTP 的总耗时当成 TTFT</td></tr>
+<tr><td>ITL / TPOT</td><td>ITL 是相邻两个 token 的间隔；TPOT 是一段生成的平均每 token 时间</td><td>只报平均值，掩盖了 P99 和中途卡顿</td></tr>
+<tr><td>Goodput</td><td>每秒满足 TTFT、ITL、成功率等目标的请求数或 token 数</td><td>只看总吞吐，不管有多少请求超时</td></tr>
+<tr><td>请求命中率</td><td>至少命中一部分的请求占比，或完全命中的请求占比；必须写明是哪种</td><td>请求只命中了 1 个 chunk 也算成“命中”</td></tr>
+<tr><td>Token 命中率</td><td>能复用的 token ÷ 参与查找的 token；APC 和外部缓存的分母要分清</td><td>把 APC 和外部缓存的命中加在一起，重复计数</td></tr>
+<tr><td>实际读取带宽</td><td>指定时间窗口内真正传输完成的数据字节</td><td>用“提交的字节数”或压缩前的逻辑大小冒充实际流量</td></tr>
+<tr><td>缓存成本</td><td>内存、SSD、网络、存储请求费用，减去省下的 GPU 计算</td><td>只看命中，不算写入和副本带来的流量</td></tr>
+</tbody></table></div>
+<p>平均命中率说明不了尾延迟。建议把请求按结果分开统计：冷启动、L1 命中、L2 命中、部分命中、查找超时、加载失败后重算；再按 prompt 长度、租户和并发度分组。生产监控里不要把原文、token 内容或不断增长的 request id 放进指标标签。</p>
+
+<h2 id="2-实验按阶梯一步一步做">2. 实验按阶梯一步一步做</h2>
+<p>每一步只多加一样东西，这样才知道收益（或损失）来自哪里：</p>
+<ol>
+<li><strong>不开 LMCache 的引擎基线</strong>：固定模型、dtype、batch、并发、输入输出长度分布。</li>
+<li><strong>只开引擎自带的前缀缓存（APC）</strong>：看本地复用能带来多少。</li>
+<li><strong>APC + LMCache，冷缓存</strong>：测保存和集成本身的开销。这一步没收益是正常的，不能说“没效果所以失败”。</li>
+<li><strong>APC + LMCache，热缓存</strong>：区分哪些命中来自 GPU 上的 APC，哪些真正是从 LMCache 读回来的。</li>
+<li><strong>重启引擎，连接仍在运行的 LMCache</strong>：GPU 上的 APC 清空了，能更干净地看出 LMCache 的作用。</li>
+<li><strong>更大的工作集或更高的并发</strong>：超过 GPU 或 L1 容量之后，缓存还有多大价值。</li>
+<li><strong>单独测失败、取消、抢占和重启</strong>：不能只验证一切顺利的情况。</li>
 </ol>
-<p>每组先预热，再重复多轮，保留原始输出、版本、启动配置和指标快照。
-请求数要能支撑所报分位数；几十个请求不足以可靠说明生产 p99。
-混合模型要增加 group/layout 支持和输出一致性验证，不能只迁移普通模型结论。</p>
-</section>
-<section id="section-4">
-<h2 id="heading-吞吐瓶颈如何拆">吞吐瓶颈如何拆</h2>
-<p>记录查询、后端读取、CPU buffer 等待、网络、H2D、剩余 prefill、首 token
-和后续 decode 的时间。存在 overlap 时用 trace 的关键路径解释端到端延迟，
-不要将多个重叠 span 直接求和。</p>
-<pre class="code text literal-block"><code>端到端慢
-  ├─ lookup 慢：RPC 排队 / 元数据压力 / 过多小对象 / 查询轮询
-  ├─ load 慢：后端 I/O / 网络拥塞 / 热点 / CPU copy / 注册
-  ├─ H2D 慢：NUMA / PCIe / layout 转换 / chunk 太碎 / 设备同步
-  ├─ hit 不可用：前缀断裂 / group 缺失 / rank 不齐 / APC 已覆盖
-  └─ decode 慢：copy 和计算争带宽 / 过大 batch / 抢占</code></pre>
-<p>Little 定律 <span class="docutils literal">在途量 ≈ 吞吐 × 平均停留时间</span> 可以估算 buffer 预算。
-例如 20 GiB/s 的持续输入、0.1 s 的平均 staging 停留，平均需要约 2 GiB staging；
-还必须给尾延迟、突发、lookup 未分配预算和双缓冲留余量。
-该近似不允许把无限排队当作带宽扩容。</p>
-</section>
-<section id="section-5">
-<h2 id="heading-主要优化项及代价">主要优化项及代价</h2>
-<p><strong>Chunk 大小</strong>：大 chunk 摊薄 hash、RPC 与元数据开销，提高顺序带宽，
-但尾部不可复用、部分命中和过取增加；小 chunk 更灵活，却可能被提交开销限制。
-本基线常用默认 256 tokens，但应遵守 block/group 协商并按 workload 验证。</p>
-<p><strong>Batch 与流水</strong>：合并 lookup、批量传输和流水可以提高利用率；
-过大的 batch 延迟首个可消费结果，并放大失败/取消时占用。
-流水稳态接近各阶段最大耗时，而不是各阶段之和，但会有启动、收尾和资源争用。</p>
-<p><strong>Layerwise</strong>：加载下一层与当前层计算重叠，减少关键路径上暴露的传输时间。
-要有正确的 per-layer 数据依赖、layout 与支持的模型路径；
-不是把 <span class="docutils literal">async</span> 加在函数名上就自然 overlap。</p>
-<p><strong>压缩/量化</strong>：减少字节数但增加编码/解码时间、scale 元数据和可能的质量损失。
-在带宽受限路径上有潜力，在 PCIe/GPU 已空闲而编码昂贵时可能变慢。
-比较完整的 <span class="docutils literal">encode + transfer + decode</span> 与原始路径，并报告任务质量。
-CacheGen、普通 KV dtype 量化与任意 serde 插件不是同一个算法。
-见 <a class="reference external" href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/mp/cachegen.rst">CacheGen</a>、
-<a class="reference external" href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/mp/serde.rst">序列化</a>。</p>
-<p><strong>CacheBlend</strong>：复用非前缀片段并选择性重算以恢复跨片段依赖。
-必须评价真实 RAG/多文档任务的质量和时延，不能宣称任意拼接与完整 prefill
-逐位等价。MP 与进程内启用方式不同，见 <a class="reference external" href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/kv_cache_optimizations/cacheblend.rst">CacheBlend</a>。</p>
-<p><strong>Lazy offload</strong>：减少对未来未必重用数据的立即写出，但需与引擎淘汰及抢占生命周期协同；
-不能等 page 已复用再去读取旧 KV。见 <a class="reference external" href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/mp/lazy_offload.rst">Lazy offload</a>。</p>
-<p><strong>缓存感知路由</strong>：可用候选代价估计
-<span class="docutils literal">排队 + 缺失前缀重算 + 加载/传输</span>，而不是永远选 hit 最长的实例。
-这是设计建议；目录陈旧时需要实际 lookup 验证，并控制热点和租户公平性。</p>
-</section>
-<section id="section-6">
-<h2 id="heading-故障矩阵">故障矩阵</h2>
+<p>每组都先预热，再重复多轮，保存原始输出、版本、启动配置和指标快照。请求数要足够支撑你报告的分位数——几十个请求说明不了生产环境的 P99。混合模型还要额外验证组和布局的支持以及输出是否一致，不能直接沿用普通模型的结论。实测步骤和记录模板见<a href="../../../07-practice/measurement-and-drills.html">实测与故障演练</a>。</p>
+
+<h2 id="3-慢在哪里怎样拆">3. 慢在哪里，怎样拆</h2>
+<p>分别记录查找、后端读取、CPU buffer 等待、网络、H2D、剩余 Prefill、首 token 和后续 Decode 的时间。如果各阶段有重叠，要用 trace 里的关键路径来解释端到端时间，不能把重叠的时间段直接相加。</p>
+<pre><code class="language-text">端到端慢
+  ├─ 查找慢：RPC 排队 / 元数据压力 / 小对象太多 / 轮询查询
+  ├─ 加载慢：后端 I/O / 网络拥塞 / 热点 / CPU 拷贝 / 内存注册
+  ├─ H2D 慢：NUMA / PCIe / 布局转换 / chunk 太碎 / 设备同步
+  ├─ 命中用不上：前缀断了 / 某个组缺失 / rank 不齐 / APC 已经覆盖
+  └─ Decode 慢：拷贝和计算抢带宽 / batch 过大 / 抢占</code></pre>
+<p><strong>估算 buffer 要多大</strong>：用 Little 定律，<code>在途数据量 ≈ 吞吐 × 平均停留时间</code>。例如持续 20 GiB/s 的输入，每份数据平均在 staging 里停 0.1 秒，平均就需要约 2 GiB staging。再给尾延迟、突发、已查找未分配的请求和双缓冲留余量。注意：无限排队不等于带宽变大。</p>
+
+<h2 id="4-常见优化和它们的代价">4. 常见优化和它们的代价</h2>
 <div class="table-scroll"><table>
-<colgroup>
-<col style="width: 22%" />
-<col style="width: 35%" />
-<col style="width: 43%" />
-</colgroup>
-<thead>
-<tr><th class="head"><p>现象</p></th>
-<th class="head"><p>检测</p></th>
-<th class="head"><p>正确处理原则</p></th>
-</tr>
-</thead>
+<thead><tr><th>优化</th><th>好处</th><th>代价或前提</th></tr></thead>
 <tbody>
-<tr><td><p>lookup 超时</p></td>
-<td><p>per-RPC deadline、server health、队列长度</p></td>
-<td><p>终结本次计划或安全降级；迟到回复不能覆写结果；释放未用锁</p></td>
-</tr>
-<tr><td><p>L2 部分读失败</p></td>
-<td><p>完成 bitmap、bytes、adapter 错误</p></td>
-<td><p>只计成功且语义完整的前缀；不要使用未完成 buffer</p></td>
-</tr>
-<tr><td><p>请求取消</p></td>
-<td><p>request/session 状态与在途操作</p></td>
-<td><p>停止新工作，等待或隔离已提交 DMA，再释放引用</p></td>
-</tr>
-<tr><td><p>L1 空间不足</p></td>
-<td><p>resident/staging/lookup 预算、eviction eligible bytes</p></td>
-<td><p>背压、减少预取或准入；不要强制回收正在读的数据</p></td>
-</tr>
-<tr><td><p>存储节点退出</p></td>
-<td><p>membership、读错误、副本状态</p></td>
-<td><p>选择有效副本或重算；限制重算风暴与重新复制流量</p></td>
-</tr>
-<tr><td><p>引擎抢占</p></td>
-<td><p>preemption 事件、page 生命周期</p></td>
-<td><p>避免旧 store 读到新请求页面；恢复 token 进度与 KV 必须一致</p></td>
-</tr>
-<tr><td><p>模型/布局变更</p></td>
-<td><p>namespace、版本和 layout 检查</p></td>
-<td><p>隔离或拒绝不兼容对象，不能把 shape 相同视为语义相同</p></td>
-</tr>
-<tr><td><p>读完但质量异常</p></td>
-<td><p>对照输出、校验和、token/key/layout/rank 记录</p></td>
-<td><p>从身份和生命周期排查；校验和无法发现“正确 bytes 对错请求”</p></td>
-</tr>
-</tbody>
-</table></div>
-<p>“回退到重算”需要 connector 与 scheduler 共同支持，并且未使用坏数据；
-不能任意捕获异常后继续 forward。某些部署要求立即报错而非回退，
-例如严格 P/D 的传输失败策略。缓存 miss、load failure、deadline exceeded
-在指标中仍应可区分，哪怕某一接口层最终把它们都折叠成零命中。</p>
-</section>
-<section id="section-7">
-<h2 id="heading-安全隔离与生产就绪">安全、隔离与生产就绪</h2>
-<p>KV 可能携带敏感上下文信息。至少设计模型/租户命名空间、服务身份认证、
-网络访问控制、加密需求、数据保留与删除、审计，以及避免跨租户命中侧信道。
-<span class="docutils literal">cache_salt</span> 能隔离 key，但如果任意用户可冒充另一人的 salt，它不是访问控制。</p>
-<p>内存预算要包括：
-<span class="docutils literal">resident + staging + 在途传输 buffer + allocator/注册开销 + 运行时 + 余量</span>。
-磁盘预算要包括副本、临时文件与写放大；用文件后端测试时注明 OS page cache 状态。</p>
-<p>生产前最小检查：</p>
-<ul class="simple">
-<li><p>用固定版本验证 runtime/ABI、connector 加载来源、model/layout/group 支持。</p></li>
-<li><p>区分 request RPC、HTTP 管理、Mooncake Master 与 metadata 的端口和网络边界。</p></li>
-<li><p>限制预取、写回、连接、线程和租户资源，保证 read/lookup 不被大写入饿死。</p></li>
-<li><p>验证 graceful drain：停止接新任务，完成/取消在途操作，解锁后释放内存。</p></li>
-<li><p>明确缓存丢失后的恢复负载和 SLO，不只测试进程能重新启动。</p></li>
-<li><p>建立 TTFT/ITL、实际 token 命中、staging、带宽、失败和锁/会话泄漏的观测面。</p></li>
+<tr><td>chunk 大小</td><td>大 chunk 摊薄 hash、RPC 和元数据开销，顺序带宽更高</td><td>尾部不能复用的部分变多，部分命中和多取的浪费变大；小 chunk 灵活但容易被提交开销拖慢。学习版本常用 256 token，但要服从 block/组的协商，并按负载验证</td></tr>
+<tr><td>批量与流水</td><td>合并查找、批量传输、流水线能提高利用率</td><td>batch 太大会推迟第一个能用的结果，失败或取消时占用的资源也更多。流水稳定后接近最慢一段的时间，但有启动、收尾和资源竞争</td></tr>
+<tr><td>逐层加载（Layerwise）</td><td>加载下一层的同时计算当前层，减少关键路径上的传输时间</td><td>需要正确的逐层依赖、布局和模型支持；不是给函数加个 async 就能自动重叠</td></tr>
+<tr><td>压缩 / 量化</td><td>减少字节数，在带宽受限时有潜力</td><td>增加编解码时间、缩放元数据和可能的质量损失；PCIe/GPU 空闲而编码很贵时反而变慢。要比较完整的“编码 + 传输 + 解码”和原路径，并报告任务质量。CacheGen、普通 KV 量化和任意序列化插件是不同的东西，见 <a href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/mp/cachegen.rst">CacheGen</a>、<a href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/mp/serde.rst">序列化</a></td></tr>
+<tr><td>CacheBlend</td><td>复用不在前缀位置的片段，选择性重算一部分来恢复片段之间的依赖</td><td>必须在真实的 RAG/多文档任务上评估质量和时延，不能说和完整 Prefill 逐位相同。MP 和进程内的开启方式不同，见 <a href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/kv_cache_optimizations/cacheblend.rst">CacheBlend</a></td></tr>
+<tr><td>延迟卸载（Lazy offload）</td><td>不急着把将来未必用到的数据写出去</td><td>要和引擎的淘汰、抢占配合；不能等 page 被别人复用了才去读旧 KV。见 <a href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/mp/lazy_offload.rst">Lazy offload</a></td></tr>
+<tr><td>缓存感知路由</td><td>请求发到能复用最多的实例</td><td>应估算“排队 + 缺失部分的重算 + 加载传输”的总代价，而不是永远选命中最长的实例。这是设计建议；目录可能过时，要实际查找验证，并控制热点和租户公平</td></tr>
+</tbody></table></div>
+
+<h2 id="5-故障怎么处理">5. 故障怎么处理</h2>
+<div class="table-scroll"><table>
+<thead><tr><th>现象</th><th>怎么发现</th><th>正确的处理</th></tr></thead>
+<tbody>
+<tr><td>查找超时</td><td>每个 RPC 的截止时间、server 健康状态、队列长度</td><td>结束本次计划或安全降级；迟到的回复不能改结果；释放没用上的锁</td></tr>
+<tr><td>L2 部分读取失败</td><td>完成 bitmap、字节数、adapter 报错</td><td>只算成功且语义完整的前缀；没完成的 buffer 不能用</td></tr>
+<tr><td>请求取消</td><td>请求/会话状态和在途操作</td><td>停止新工作；已提交的 DMA 要等它结束或隔离起来，再释放引用</td></tr>
+<tr><td>L1 空间不足</td><td>resident、staging、查找预算、可淘汰字节数</td><td>背压、减少预取或准入；不能强行回收正在被读的数据</td></tr>
+<tr><td>存储节点退出</td><td>成员变化、读取报错、副本状态</td><td>改读有效副本或重算；限制重算风暴和重新复制的流量</td></tr>
+<tr><td>引擎抢占</td><td>抢占事件、page 生命周期</td><td>避免旧的保存任务读到新请求的 page；恢复时 token 进度和 KV 必须对得上</td></tr>
+<tr><td>模型或布局变更</td><td>命名空间、版本和布局检查</td><td>隔离或拒绝不兼容的对象；形状相同不代表语义相同</td></tr>
+<tr><td>读完了但输出质量异常</td><td>对照输出、校验和、token/key/布局/rank 记录</td><td>从身份和生命周期查起；校验和发现不了“字节是对的，但给错了请求”</td></tr>
+</tbody></table></div>
+<p>“失败就回退到重算”需要 Connector 和调度器一起支持，并且确保没有用到坏数据，不能随便捕获异常后继续算。有些部署要求出错立即报错而不是回退，例如严格的 PD 交接失败策略。缓存未命中、加载失败、超时在指标里应该能区分开，即使某层接口最后都把它们当作“0 命中”处理。各类故障的演练方法见<a href="../../../07-practice/measurement-and-drills.html#4-故障演练">故障演练</a>。</p>
+
+<h2 id="6-上生产前的检查">6. 上生产前的检查</h2>
+<p><strong>安全与隔离</strong>：KV 里可能带有敏感的上下文信息。至少要设计模型和租户命名空间、服务身份认证、网络访问控制、加密要求、数据保留与删除、审计，以及防止跨租户命中带来的侧信道。<code>cache_salt</code> 能隔离 key，但如果谁都能冒用别人的 salt，它就不是访问控制。</p>
+<p><strong>资源预算</strong>：内存要算 <code>resident + staging + 在途传输 buffer + 分配器和注册开销 + 运行时 + 余量</code>；磁盘要算副本、临时文件和写放大。用文件后端测试时，注明操作系统 page cache 的状态。</p>
+<p><strong>最低检查清单</strong>：</p>
+<ul>
+<li>用固定版本验证运行时和二进制兼容、Connector 实际从哪里加载、模型/布局/组是否支持。</li>
+<li>分清请求 RPC、HTTP 管理、Mooncake Master 和元数据服务的端口与网络边界。</li>
+<li>限制预取、写回、连接数、线程和每个租户的资源，保证读取和查找不会被大量写入饿死。</li>
+<li>验证优雅下线：停止接新任务 → 完成或取消在途操作 → 解锁 → 释放内存。</li>
+<li>明确缓存丢失后的恢复负载和 SLO，不只是测试“进程能重新启动”。</li>
+<li>建立观测：TTFT/ITL、实际 token 命中、staging 占用、带宽、失败次数，以及锁和会话是否泄漏。</li>
 </ul>
-<p>观测入口见 <a class="reference external" href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/mp/observability/index.rst">Observability</a>、
-<a class="reference external" href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/mp/http_api.rst">HTTP API</a>。
-HTTP 200 本身不一定代表所有后端健康，应阅读具体 endpoint 的响应语义。</p>
-</section>
+<p>观测入口见 <a href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/mp/observability/index.rst">Observability</a>、<a href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/mp/http_api.rst">HTTP API</a>。HTTP 返回 200 不一定代表所有后端都健康，要看具体接口返回的内容。</p>
 </article>
 <footer><a href="../../../index.html">返回总目录</a>
 <p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
-<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#heading-先定义指标再谈收益">先定义指标再谈收益</a><a class="level-2" href="#heading-正确的性能实验阶梯">正确的性能实验阶梯</a><a class="level-2" href="#heading-吞吐瓶颈如何拆">吞吐瓶颈如何拆</a><a class="level-2" href="#heading-主要优化项及代价">主要优化项及代价</a><a class="level-2" href="#heading-故障矩阵">故障矩阵</a><a class="level-2" href="#heading-安全隔离与生产就绪">安全、隔离与生产就绪</a></aside>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-先把指标定义清楚">1. 先把指标定义清楚</a><a class="level-2" href="#2-实验按阶梯一步一步做">2. 实验按阶梯一步一步做</a><a class="level-2" href="#3-慢在哪里怎样拆">3. 慢在哪里，怎样拆</a><a class="level-2" href="#4-常见优化和它们的代价">4. 常见优化和它们的代价</a><a class="level-2" href="#5-故障怎么处理">5. 故障怎么处理</a><a class="level-2" href="#6-上生产前的检查">6. 上生产前的检查</a></aside>
 <dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
 <button id="search-close" aria-label="关闭搜索">关闭</button></div>
 <input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">

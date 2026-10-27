@@ -103,405 +103,270 @@
 <main id="content"><div class="breadcrumbs">08 专家能力与面试 · 专注 KV Cache 存储</div>
 <article><h1 id="page-title">LMCache 专项：60 道面试题与参考回答</h1>
 <div class="note"><p><strong>白话导读</strong>：LMCache 方向的 60 道题与参考回答，覆盖容量、架构、存储、性能与系统设计。</p><ul><li>每题先给结论，再讲机制、边界和怎样验证。</li><li>与<a href="../../expert-qa.html">专家深挖问答</a>重叠的题，以深挖问答为主答案，这里用来补细节。</li><li>涉及实现的回答以资料中的源码版本为准。</li></ul><p>建议按薄弱点挑题，不必从头刷到尾。</p></div>
-<p>下面覆盖这类岗位常见的考察主题，不是某家公司的真实题库或频率统计。
-回答先给结论，再给机制、边界和验证方法；涉及实现时以本指南的源码基线为准。
-“正确回答”不意味着只有一种架构选择，而是推理自洽、假设明确、不会牺牲正确性。</p>
-<section id="q1q12">
-<h2 id="heading-基础与容量q1q12">基础与容量（Q1–Q12）</h2>
-<section id="q1-kv-cache-q">
-<h3 id="heading-q1为什么需要-kv-cache为什么不缓存历史-q">Q1：为什么需要 KV Cache，为什么不缓存历史 Q？</h3>
-<p>普通自回归 attention 的新 query 会读取历史 K/V，所以缓存它们可避免重算历史前向。
-历史 Q 通常不再用于后续 token 的 attention，缓存它不能获得相同收益。
-KV 仍需从 HBM 读取，因此缓存不是消除 attention 计算或历史访存。
-追问时写出 attention 方程，而不是只回答“加速推理”。</p>
-</section>
-<section id="q2-prefill-decode">
-<h3 id="heading-q2prefill-与-decode-的瓶颈有什么不同">Q2：Prefill 与 Decode 的瓶颈有什么不同？</h3>
-<p>Prefill 并行处理许多输入位置，常有较高计算强度；Decode 每步的新 token 少，
-常受权重/KV 带宽与 batch 效率影响。长上下文 attention、MoE、量化和不同 batch
-会改变瓶颈，所以应看 profiler 与 roofline，而不是绝对声称前者只算力、后者只带宽。</p>
-</section>
-<section id="q3-kv-cache">
-<h3 id="heading-q3如何计算-kv-cache-大小">Q3：如何计算 KV Cache 大小？</h3>
-<p>普通同构 attention 用 <span class="docutils literal">2 × layers × tokens × KV_heads × head_dim × dtype_bytes</span>。
-例如 32 层、8 KV heads、128 维、BF16：128 KiB/token，8K 是 1 GiB。
-这不包含 allocator 对齐、scale、buffer、副本和元数据；多序列按实际有效长度求和。
-回答时同时注明 GB 与 GiB。</p>
-</section>
-<section id="q4-gqa-mqa-kv">
-<h3 id="heading-q4gqamqa-为什么能节省-kv">Q4：GQA/MQA 为什么能节省 KV？</h3>
-<p>多个 query heads 共用较少的 K/V heads，缓存按 KV heads 而非 query heads 计量。
-MQA 通常只有一个 KV head，GQA 介于 MHA 与 MQA 之间。
-这是模型结构设计，不是存储层把几个不同 head 的 KV 随意合并。</p>
-</section>
-<section id="q5-tp-8-kv">
-<h3 id="heading-q5tp8-时每张卡的-kv-一定是总量的八分之一吗">Q5：TP=8 时每张卡的 KV 一定是总量的八分之一吗？</h3>
-<p>只有 KV 头/状态均匀分片且没有复制时才成立。KV heads 少于 TP、MLA 的 latent
-表示或某些引擎布局可能复制 KV；PP 又改变每 rank 持有的层。
-应从实际 tensor/group layout 和 rank 语义求和，不能只看 TP 参数。</p>
-</section>
-<section id="q6-mla">
-<h3 id="heading-q6mla-和滑窗模型怎么估算">Q6：MLA 和滑窗模型怎么估算？</h3>
-<p>MLA 应按引擎实际保存的压缩 latent、位置分量等计算；
-滑窗层按实际窗口存储策略计算，full-attention 层仍可能线性增长。
-混合模型还可能有递归状态快照，按 group 分别计量。
-MLA 是 Multi-head Latent Attention，不应称作普通的多层 attention。</p>
-</section>
-<section id="q7-pagedattention">
-<h3 id="heading-q7pagedattention-解决了什么不解决什么">Q7：PagedAttention 解决了什么，不解决什么？</h3>
-<p>它通过逻辑块到物理页的映射减少为每条序列预留连续最大空间的浪费，
-支持灵活分配和共享。但不自动提供跨进程远端存储，不让 KV 总量消失，
-也不保证每个块都无内部碎片。分页管理、前缀复用和外部 offload 是不同能力。</p>
-</section>
-<section id="q8-apc-lmcache">
-<h3 id="heading-q8apc-与-lmcache-有什么关系">Q8：APC 与 LMCache 有什么关系？</h3>
-<p>APC 复用引擎内已有 GPU 前缀块；LMCache 可扩展到主机内存、外部后端和独立服务。
-两者可协作，但 GPU 已全命中的请求未必从 LMCache 读取。
-实验须分别统计本地和外部命中，可用新引擎连接仍存活 server 的方式验证外部复用。</p>
-</section>
-<section id="q9-kv">
-<h3 id="heading-q9相同文本一定有相同-kv-吗">Q9：相同文本一定有相同 KV 吗？</h3>
-<p>不一定。模型权重、tokenizer、模板、前文、位置/RoPE、mask、LoRA 和多模态输入
-都可能改变 KV。token IDs 相同也不足以绕过模型/位置和 layout 检查。
-需要计算语义等价及物理解释兼容；“字符串相等”不是充分条件。</p>
-</section>
-<section id="q10-key">
-<h3 id="heading-q10为什么-key-要包含前缀链">Q10：为什么 key 要包含前缀链？</h3>
-<p>同一文本块处在不同历史后面时，其 hidden state 与深层 KV 会不同。
-把前一块 hash 纳入当前 hash，可以让历史变化传播到后续身份。
-还需稳定编码、模型/租户 namespace 等；hash 抗碰撞不能替代正确的输入定义。</p>
-</section>
-<section id="q11-temperature-prompt-kv">
-<h3 id="heading-q11temperature-会让-prompt-kv-失效吗">Q11：temperature 会让 prompt KV 失效吗？</h3>
-<p>通常不会，采样参数作用于 logits 之后，固定 prompt 的前向 KV 不变。
-但采样导致的生成 token 不同会使后续上下文和 KV 不同。
-如果其他配置实际改变了前向计算，要按具体实现判断，而不是把所有请求参数都盲目哈希。</p>
-</section>
-<section id="q12-prompt">
-<h3 id="heading-q12命中整个-prompt-是否完全不需要模型计算">Q12：命中整个 prompt 是否完全不需要模型计算？</h3>
-<p>不能笼统保证。某些引擎仍需重算末位 token 获得首个输出所需 logits，
-并且存在完整 chunk、block 与调度接口的限制。
-prefill 被大幅减少不等于 decode 消失，仍需为输出 token 执行模型。</p>
-</section>
-</section>
-<section id="lmcache-q13q25">
-<h2 id="heading-lmcache-架构与正确性q13q25">LMCache 架构与正确性（Q13–Q25）</h2>
-<section id="q13-lmcache">
-<h3 id="heading-q13用一分钟介绍-lmcache">Q13：用一分钟介绍 LMCache。</h3>
-<p>它是推理引擎与多级 KV 存储之间的管理/集成层，让本来短暂的 KV 可被后续请求复用。
-Connector 连接调度与 GPU KV，存储管理器负责对象和层级，
-adapter 对接文件、对象存储、Mooncake 等后端。
-本基线推荐独立 MP 服务；它不是另一个完整的模型执行引擎。</p>
-</section>
-<section id="q14-mp">
-<h3 id="heading-q14mp-模式相对进程内模式的取舍是什么">Q14：MP 模式相对进程内模式的取舍是什么？</h3>
-<p>独立服务允许跨引擎共享与独立生命周期，隔离缓存服务的 CPU 工作和故障边界。
-代价是 RPC、设备 IPC/共享内存、服务部署和更复杂的异步生命周期。
-不是完全消除引擎侧开销，也不是只要 server 活着缓存就永不丢失。</p>
-</section>
-<section id="q15-scheduler-worker">
-<h3 id="heading-q15scheduler-与-worker-各做什么">Q15：Scheduler 与 Worker 各做什么？</h3>
-<p>Scheduler 决定可跳过多少计算、何时分配 block 与调度请求；
-Worker 处理实际 GPU buffer 的加载/存储及数据就绪依赖。
-Connector 把两侧元数据连接起来。查询到 key 不等于数据已落在 worker 的目标 page。</p>
-</section>
-<section id="q16-lookupprefetchretrieve">
-<h3 id="heading-q16lookupprefetchretrieve-有何不同">Q16：lookup、prefetch、retrieve 有何不同？</h3>
-<p>lookup 判断候选对象并可触发预取；prefetch 把 L2 对象加载到可供消费的 L1，
-并管理锁和 staging；retrieve 将已有可用对象搬进引擎 GPU KV。
-LOOKUP ack、预取结果就绪、GPU 可读是三个独立时刻。</p>
-</section>
-<section id="q17-lookup-ack">
-<h3 id="heading-q17为什么先等-lookup-ack-再查询预取状态">Q17：为什么先等 LOOKUP ack 再查询预取状态？</h3>
-<p>请求处理池可能重排两条 RPC；查询先到会看到尚未登记的任务，导致错误 miss。
-只需等目标 server 自己的 ack，不必为所有 server 设置无关的全局 barrier。
-当前 LookupState 用 callback 推进，同时限制 pending 时重查频率。</p>
-</section>
-<section id="q18-none">
-<h3 id="heading-q18-none-与零命中为什么不能混用">Q18：<span class="docutils literal">None</span> 与零命中为什么不能混用？</h3>
-<p>在相关异步查询接口中，<span class="docutils literal">None</span> 表示 pending，0 或空 bitmap 表示完成且没有命中。
-把 pending 当 miss 会过早重算，把 miss 当 pending 会一直等待。
-还应读清结果是否只消费一次，不能假设任意重复 query 幂等。</p>
-</section>
-<section id="q19-objectkey">
-<h3 id="heading-q19objectkey-编码了哪些东西还缺什么">Q19：ObjectKey 编码了哪些东西？还缺什么？</h3>
-<p>本基线有 chunk_hash、model_name、kv_rank、object_group_id 和 cache_salt。
-它们区分内容、模型命名、分片、group 与隔离域。
-字段本身不保证模型 revision、LoRA、dtype 等全部被正确覆盖，
-还要检查调用方 namespace、hash 输入和 layout 协商。</p>
-</section>
-<section id="q20-block-chunk">
-<h3 id="heading-q20block-与-chunk-为什么不能混为一谈">Q20：block 与 chunk 为什么不能混为一谈？</h3>
-<p>block 是引擎 GPU 分配/调度单位，chunk 是缓存分块与对象管理单位。
-一个 chunk 可涵盖多个 block，也可能拆成多个 group/rank 对象。
-尺寸要满足兼容与对齐；本基线 MP 可协商最终 chunk size，不应只相信启动请求值。</p>
-</section>
-<section id="q21-staging">
-<h3 id="heading-q21为什么要有-staging而不是分配地址后立即可读">Q21：为什么要有 staging，而不是分配地址后立即可读？</h3>
-<p>地址可用不代表内容已完成。staging 把在写数据与已发布 resident 分开，
-只有 fill/copy 完成后才 admission，避免读半成品。
-不同 writer tag 可并发准备同 key，第一个发布者胜出，后来 staging 可安全丢弃。</p>
-</section>
-<section id="q22">
-<h3 id="heading-q22缓存是不可变对象为什么还需要锁">Q22：缓存是不可变对象，为什么还需要锁？</h3>
-<p>不可变只解决内容修改，不解决对象在读取期间被淘汰、内存回收或地址复用。
-读保留/租约保持数据生命周期；写保留保护发布前状态。
-锁和引用应覆盖真正的数据操作，不只是 Python 调用或 RPC 提交。</p>
-</section>
-<section id="q23-gpu-bug">
-<h3 id="heading-q23gpu-异步传输最危险的-bug-是什么">Q23：GPU 异步传输最危险的 bug 是什么？</h3>
-<p>传输还没结束就释放/复用 source 或 destination，或消费流没等生产者事件。
-表现可能是偶发错误答案而非崩溃。正确链路是计算完成→传输等待→copy 完成→
-发布/消费→释放，不能把 future done 无条件当作 DMA 完成。</p>
-</section>
-<section id="q24-tp-rank">
-<h3 id="heading-q24两个-tp-rank-命中长度不同怎么办">Q24：两个 TP rank 命中长度不同怎么办？</h3>
-<p>必须满足实际 forward 所需所有分片的共同有效范围。
-普通前缀场景通常取共同最短前缀，并释放不会使用的尾部保留。
-混合 group、滑窗和复制 KV 需要按其契约处理，不能把单 rank 最长结果广播给所有人。</p>
-</section>
-<section id="q25">
-<h3 id="heading-q25抢占恢复为什么会产生缓存正确性问题">Q25：抢占恢复为什么会产生缓存正确性问题？</h3>
-<p>GPU page 可能在旧 store 完成前被新请求复用，导致旧 key 存入新请求内容；
-恢复时 computed-token 游标也可能与实际加载范围不一致。
-需要对 page 复用、传输完成、进度重置和重新加载建立明确顺序，并测试高并发抢占路径。</p>
-</section>
-</section>
-<section id="mooncake-rdma-q26q40">
-<h2 id="heading-存储mooncake-与-rdmaq26q40">存储、Mooncake 与 RDMA（Q26–Q40）</h2>
-<section id="q26-lmcache-mooncake">
-<h3 id="heading-q26lmcache-与-mooncake-谁替代谁">Q26：LMCache 与 Mooncake 谁替代谁？</h3>
-<p>常见部署是组合关系。LMCache 连接推理语义、KV 生命周期和多级后端；
-Mooncake Store 提供分布式对象池，Transfer Engine 提供数据传输。
-也有不用 LMCache 的 Mooncake 集成，所以不能说两者必然绑定或完全等价。</p>
-</section>
-<section id="q27-store-transfer-engine">
-<h3 id="heading-q27store-与-transfer-engine-的区别">Q27：Store 与 Transfer Engine 的区别？</h3>
-<p>Store 按 key 处理对象、分配、副本、租约与淘汰；Transfer Engine 按 segment
-和注册地址搬运 bytes。直接 P/D 交接可以使用传输层而不建立长期 Store 对象。
-只有传输能力并不自动产生跨请求前缀复用。</p>
-</section>
-<section id="q28-mooncake-master">
-<h3 id="heading-q28mooncake-master-是否是数据带宽瓶颈">Q28：Mooncake Master 是否是数据带宽瓶颈？</h3>
-<p>它通常处理对象元数据、位置和生命周期，不中转大 payload，
-Client 使用 Transfer Engine 直接访问数据。Master 仍可能成为控制面 QPS、
-目录容量或可用性瓶颈，但不能用所有对象字节数除以 Master 网卡来估算其压力。</p>
-</section>
-<section id="q29-putstart-putend">
-<h3 id="heading-q29putstartputend-的意义是什么">Q29：PutStart/PutEnd 的意义是什么？</h3>
-<p>先申请位置，再由 Client 写数据，最后把完成状态发布给后续读者。
-分离分配与可读发布，避免读半写对象。失败路径必须回收未完成分配或保持不可读，
-不能因为 PutStart 成功就认为对象已经完整存在。</p>
-</section>
-<section id="q30-ttlsoft-pin">
-<h3 id="heading-q30读租约ttlsoft-pin-有什么区别">Q30：读租约、TTL、soft pin 有什么区别？</h3>
-<p>读租约保护在途读取的有效期；TTL 可能指对象存活或其他过期策略，必须看具体接口；
-soft pin 是更不易淘汰的提示/策略，并非永久持久化。
-本基线 Mooncake soft-pin 生命周期不被普通读不断续期，读租约有独立语义。</p>
-</section>
-<section id="q31">
-<h3 id="heading-q31多副本是不是强持久化">Q31：多副本是不是强持久化？</h3>
-<p>不是。内存副本提高节点故障下的数据可用性，但集群断电仍可能丢失。
-要说明写确认条件、副本独立故障域、持久介质以及恢复协议。
-缓存可选择丢失后重算，但必须预算重算的 GPU 与 SLO 成本。</p>
-</section>
-<section id="q32-rdma-socket">
-<h3 id="heading-q32rdma-为什么比普通-socket-可能更快">Q32：RDMA 为什么比普通 socket 可能更快？</h3>
-<p>它可减少内核协议栈与 CPU payload 拷贝开销，让 NIC 对已注册内存做 DMA，
-并支持高效批量和单边操作。但仍有连接、元数据、提交、完成处理和注册成本，
-小对象、差拓扑或低并发下不保证优于优化过的 TCP。</p>
-</section>
-<section id="q33">
-<h3 id="heading-q33零拷贝究竟指什么">Q33：“零拷贝”究竟指什么？</h3>
-<p>是省去特定路径的中间 buffer/CPU memcpy，不是数据不经总线移动。
-必须画出源、目标、NIC/GPU 和 staging，指出省掉哪次 copy。
-LMCache 主机 L1 接 Mooncake RDMA 时仍可能有 GPU↔host 的拷贝。</p>
-</section>
-<section id="q34">
-<h3 id="heading-q34为什么内存注册应复用">Q34：为什么内存注册应复用？</h3>
-<p>MR 注册可能涉及 pin 页、地址映射、NIC 状态和系统调用，
-逐对象频繁注册会限制小对象吞吐。注册 slab/内存池可摊销代价，
-但需要控制总 pin 内存、碎片、权限与在途引用，不能无限注册。</p>
-</section>
-<section id="q35-cq">
-<h3 id="heading-q35cq-完成和对象可读是同一回事吗">Q35：CQ 完成和对象可读是同一回事吗？</h3>
-<p>传输完成是底层操作状态，对象可读还需要上层发布完整性、版本及位置元数据。
-多片对象尤其不能在第一片完成时就作为整体发布。
-反过来，软件发布如果先于设备完成，也会把未完成数据暴露给读者。</p>
-</section>
-<section id="q36-gpudirect-rdmagdsnvlink">
-<h3 id="heading-q36gpudirect-rdmagdsnvlink-有什么区别">Q36：GPUDirect RDMA、GDS、NVLink 有什么区别？</h3>
-<p>GPUDirect RDMA 面向 NIC 与 GPU memory 的直接访问；GDS 面向存储↔GPU 数据路径；
-NVLink 是 GPU 等设备之间的互连技术。它们的软硬件条件、拓扑和场景不同，
-不能因为系统拥有其中一个就宣布具备另两个。</p>
-</section>
-<section id="q37">
-<h3 id="heading-q37多网卡为什么不一定线性提速">Q37：多网卡为什么不一定线性提速？</h3>
-<p>还可能受 PCIe root complex、NUMA、单流并发、远端 DRAM、CPU 提交速率或对象大小限制。
-需要合理 striping 和足够在途工作，并测每个 NIC 的流量。
-“两张 200G 卡”只是物理上界，不是应用稳定达到 50 GB/s 的证明。</p>
-</section>
-<section id="q38-lmcache-mooncake-adapter">
-<h3 id="heading-q38lmcache-的-mooncake-adapter-有哪些接入陷阱">Q38：LMCache 的 Mooncake adapter 有哪些接入陷阱？</h3>
-<p>MP native adapter 与旧进程内配置不同；要构建相应 C++ 扩展并匹配头文件/库。
-RDMA 需要有效 L1 descriptor 和内存注册条件；非 LMCache 字段会转交 Mooncake，
-不能期待自动修正错误服务地址。还要避免 LMCache HTTP 与 metadata 的端口冲突。</p>
-</section>
-<section id="q39-sglang-hicache-l2-lmcache-l2">
-<h3 id="heading-q39sglang-hicache-的-l2-等于-lmcache-l2-吗">Q39：SGLang HiCache 的 L2 等于 LMCache L2 吗？</h3>
-<p>不等于。HiCache 常把 GPU、host、外部存储叫 L1/L2/L3；
-LMCache MP 常把 host 管理层叫 L1、外部 adapter 叫 L2。
-对比时先说物理介质和管理职责，不能只比较层号。</p>
-</section>
-<section id="q40-s3redis-kv">
-<h3 id="heading-q40s3redis远端内存谁最适合-kv">Q40：S3、Redis、远端内存谁最适合 KV？</h3>
-<p>取决于对象大小、复用间隔、容量成本、延迟预算、请求费用和运维能力。
-大 KV 的延迟敏感复用通常更关注带宽与低拷贝路径；
-冷缓存可用对象存储扩容；传统服务也可能适合中小规模或已有基础设施。
-没有脱离 workload 的唯一正确选型。</p>
-</section>
-</section>
-<section id="q41q50">
-<h2 id="heading-性能与高级主题q41q50">性能与高级主题（Q41–Q50）</h2>
-<section id="q41-ttft">
-<h3 id="heading-q41命中率高但-ttft-更差怎么排查">Q41：命中率高但 TTFT 更差，怎么排查？</h3>
-<p>拆 lookup、L2、网络、H2D、剩余 prefill 和队列，确认 hit 的长度与实际来源。
-可能命中很短但固定查询开销大、远端读慢、数据转换重、或路由去更拥塞的实例。
-用相同输入和并发对比读取与重算，不以命中率作为最终性能指标。</p>
-</section>
-<section id="q42">
-<h3 id="heading-q42怎样判断读取还是重算">Q42：怎样判断读取还是重算？</h3>
-<p>比较省下的计算与查询、暴露传输、解码和干扰成本。
-例如 1 GiB 走 200 Gbit/s 的网络理论下界约 43 ms，还要加其他阶段。
-若只能省 20 ms prefill，通常不划算；有 overlap 时按关键路径而非简单相加判断。</p>
-</section>
-<section id="q43-chunk">
-<h3 id="heading-q43chunk-应越大越好吗">Q43：chunk 应越大越好吗？</h3>
-<p>大 chunk 减少对象/提交开销，但增加过取、尾部浪费和部分命中损失；
-小 chunk 相反，还可能令元数据/IOPS 变成瓶颈。
-应满足引擎对齐条件，在固定 workload 下扫描大小并记录协商后的真实值。</p>
-</section>
-<section id="q44">
-<h3 id="heading-q44为什么异步不一定提高吞吐">Q44：为什么异步不一定提高吞吐？</h3>
-<p>异步只改变等待组织，不创造带宽；无限在途会耗尽 staging、增加排队和尾延迟。
-有效异步需要可重叠的资源、完成通知、背压与取消机制。
-用在途 bytes 而不只任务数限流，更适合长度差异大的 KV 请求。</p>
-</section>
-<section id="q45-lru">
-<h3 id="heading-q45lru-有什么不足如何改进">Q45：LRU 有什么不足，如何改进？</h3>
-<p>它只近似利用最近性，不直接考虑对象大小、重算价值、前缀依赖与租户公平。
-可考虑频率、成本/字节、前缀保护与准入过滤，但增加状态和预测误差。
-先用访问 trace 验证比 LRU 更好，再引入复杂策略；不要把启发式说成理论最优。</p>
-</section>
-<section id="q46">
-<h3 id="heading-q46缓存感知路由为何不能只选最长命中">Q46：缓存感知路由为何不能只选最长命中？</h3>
-<p>最长命中的节点可能队列最深或跨网传输最贵，整体完成时间反而更高。
-结合 queue、可省计算、load、网络和公平性估算候选成本；
-目录可能陈旧，实际加载还要验证。路由索引不是数据正确性的唯一来源。</p>
-</section>
-<section id="q47-cacheblend">
-<h3 id="heading-q47cacheblend-是否无损复用任意片段">Q47：CacheBlend 是否无损复用任意片段？</h3>
-<p>不是无条件保证。片段在新上下文中的深层 KV 会变化，
-CacheBlend 用选择性重算处理依赖/质量恢复。
-需要在目标模型与任务上验证质量和性能，不能用“文本重复”证明逐位等价。</p>
-</section>
-<section id="q48-kv">
-<h3 id="heading-q48压缩-kv-何时划算">Q48：压缩 KV 何时划算？</h3>
-<p>当减少的传输/存储成本大于编码、解码、scale 与质量代价时。
-分别测压缩率、编码吞吐、解码关键路径、输出质量和端到端 SLO。
-无损压缩、低精度量化与选择性丢 token 的正确性边界不同，不应混称同一方法。</p>
-</section>
-<section id="q49-p-d">
-<h3 id="heading-q49pd-分离和共享缓存分别解决什么">Q49：P/D 分离和共享缓存分别解决什么？</h3>
-<p>P/D 分离把 prefill 与 decode 的计算和资源池拆开，通常需要本次请求的 KV 交接；
-共享缓存让后续请求复用已计算状态。两者可组合，但任一个都不自动提供另一个。
-当前 MP recipe 用 NIXL 做交接、LMCache 做跨请求复用，具体配置需核对版本。</p>
-</section>
-<section id="q50">
-<h3 id="heading-q50怎么证明缓存没有破坏结果">Q50：怎么证明缓存没有破坏结果？</h3>
-<p>用固定模型/输入/dtype 的无缓存参考，验证冷写、热读、partial hit、并发、
-跨 rank、取消和抢占。随机性及 batch 数值变化需先用无缓存对照校准。
-精确复用看 token/logit 一致性及合理数值容差；有损策略还要任务质量指标。
-仅 HTTP 200、形状正确或 CRC 正确都不充分。</p>
-</section>
-</section>
-<section id="q51q60">
-<h2 id="heading-系统设计与故障分析q51q60">系统设计与故障分析（Q51–Q60）</h2>
-<section id="q51-kv-cache">
-<h3 id="heading-q51设计-kv-cache-服务前先问什么">Q51：设计 KV Cache 服务前先问什么？</h3>
-<p>模型/布局、上下文与输出长度分布、QPS/并发、共享前缀比例和复用间隔，
-TTFT/ITL SLO、GPU/网络/存储条件、租户隔离、容错和预算。
-然后分别算容量、读写带宽、对象/元数据数、在途空间和故障余量。
-不要先画十个组件再猜负载。</p>
-</section>
-<section id="q52">
-<h3 id="heading-q52存储掉一台机器缓存可重算所以不用管吗">Q52：存储掉一台机器，缓存可重算所以不用管吗？</h3>
-<p>仍要控制重算风暴：限流/背压、选择副本、降级慢层、保护 GPU，
-并控制重新复制和预热流量。可重算意味着允许丢状态，不意味着 SLO 免费恢复。
-必须按同时失效的热点容量与并发请求估算回源负载。</p>
-</section>
-<section id="q53">
-<h3 id="heading-q53怎样避免并发重复加载同一个大对象">Q53：怎样避免并发重复加载同一个大对象？</h3>
-<p>可以设计 single-flight/合并等待者，或允许多个 staging、发布时去重，
-各有锁复杂度和重复 I/O 的取舍。不能在持全局锁时做慢 I/O。
-本基线 L1 的不同 writer tag 可 staging 同 key，并在 admission 决出 resident；
-这不等于所有上层都已经合并了重复网络读取。</p>
-</section>
-<section id="q54-buffer">
-<h3 id="heading-q54请求取消时可以立即释放-buffer-吗">Q54：请求取消时可以立即释放 buffer 吗？</h3>
-<p>只有确认没有在途设备/网络操作会访问它才可以。
-应停止新任务、标记状态、取消可取消的工作，等待或隔离不可取消 DMA，
-然后释放锁、引用与地址映射。超时和 Python 对象析构不能自动证明硬件访问已停止。</p>
-</section>
-<section id="q55-system-prompt">
-<h3 id="heading-q55如何处理热门-system-prompt">Q55：如何处理热门 system prompt？</h3>
-<p>优先保证兼容的多实例复用，可增加副本、局部预热或固定一部分容量，
-并结合负载均衡避免所有请求集中到一个“命中最长”的节点。
-共享边界需要授权；不同模型版本、LoRA 或租户策略不允许盲目合并。
-热点保护也需上限，避免 pin 满全部容量。</p>
-</section>
-<section id="q56-cache-salt">
-<h3 id="heading-q56cache_salt-能替代认证吗">Q56：cache_salt 能替代认证吗？</h3>
-<p>不能。它提供 key 命名隔离，身份认证和授权决定谁有权使用哪个隔离域。
-还需配额、网络与管理 API 控制，以及避免日志/指标泄露内容。
-KV 本身也应按敏感状态管理，不能因为不是原文就认定无隐私风险。</p>
-</section>
-<section id="q57">
-<h3 id="heading-q57为什么冷热基准常常失真">Q57：为什么冷/热基准常常失真？</h3>
-<p>GPU APC、LMCache L1、OS page cache、远端 cache 和 kernel 预热可能不同步。
-重复同一 prompt 可能只测到 APC；重启引擎首请求又混入初始化。
-为每一级记录热状态，使用可复现 trace、独立数据目录和充分样本，并保留原始结果。</p>
-</section>
-<section id="q58-l2-adapter">
-<h3 id="heading-q58怎样设计一个新的-l2-adapter">Q58：怎样设计一个新的 L2 adapter？</h3>
-<p>先读公开接口，明确 submit/完成通知/结果消费、锁、失败 bitmap 与 buffer 所有权；
-再实现最小 store/lookup/load/unlock，加入超时、取消、部分失败与 shutdown 测试。
-不能只实现同步 put/get 并阻塞 controller 主循环，也不能忽略 unlock 的最终完成契约。</p>
-</section>
-<section id="q59-kv-cache">
-<h3 id="heading-q59面试官让你讲一个-kv-cache-优化项目怎么组织">Q59：面试官让你讲一个 KV Cache 优化项目，怎么组织？</h3>
-<p>按“业务负载与 SLO→基线瓶颈→假设→单变量实验→结果与质量→代价与失败路径”回答。
-明确自己的贡献、环境与样本数量，给出可复现实验和关键 trace。
-本指南的离线练习可以作为学习项目，但不能包装成自己运营过的生产集群。</p>
-</section>
-<section id="q60">
-<h3 id="heading-q60被问到没读过的版本或实现细节怎么办">Q60：被问到没读过的版本或实现细节怎么办？</h3>
-<p>说明已确认的原理与版本范围，然后列出要检查的接口、设计文档和测试。
-例如“需要确认该 adapter 的 lookup 是原子锁还是租约模拟，并检查 load 失败路径”。
-坦诚的不确定性与可执行验证方法，比捏造默认配置或宣称所有故障都自动恢复更可信。</p>
-</section>
-</section>
-<section id="section-1">
-<h2 id="heading-面试前最后一页">面试前最后一页</h2>
-<p>必须能现场写出容量公式、带宽下界和读取/重算条件；必须能画 MP 数据路径、
-L1 对象生命周期和 Mooncake 控制/数据分离；必须能解释前缀、布局、分片和异步完成。
-最后用 <a class="reference external" href="system-design.html">系统设计</a> 的完整题把它们串成一个可运行、可观测、
-可降级的系统，而不是孤立背诵 60 个答案。</p>
-</section>
+<p>这些题覆盖 KV 存储方向常见的考察点，不是哪家公司的真实题库，也不代表出现频率。每个回答都按“先给结论，再讲原理、边界和怎样验证”组织；涉及实现的部分，以资料对应的源码版本为准。</p>
+<p>“答得对”不是指只有一种架构是正确的，而是推理前后一致、假设讲清楚、没有拿正确性去换性能。练习时先自己口述两分钟，再对照参考回答。</p>
+
+<h2 id="基础与容量q1q12">基础与容量（Q1–Q12）</h2>
+
+<h3 id="q1为什么需要-kv-cache为什么不缓存历史-q">Q1：为什么需要 KV Cache，为什么不缓存历史 Q？</h3>
+<p>普通自回归 attention 的新 query 会读取历史 K/V，所以缓存它们可避免重算历史前向。历史 Q 通常不再用于后续 token 的 attention，缓存它不能获得相同收益。 KV 仍需从 HBM 读取，因此缓存不是消除 attention 计算或历史访存。追问时写出 attention 方程，而不是只回答“加速推理”。</p>
+
+
+<h3 id="q2prefill-与-decode-的瓶颈有什么不同">Q2：Prefill 与 Decode 的瓶颈有什么不同？</h3>
+<p>Prefill 并行处理许多输入位置，常有较高计算强度；Decode 每步的新 token 少，常受权重/KV 带宽与 batch 效率影响。长上下文 attention、MoE、量化和不同 batch 会改变瓶颈，所以应看 profiler 与 roofline，而不是绝对声称前者只算力、后者只带宽。</p>
+
+
+<h3 id="q3如何计算-kv-cache-大小">Q3：如何计算 KV Cache 大小？</h3>
+<p>普通同构 attention 用 <code>2 × layers × tokens × KV_heads × head_dim × dtype_bytes</code>。例如 32 层、8 KV heads、128 维、BF16：128 KiB/token，8K 是 1 GiB。这不包含 allocator 对齐、scale、buffer、副本和元数据；多序列按实际有效长度求和。回答时同时注明 GB 与 GiB。</p>
+
+
+<h3 id="q4gqamqa-为什么能节省-kv">Q4：GQA/MQA 为什么能节省 KV？</h3>
+<p>多个 query heads 共用较少的 K/V heads，缓存按 KV heads 而非 query heads 计量。 MQA 通常只有一个 KV head，GQA 介于 MHA 与 MQA 之间。这是模型结构设计，不是存储层把几个不同 head 的 KV 随意合并。</p>
+
+
+<h3 id="q5tp8-时每张卡的-kv-一定是总量的八分之一吗">Q5：TP=8 时每张卡的 KV 一定是总量的八分之一吗？</h3>
+<p>只有 KV 头/状态均匀分片且没有复制时才成立。KV heads 少于 TP、MLA 的 latent 表示或某些引擎布局可能复制 KV；PP 又改变每 rank 持有的层。应从实际 tensor/group layout 和 rank 语义求和，不能只看 TP 参数。</p>
+
+
+<h3 id="q6mla-和滑窗模型怎么估算">Q6：MLA 和滑窗模型怎么估算？</h3>
+<p>MLA 应按引擎实际保存的压缩 latent、位置分量等计算；滑窗层按实际窗口存储策略计算，full-attention 层仍可能线性增长。混合模型还可能有递归状态快照，按 group 分别计量。 MLA 是 Multi-head Latent Attention，不应称作普通的多层 attention。</p>
+
+
+<h3 id="q7pagedattention-解决了什么不解决什么">Q7：PagedAttention 解决了什么，不解决什么？</h3>
+<p>它通过逻辑块到物理页的映射减少为每条序列预留连续最大空间的浪费，支持灵活分配和共享。但不自动提供跨进程远端存储，不让 KV 总量消失，也不保证每个块都无内部碎片。分页管理、前缀复用和外部 offload 是不同能力。</p>
+
+
+<h3 id="q8apc-与-lmcache-有什么关系">Q8：APC 与 LMCache 有什么关系？</h3>
+<p>APC 复用引擎内已有 GPU 前缀块；LMCache 可扩展到主机内存、外部后端和独立服务。两者可协作，但 GPU 已全命中的请求未必从 LMCache 读取。实验须分别统计本地和外部命中，可用新引擎连接仍存活 server 的方式验证外部复用。</p>
+
+
+<h3 id="q9相同文本一定有相同-kv-吗">Q9：相同文本一定有相同 KV 吗？</h3>
+<p>不一定。模型权重、tokenizer、模板、前文、位置/RoPE、mask、LoRA 和多模态输入都可能改变 KV。token IDs 相同也不足以绕过模型/位置和 layout 检查。需要计算语义等价及物理解释兼容；“字符串相等”不是充分条件。</p>
+
+
+<h3 id="q10为什么-key-要包含前缀链">Q10：为什么 key 要包含前缀链？</h3>
+<p>同一文本块处在不同历史后面时，其 hidden state 与深层 KV 会不同。把前一块 hash 纳入当前 hash，可以让历史变化传播到后续身份。还需稳定编码、模型/租户 namespace 等；hash 抗碰撞不能替代正确的输入定义。</p>
+
+
+<h3 id="q11temperature-会让-prompt-kv-失效吗">Q11：temperature 会让 prompt KV 失效吗？</h3>
+<p>通常不会，采样参数作用于 logits 之后，固定 prompt 的前向 KV 不变。但采样导致的生成 token 不同会使后续上下文和 KV 不同。如果其他配置实际改变了前向计算，要按具体实现判断，而不是把所有请求参数都盲目哈希。</p>
+
+
+<h3 id="q12命中整个-prompt-是否完全不需要模型计算">Q12：命中整个 prompt 是否完全不需要模型计算？</h3>
+<p>不能笼统保证。某些引擎仍需重算末位 token 获得首个输出所需 logits，并且存在完整 chunk、block 与调度接口的限制。 prefill 被大幅减少不等于 decode 消失，仍需为输出 token 执行模型。</p>
+
+
+
+<h2 id="lmcache-架构与正确性q13q25">LMCache 架构与正确性（Q13–Q25）</h2>
+
+<h3 id="q13用一分钟介绍-lmcache">Q13：用一分钟介绍 LMCache。</h3>
+<p>它是推理引擎与多级 KV 存储之间的管理/集成层，让本来短暂的 KV 可被后续请求复用。 Connector 连接调度与 GPU KV，存储管理器负责对象和层级， adapter 对接文件、对象存储、Mooncake 等后端。本基线推荐独立 MP 服务；它不是另一个完整的模型执行引擎。</p>
+
+
+<h3 id="q14mp-模式相对进程内模式的取舍是什么">Q14：MP 模式相对进程内模式的取舍是什么？</h3>
+<p>独立服务允许跨引擎共享与独立生命周期，隔离缓存服务的 CPU 工作和故障边界。代价是 RPC、设备 IPC/共享内存、服务部署和更复杂的异步生命周期。不是完全消除引擎侧开销，也不是只要 server 活着缓存就永不丢失。</p>
+
+
+<h3 id="q15scheduler-与-worker-各做什么">Q15：Scheduler 与 Worker 各做什么？</h3>
+<p>Scheduler 决定可跳过多少计算、何时分配 block 与调度请求； Worker 处理实际 GPU buffer 的加载/存储及数据就绪依赖。 Connector 把两侧元数据连接起来。查询到 key 不等于数据已落在 worker 的目标 page。</p>
+
+
+<h3 id="q16lookupprefetchretrieve-有何不同">Q16：lookup、prefetch、retrieve 有何不同？</h3>
+<p>lookup 判断候选对象并可触发预取；prefetch 把 L2 对象加载到可供消费的 L1，并管理锁和 staging；retrieve 将已有可用对象搬进引擎 GPU KV。 LOOKUP ack、预取结果就绪、GPU 可读是三个独立时刻。</p>
+
+
+<h3 id="q17为什么先等-lookup-ack-再查询预取状态">Q17：为什么先等 LOOKUP ack 再查询预取状态？</h3>
+<p>请求处理池可能重排两条 RPC；查询先到会看到尚未登记的任务，导致错误 miss。只需等目标 server 自己的 ack，不必为所有 server 设置无关的全局 barrier。当前 LookupState 用 callback 推进，同时限制 pending 时重查频率。</p>
+
+
+<h3 id="q18-none-与零命中为什么不能混用">Q18：<code>None</code> 与零命中为什么不能混用？</h3>
+<p>在相关异步查询接口中，<code>None</code> 表示 pending，0 或空 bitmap 表示完成且没有命中。把 pending 当 miss 会过早重算，把 miss 当 pending 会一直等待。还应读清结果是否只消费一次，不能假设任意重复 query 幂等。</p>
+
+
+<h3 id="q19objectkey-编码了哪些东西还缺什么">Q19：ObjectKey 编码了哪些东西？还缺什么？</h3>
+<p>本基线有 chunk_hash、model_name、kv_rank、object_group_id 和 cache_salt。它们区分内容、模型命名、分片、group 与隔离域。字段本身不保证模型 revision、LoRA、dtype 等全部被正确覆盖，还要检查调用方 namespace、hash 输入和 layout 协商。</p>
+
+
+<h3 id="q20block-与-chunk-为什么不能混为一谈">Q20：block 与 chunk 为什么不能混为一谈？</h3>
+<p>block 是引擎 GPU 分配/调度单位，chunk 是缓存分块与对象管理单位。一个 chunk 可涵盖多个 block，也可能拆成多个 group/rank 对象。尺寸要满足兼容与对齐；本基线 MP 可协商最终 chunk size，不应只相信启动请求值。</p>
+
+
+<h3 id="q21为什么要有-staging而不是分配地址后立即可读">Q21：为什么要有 staging，而不是分配地址后立即可读？</h3>
+<p>地址可用不代表内容已完成。staging 把在写数据与已发布 resident 分开，只有 fill/copy 完成后才 admission，避免读半成品。不同 writer tag 可并发准备同 key，第一个发布者胜出，后来 staging 可安全丢弃。</p>
+
+
+<h3 id="q22缓存是不可变对象为什么还需要锁">Q22：缓存是不可变对象，为什么还需要锁？</h3>
+<p>不可变只解决内容修改，不解决对象在读取期间被淘汰、内存回收或地址复用。读保留/租约保持数据生命周期；写保留保护发布前状态。锁和引用应覆盖真正的数据操作，不只是 Python 调用或 RPC 提交。</p>
+
+
+<h3 id="q23gpu-异步传输最危险的-bug-是什么">Q23：GPU 异步传输最危险的 bug 是什么？</h3>
+<p>传输还没结束就释放/复用 source 或 destination，或消费流没等生产者事件。表现可能是偶发错误答案而非崩溃。正确链路是计算完成→传输等待→copy 完成→ 发布/消费→释放，不能把 future done 无条件当作 DMA 完成。</p>
+
+
+<h3 id="q24两个-tp-rank-命中长度不同怎么办">Q24：两个 TP rank 命中长度不同怎么办？</h3>
+<p>必须满足实际 forward 所需所有分片的共同有效范围。普通前缀场景通常取共同最短前缀，并释放不会使用的尾部保留。混合 group、滑窗和复制 KV 需要按其契约处理，不能把单 rank 最长结果广播给所有人。</p>
+
+
+<h3 id="q25抢占恢复为什么会产生缓存正确性问题">Q25：抢占恢复为什么会产生缓存正确性问题？</h3>
+<p>GPU page 可能在旧 store 完成前被新请求复用，导致旧 key 存入新请求内容；恢复时 computed-token 游标也可能与实际加载范围不一致。需要对 page 复用、传输完成、进度重置和重新加载建立明确顺序，并测试高并发抢占路径。</p>
+
+
+
+<h2 id="存储mooncake-与-rdmaq26q40">存储、Mooncake 与 RDMA（Q26–Q40）</h2>
+
+<h3 id="q26lmcache-与-mooncake-谁替代谁">Q26：LMCache 与 Mooncake 谁替代谁？</h3>
+<p>常见部署是组合关系。LMCache 连接推理语义、KV 生命周期和多级后端； Mooncake Store 提供分布式对象池，Transfer Engine 提供数据传输。也有不用 LMCache 的 Mooncake 集成，所以不能说两者必然绑定或完全等价。</p>
+
+
+<h3 id="q27store-与-transfer-engine-的区别">Q27：Store 与 Transfer Engine 的区别？</h3>
+<p>Store 按 key 处理对象、分配、副本、租约与淘汰；Transfer Engine 按 segment 和注册地址搬运 bytes。直接 P/D 交接可以使用传输层而不建立长期 Store 对象。只有传输能力并不自动产生跨请求前缀复用。</p>
+
+
+<h3 id="q28mooncake-master-是否是数据带宽瓶颈">Q28：Mooncake Master 是否是数据带宽瓶颈？</h3>
+<p>它通常处理对象元数据、位置和生命周期，不中转大 payload， Client 使用 Transfer Engine 直接访问数据。Master 仍可能成为控制面 QPS、目录容量或可用性瓶颈，但不能用所有对象字节数除以 Master 网卡来估算其压力。</p>
+
+
+<h3 id="q29putstartputend-的意义是什么">Q29：PutStart/PutEnd 的意义是什么？</h3>
+<p>先申请位置，再由 Client 写数据，最后把完成状态发布给后续读者。分离分配与可读发布，避免读半写对象。失败路径必须回收未完成分配或保持不可读，不能因为 PutStart 成功就认为对象已经完整存在。</p>
+
+
+<h3 id="q30读租约ttlsoft-pin-有什么区别">Q30：读租约、TTL、soft pin 有什么区别？</h3>
+<p>读租约保护在途读取的有效期；TTL 可能指对象存活或其他过期策略，必须看具体接口； soft pin 是更不易淘汰的提示/策略，并非永久持久化。本基线 Mooncake soft-pin 生命周期不被普通读不断续期，读租约有独立语义。</p>
+
+
+<h3 id="q31多副本是不是强持久化">Q31：多副本是不是强持久化？</h3>
+<p>不是。内存副本提高节点故障下的数据可用性，但集群断电仍可能丢失。要说明写确认条件、副本独立故障域、持久介质以及恢复协议。缓存可选择丢失后重算，但必须预算重算的 GPU 与 SLO 成本。</p>
+
+
+<h3 id="q32rdma-为什么比普通-socket-可能更快">Q32：RDMA 为什么比普通 socket 可能更快？</h3>
+<p>它可减少内核协议栈与 CPU payload 拷贝开销，让 NIC 对已注册内存做 DMA，并支持高效批量和单边操作。但仍有连接、元数据、提交、完成处理和注册成本，小对象、差拓扑或低并发下不保证优于优化过的 TCP。</p>
+
+
+<h3 id="q33零拷贝究竟指什么">Q33：“零拷贝”究竟指什么？</h3>
+<p>是省去特定路径的中间 buffer/CPU memcpy，不是数据不经总线移动。必须画出源、目标、NIC/GPU 和 staging，指出省掉哪次 copy。 LMCache 主机 L1 接 Mooncake RDMA 时仍可能有 GPU↔host 的拷贝。</p>
+
+
+<h3 id="q34为什么内存注册应复用">Q34：为什么内存注册应复用？</h3>
+<p>MR 注册可能涉及 pin 页、地址映射、NIC 状态和系统调用，逐对象频繁注册会限制小对象吞吐。注册 slab/内存池可摊销代价，但需要控制总 pin 内存、碎片、权限与在途引用，不能无限注册。</p>
+
+
+<h3 id="q35cq-完成和对象可读是同一回事吗">Q35：CQ 完成和对象可读是同一回事吗？</h3>
+<p>传输完成是底层操作状态，对象可读还需要上层发布完整性、版本及位置元数据。多片对象尤其不能在第一片完成时就作为整体发布。反过来，软件发布如果先于设备完成，也会把未完成数据暴露给读者。</p>
+
+
+<h3 id="q36gpudirect-rdmagdsnvlink-有什么区别">Q36：GPUDirect RDMA、GDS、NVLink 有什么区别？</h3>
+<p>GPUDirect RDMA 面向 NIC 与 GPU memory 的直接访问；GDS 面向存储↔GPU 数据路径； NVLink 是 GPU 等设备之间的互连技术。它们的软硬件条件、拓扑和场景不同，不能因为系统拥有其中一个就宣布具备另两个。</p>
+
+
+<h3 id="q37多网卡为什么不一定线性提速">Q37：多网卡为什么不一定线性提速？</h3>
+<p>还可能受 PCIe root complex、NUMA、单流并发、远端 DRAM、CPU 提交速率或对象大小限制。需要合理 striping 和足够在途工作，并测每个 NIC 的流量。“两张 200G 卡”只是物理上界，不是应用稳定达到 50 GB/s 的证明。</p>
+
+
+<h3 id="q38lmcache-的-mooncake-adapter-有哪些接入陷阱">Q38：LMCache 的 Mooncake adapter 有哪些接入陷阱？</h3>
+<p>MP native adapter 与旧进程内配置不同；要构建相应 C++ 扩展并匹配头文件/库。 RDMA 需要有效 L1 descriptor 和内存注册条件；非 LMCache 字段会转交 Mooncake，不能期待自动修正错误服务地址。还要避免 LMCache HTTP 与 metadata 的端口冲突。</p>
+
+
+<h3 id="q39sglang-hicache-的-l2-等于-lmcache-l2-吗">Q39：SGLang HiCache 的 L2 等于 LMCache L2 吗？</h3>
+<p>不等于。HiCache 常把 GPU、host、外部存储叫 L1/L2/L3； LMCache MP 常把 host 管理层叫 L1、外部 adapter 叫 L2。对比时先说物理介质和管理职责，不能只比较层号。</p>
+
+
+<h3 id="q40s3redis远端内存谁最适合-kv">Q40：S3、Redis、远端内存谁最适合 KV？</h3>
+<p>取决于对象大小、复用间隔、容量成本、延迟预算、请求费用和运维能力。大 KV 的延迟敏感复用通常更关注带宽与低拷贝路径；冷缓存可用对象存储扩容；传统服务也可能适合中小规模或已有基础设施。没有脱离 workload 的唯一正确选型。</p>
+
+
+
+<h2 id="性能与高级主题q41q50">性能与高级主题（Q41–Q50）</h2>
+
+<h3 id="q41命中率高但-ttft-更差怎么排查">Q41：命中率高但 TTFT 更差，怎么排查？</h3>
+<p>拆 lookup、L2、网络、H2D、剩余 prefill 和队列，确认 hit 的长度与实际来源。可能命中很短但固定查询开销大、远端读慢、数据转换重、或路由去更拥塞的实例。用相同输入和并发对比读取与重算，不以命中率作为最终性能指标。</p>
+
+
+<h3 id="q42怎样判断读取还是重算">Q42：怎样判断读取还是重算？</h3>
+<p>比较省下的计算与查询、暴露传输、解码和干扰成本。例如 1 GiB 走 200 Gbit/s 的网络理论下界约 43 ms，还要加其他阶段。若只能省 20 ms prefill，通常不划算；有 overlap 时按关键路径而非简单相加判断。</p>
+
+
+<h3 id="q43chunk-应越大越好吗">Q43：chunk 应越大越好吗？</h3>
+<p>大 chunk 减少对象/提交开销，但增加过取、尾部浪费和部分命中损失；小 chunk 相反，还可能令元数据/IOPS 变成瓶颈。应满足引擎对齐条件，在固定 workload 下扫描大小并记录协商后的真实值。</p>
+
+
+<h3 id="q44为什么异步不一定提高吞吐">Q44：为什么异步不一定提高吞吐？</h3>
+<p>异步只改变等待组织，不创造带宽；无限在途会耗尽 staging、增加排队和尾延迟。有效异步需要可重叠的资源、完成通知、背压与取消机制。用在途 bytes 而不只任务数限流，更适合长度差异大的 KV 请求。</p>
+
+
+<h3 id="q45lru-有什么不足如何改进">Q45：LRU 有什么不足，如何改进？</h3>
+<p>它只近似利用最近性，不直接考虑对象大小、重算价值、前缀依赖与租户公平。可考虑频率、成本/字节、前缀保护与准入过滤，但增加状态和预测误差。先用访问 trace 验证比 LRU 更好，再引入复杂策略；不要把启发式说成理论最优。</p>
+
+
+<h3 id="q46缓存感知路由为何不能只选最长命中">Q46：缓存感知路由为何不能只选最长命中？</h3>
+<p>最长命中的节点可能队列最深或跨网传输最贵，整体完成时间反而更高。结合 queue、可省计算、load、网络和公平性估算候选成本；目录可能陈旧，实际加载还要验证。路由索引不是数据正确性的唯一来源。</p>
+
+
+<h3 id="q47cacheblend-是否无损复用任意片段">Q47：CacheBlend 是否无损复用任意片段？</h3>
+<p>不是无条件保证。片段在新上下文中的深层 KV 会变化， CacheBlend 用选择性重算处理依赖/质量恢复。需要在目标模型与任务上验证质量和性能，不能用“文本重复”证明逐位等价。</p>
+
+
+<h3 id="q48压缩-kv-何时划算">Q48：压缩 KV 何时划算？</h3>
+<p>当减少的传输/存储成本大于编码、解码、scale 与质量代价时。分别测压缩率、编码吞吐、解码关键路径、输出质量和端到端 SLO。无损压缩、低精度量化与选择性丢 token 的正确性边界不同，不应混称同一方法。</p>
+
+
+<h3 id="q49pd-分离和共享缓存分别解决什么">Q49：P/D 分离和共享缓存分别解决什么？</h3>
+<p>P/D 分离把 prefill 与 decode 的计算和资源池拆开，通常需要本次请求的 KV 交接；共享缓存让后续请求复用已计算状态。两者可组合，但任一个都不自动提供另一个。当前 MP recipe 用 NIXL 做交接、LMCache 做跨请求复用，具体配置需核对版本。</p>
+
+
+<h3 id="q50怎么证明缓存没有破坏结果">Q50：怎么证明缓存没有破坏结果？</h3>
+<p>用固定模型/输入/dtype 的无缓存参考，验证冷写、热读、partial hit、并发、跨 rank、取消和抢占。随机性及 batch 数值变化需先用无缓存对照校准。精确复用看 token/logit 一致性及合理数值容差；有损策略还要任务质量指标。仅 HTTP 200、形状正确或 CRC 正确都不充分。</p>
+
+
+
+<h2 id="系统设计与故障分析q51q60">系统设计与故障分析（Q51–Q60）</h2>
+
+<h3 id="q51设计-kv-cache-服务前先问什么">Q51：设计 KV Cache 服务前先问什么？</h3>
+<p>模型/布局、上下文与输出长度分布、QPS/并发、共享前缀比例和复用间隔， TTFT/ITL SLO、GPU/网络/存储条件、租户隔离、容错和预算。然后分别算容量、读写带宽、对象/元数据数、在途空间和故障余量。不要先画十个组件再猜负载。</p>
+
+
+<h3 id="q52存储掉一台机器缓存可重算所以不用管吗">Q52：存储掉一台机器，缓存可重算所以不用管吗？</h3>
+<p>仍要控制重算风暴：限流/背压、选择副本、降级慢层、保护 GPU，并控制重新复制和预热流量。可重算意味着允许丢状态，不意味着 SLO 免费恢复。必须按同时失效的热点容量与并发请求估算回源负载。</p>
+
+
+<h3 id="q53怎样避免并发重复加载同一个大对象">Q53：怎样避免并发重复加载同一个大对象？</h3>
+<p>可以设计 single-flight/合并等待者，或允许多个 staging、发布时去重，各有锁复杂度和重复 I/O 的取舍。不能在持全局锁时做慢 I/O。本基线 L1 的不同 writer tag 可 staging 同 key，并在 admission 决出 resident；这不等于所有上层都已经合并了重复网络读取。</p>
+
+
+<h3 id="q54请求取消时可以立即释放-buffer-吗">Q54：请求取消时可以立即释放 buffer 吗？</h3>
+<p>只有确认没有在途设备/网络操作会访问它才可以。应停止新任务、标记状态、取消可取消的工作，等待或隔离不可取消 DMA，然后释放锁、引用与地址映射。超时和 Python 对象析构不能自动证明硬件访问已停止。</p>
+
+
+<h3 id="q55如何处理热门-system-prompt">Q55：如何处理热门 system prompt？</h3>
+<p>优先保证兼容的多实例复用，可增加副本、局部预热或固定一部分容量，并结合负载均衡避免所有请求集中到一个“命中最长”的节点。共享边界需要授权；不同模型版本、LoRA 或租户策略不允许盲目合并。热点保护也需上限，避免 pin 满全部容量。</p>
+
+
+<h3 id="q56cache_salt-能替代认证吗">Q56：cache_salt 能替代认证吗？</h3>
+<p>不能。它提供 key 命名隔离，身份认证和授权决定谁有权使用哪个隔离域。还需配额、网络与管理 API 控制，以及避免日志/指标泄露内容。 KV 本身也应按敏感状态管理，不能因为不是原文就认定无隐私风险。</p>
+
+
+<h3 id="q57为什么冷热基准常常失真">Q57：为什么冷/热基准常常失真？</h3>
+<p>GPU APC、LMCache L1、OS page cache、远端 cache 和 kernel 预热可能不同步。重复同一 prompt 可能只测到 APC；重启引擎首请求又混入初始化。为每一级记录热状态，使用可复现 trace、独立数据目录和充分样本，并保留原始结果。</p>
+
+
+<h3 id="q58怎样设计一个新的-l2-adapter">Q58：怎样设计一个新的 L2 adapter？</h3>
+<p>先读公开接口，明确 submit/完成通知/结果消费、锁、失败 bitmap 与 buffer 所有权；再实现最小 store/lookup/load/unlock，加入超时、取消、部分失败与 shutdown 测试。不能只实现同步 put/get 并阻塞 controller 主循环，也不能忽略 unlock 的最终完成契约。</p>
+
+
+<h3 id="q59面试官让你讲一个-kv-cache-优化项目怎么组织">Q59：面试官让你讲一个 KV Cache 优化项目，怎么组织？</h3>
+<p>按“业务负载与 SLO→基线瓶颈→假设→单变量实验→结果与质量→代价与失败路径”回答。明确自己的贡献、环境与样本数量，给出可复现实验和关键 trace。本指南的离线练习可以作为学习项目，但不能包装成自己运营过的生产集群。</p>
+
+
+<h3 id="q60被问到没读过的版本或实现细节怎么办">Q60：被问到没读过的版本或实现细节怎么办？</h3>
+<p>说明已确认的原理与版本范围，然后列出要检查的接口、设计文档和测试。例如“需要确认该 adapter 的 lookup 是原子锁还是租约模拟，并检查 load 失败路径”。坦诚的不确定性与可执行验证方法，比捏造默认配置或宣称所有故障都自动恢复更可信。</p>
+
+
+
+<h2 id="面试前最后一页">面试前最后一页</h2>
+<p>必须能现场写出容量公式、带宽下界和读取/重算条件；必须能画 MP 数据路径、 L1 对象生命周期和 Mooncake 控制/数据分离；必须能解释前缀、布局、分片和异步完成。最后用 <a href="system-design.html">系统设计</a> 的完整题把它们串成一个可运行、可观测、可降级的系统，而不是孤立背诵 60 个答案。</p>
 </article>
 <footer><a href="../../../index.html">返回总目录</a>
 <p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
-<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#heading-基础与容量q1q12">基础与容量（Q1–Q12）</a><a class="level-3" href="#heading-q1为什么需要-kv-cache为什么不缓存历史-q">Q1：为什么需要 KV Cache，为什么不缓存历史 Q？</a><a class="level-3" href="#heading-q2prefill-与-decode-的瓶颈有什么不同">Q2：Prefill 与 Decode 的瓶颈有什么不同？</a><a class="level-3" href="#heading-q3如何计算-kv-cache-大小">Q3：如何计算 KV Cache 大小？</a><a class="level-3" href="#heading-q4gqamqa-为什么能节省-kv">Q4：GQA/MQA 为什么能节省 KV？</a><a class="level-3" href="#heading-q5tp8-时每张卡的-kv-一定是总量的八分之一吗">Q5：TP=8 时每张卡的 KV 一定是总量的八分之一吗？</a><a class="level-3" href="#heading-q6mla-和滑窗模型怎么估算">Q6：MLA 和滑窗模型怎么估算？</a><a class="level-3" href="#heading-q7pagedattention-解决了什么不解决什么">Q7：PagedAttention 解决了什么，不解决什么？</a><a class="level-3" href="#heading-q8apc-与-lmcache-有什么关系">Q8：APC 与 LMCache 有什么关系？</a><a class="level-3" href="#heading-q9相同文本一定有相同-kv-吗">Q9：相同文本一定有相同 KV 吗？</a><a class="level-3" href="#heading-q10为什么-key-要包含前缀链">Q10：为什么 key 要包含前缀链？</a><a class="level-3" href="#heading-q11temperature-会让-prompt-kv-失效吗">Q11：temperature 会让 prompt KV 失效吗？</a><a class="level-3" href="#heading-q12命中整个-prompt-是否完全不需要模型计算">Q12：命中整个 prompt 是否完全不需要模型计算？</a><a class="level-2" href="#heading-lmcache-架构与正确性q13q25">LMCache 架构与正确性（Q13–Q25）</a><a class="level-3" href="#heading-q13用一分钟介绍-lmcache">Q13：用一分钟介绍 LMCache。</a><a class="level-3" href="#heading-q14mp-模式相对进程内模式的取舍是什么">Q14：MP 模式相对进程内模式的取舍是什么？</a><a class="level-3" href="#heading-q15scheduler-与-worker-各做什么">Q15：Scheduler 与 Worker 各做什么？</a><a class="level-3" href="#heading-q16lookupprefetchretrieve-有何不同">Q16：lookup、prefetch、retrieve 有何不同？</a><a class="level-3" href="#heading-q17为什么先等-lookup-ack-再查询预取状态">Q17：为什么先等 LOOKUP ack 再查询预取状态？</a><a class="level-3" href="#heading-q18-none-与零命中为什么不能混用">Q18： None 与零命中为什么不能混用？</a><a class="level-3" href="#heading-q19objectkey-编码了哪些东西还缺什么">Q19：ObjectKey 编码了哪些东西？还缺什么？</a><a class="level-3" href="#heading-q20block-与-chunk-为什么不能混为一谈">Q20：block 与 chunk 为什么不能混为一谈？</a><a class="level-3" href="#heading-q21为什么要有-staging而不是分配地址后立即可读">Q21：为什么要有 staging，而不是分配地址后立即可读？</a><a class="level-3" href="#heading-q22缓存是不可变对象为什么还需要锁">Q22：缓存是不可变对象，为什么还需要锁？</a><a class="level-3" href="#heading-q23gpu-异步传输最危险的-bug-是什么">Q23：GPU 异步传输最危险的 bug 是什么？</a><a class="level-3" href="#heading-q24两个-tp-rank-命中长度不同怎么办">Q24：两个 TP rank 命中长度不同怎么办？</a><a class="level-3" href="#heading-q25抢占恢复为什么会产生缓存正确性问题">Q25：抢占恢复为什么会产生缓存正确性问题？</a><a class="level-2" href="#heading-存储mooncake-与-rdmaq26q40">存储、Mooncake 与 RDMA（Q26–Q40）</a><a class="level-3" href="#heading-q26lmcache-与-mooncake-谁替代谁">Q26：LMCache 与 Mooncake 谁替代谁？</a><a class="level-3" href="#heading-q27store-与-transfer-engine-的区别">Q27：Store 与 Transfer Engine 的区别？</a><a class="level-3" href="#heading-q28mooncake-master-是否是数据带宽瓶颈">Q28：Mooncake Master 是否是数据带宽瓶颈？</a><a class="level-3" href="#heading-q29putstartputend-的意义是什么">Q29：PutStart/PutEnd 的意义是什么？</a><a class="level-3" href="#heading-q30读租约ttlsoft-pin-有什么区别">Q30：读租约、TTL、soft pin 有什么区别？</a><a class="level-3" href="#heading-q31多副本是不是强持久化">Q31：多副本是不是强持久化？</a><a class="level-3" href="#heading-q32rdma-为什么比普通-socket-可能更快">Q32：RDMA 为什么比普通 socket 可能更快？</a><a class="level-3" href="#heading-q33零拷贝究竟指什么">Q33：“零拷贝”究竟指什么？</a><a class="level-3" href="#heading-q34为什么内存注册应复用">Q34：为什么内存注册应复用？</a><a class="level-3" href="#heading-q35cq-完成和对象可读是同一回事吗">Q35：CQ 完成和对象可读是同一回事吗？</a><a class="level-3" href="#heading-q36gpudirect-rdmagdsnvlink-有什么区别">Q36：GPUDirect RDMA、GDS、NVLink 有什么区别？</a><a class="level-3" href="#heading-q37多网卡为什么不一定线性提速">Q37：多网卡为什么不一定线性提速？</a><a class="level-3" href="#heading-q38lmcache-的-mooncake-adapter-有哪些接入陷阱">Q38：LMCache 的 Mooncake adapter 有哪些接入陷阱？</a><a class="level-3" href="#heading-q39sglang-hicache-的-l2-等于-lmcache-l2-吗">Q39：SGLang HiCache 的 L2 等于 LMCache L2 吗？</a><a class="level-3" href="#heading-q40s3redis远端内存谁最适合-kv">Q40：S3、Redis、远端内存谁最适合 KV？</a><a class="level-2" href="#heading-性能与高级主题q41q50">性能与高级主题（Q41–Q50）</a><a class="level-3" href="#heading-q41命中率高但-ttft-更差怎么排查">Q41：命中率高但 TTFT 更差，怎么排查？</a><a class="level-3" href="#heading-q42怎样判断读取还是重算">Q42：怎样判断读取还是重算？</a><a class="level-3" href="#heading-q43chunk-应越大越好吗">Q43：chunk 应越大越好吗？</a><a class="level-3" href="#heading-q44为什么异步不一定提高吞吐">Q44：为什么异步不一定提高吞吐？</a><a class="level-3" href="#heading-q45lru-有什么不足如何改进">Q45：LRU 有什么不足，如何改进？</a><a class="level-3" href="#heading-q46缓存感知路由为何不能只选最长命中">Q46：缓存感知路由为何不能只选最长命中？</a><a class="level-3" href="#heading-q47cacheblend-是否无损复用任意片段">Q47：CacheBlend 是否无损复用任意片段？</a><a class="level-3" href="#heading-q48压缩-kv-何时划算">Q48：压缩 KV 何时划算？</a><a class="level-3" href="#heading-q49pd-分离和共享缓存分别解决什么">Q49：P/D 分离和共享缓存分别解决什么？</a><a class="level-3" href="#heading-q50怎么证明缓存没有破坏结果">Q50：怎么证明缓存没有破坏结果？</a><a class="level-2" href="#heading-系统设计与故障分析q51q60">系统设计与故障分析（Q51–Q60）</a><a class="level-3" href="#heading-q51设计-kv-cache-服务前先问什么">Q51：设计 KV Cache 服务前先问什么？</a><a class="level-3" href="#heading-q52存储掉一台机器缓存可重算所以不用管吗">Q52：存储掉一台机器，缓存可重算所以不用管吗？</a><a class="level-3" href="#heading-q53怎样避免并发重复加载同一个大对象">Q53：怎样避免并发重复加载同一个大对象？</a><a class="level-3" href="#heading-q54请求取消时可以立即释放-buffer-吗">Q54：请求取消时可以立即释放 buffer 吗？</a><a class="level-3" href="#heading-q55如何处理热门-system-prompt">Q55：如何处理热门 system prompt？</a><a class="level-3" href="#heading-q56cache_salt-能替代认证吗">Q56：cache_salt 能替代认证吗？</a><a class="level-3" href="#heading-q57为什么冷热基准常常失真">Q57：为什么冷/热基准常常失真？</a><a class="level-3" href="#heading-q58怎样设计一个新的-l2-adapter">Q58：怎样设计一个新的 L2 adapter？</a><a class="level-3" href="#heading-q59面试官让你讲一个-kv-cache-优化项目怎么组织">Q59：面试官让你讲一个 KV Cache 优化项目，怎么组织？</a><a class="level-3" href="#heading-q60被问到没读过的版本或实现细节怎么办">Q60：被问到没读过的版本或实现细节怎么办？</a><a class="level-2" href="#heading-面试前最后一页">面试前最后一页</a></aside>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#基础与容量q1q12">基础与容量（Q1–Q12）</a><a class="level-3" href="#q1为什么需要-kv-cache为什么不缓存历史-q">Q1：为什么需要 KV Cache，为什么不缓存历史 Q？</a><a class="level-3" href="#q2prefill-与-decode-的瓶颈有什么不同">Q2：Prefill 与 Decode 的瓶颈有什么不同？</a><a class="level-3" href="#q3如何计算-kv-cache-大小">Q3：如何计算 KV Cache 大小？</a><a class="level-3" href="#q4gqamqa-为什么能节省-kv">Q4：GQA/MQA 为什么能节省 KV？</a><a class="level-3" href="#q5tp8-时每张卡的-kv-一定是总量的八分之一吗">Q5：TP=8 时每张卡的 KV 一定是总量的八分之一吗？</a><a class="level-3" href="#q6mla-和滑窗模型怎么估算">Q6：MLA 和滑窗模型怎么估算？</a><a class="level-3" href="#q7pagedattention-解决了什么不解决什么">Q7：PagedAttention 解决了什么，不解决什么？</a><a class="level-3" href="#q8apc-与-lmcache-有什么关系">Q8：APC 与 LMCache 有什么关系？</a><a class="level-3" href="#q9相同文本一定有相同-kv-吗">Q9：相同文本一定有相同 KV 吗？</a><a class="level-3" href="#q10为什么-key-要包含前缀链">Q10：为什么 key 要包含前缀链？</a><a class="level-3" href="#q11temperature-会让-prompt-kv-失效吗">Q11：temperature 会让 prompt KV 失效吗？</a><a class="level-3" href="#q12命中整个-prompt-是否完全不需要模型计算">Q12：命中整个 prompt 是否完全不需要模型计算？</a><a class="level-2" href="#lmcache-架构与正确性q13q25">LMCache 架构与正确性（Q13–Q25）</a><a class="level-3" href="#q13用一分钟介绍-lmcache">Q13：用一分钟介绍 LMCache。</a><a class="level-3" href="#q14mp-模式相对进程内模式的取舍是什么">Q14：MP 模式相对进程内模式的取舍是什么？</a><a class="level-3" href="#q15scheduler-与-worker-各做什么">Q15：Scheduler 与 Worker 各做什么？</a><a class="level-3" href="#q16lookupprefetchretrieve-有何不同">Q16：lookup、prefetch、retrieve 有何不同？</a><a class="level-3" href="#q17为什么先等-lookup-ack-再查询预取状态">Q17：为什么先等 LOOKUP ack 再查询预取状态？</a><a class="level-3" href="#q18-none-与零命中为什么不能混用">Q18：None 与零命中为什么不能混用？</a><a class="level-3" href="#q19objectkey-编码了哪些东西还缺什么">Q19：ObjectKey 编码了哪些东西？还缺什么？</a><a class="level-3" href="#q20block-与-chunk-为什么不能混为一谈">Q20：block 与 chunk 为什么不能混为一谈？</a><a class="level-3" href="#q21为什么要有-staging而不是分配地址后立即可读">Q21：为什么要有 staging，而不是分配地址后立即可读？</a><a class="level-3" href="#q22缓存是不可变对象为什么还需要锁">Q22：缓存是不可变对象，为什么还需要锁？</a><a class="level-3" href="#q23gpu-异步传输最危险的-bug-是什么">Q23：GPU 异步传输最危险的 bug 是什么？</a><a class="level-3" href="#q24两个-tp-rank-命中长度不同怎么办">Q24：两个 TP rank 命中长度不同怎么办？</a><a class="level-3" href="#q25抢占恢复为什么会产生缓存正确性问题">Q25：抢占恢复为什么会产生缓存正确性问题？</a><a class="level-2" href="#存储mooncake-与-rdmaq26q40">存储、Mooncake 与 RDMA（Q26–Q40）</a><a class="level-3" href="#q26lmcache-与-mooncake-谁替代谁">Q26：LMCache 与 Mooncake 谁替代谁？</a><a class="level-3" href="#q27store-与-transfer-engine-的区别">Q27：Store 与 Transfer Engine 的区别？</a><a class="level-3" href="#q28mooncake-master-是否是数据带宽瓶颈">Q28：Mooncake Master 是否是数据带宽瓶颈？</a><a class="level-3" href="#q29putstartputend-的意义是什么">Q29：PutStart/PutEnd 的意义是什么？</a><a class="level-3" href="#q30读租约ttlsoft-pin-有什么区别">Q30：读租约、TTL、soft pin 有什么区别？</a><a class="level-3" href="#q31多副本是不是强持久化">Q31：多副本是不是强持久化？</a><a class="level-3" href="#q32rdma-为什么比普通-socket-可能更快">Q32：RDMA 为什么比普通 socket 可能更快？</a><a class="level-3" href="#q33零拷贝究竟指什么">Q33：“零拷贝”究竟指什么？</a><a class="level-3" href="#q34为什么内存注册应复用">Q34：为什么内存注册应复用？</a><a class="level-3" href="#q35cq-完成和对象可读是同一回事吗">Q35：CQ 完成和对象可读是同一回事吗？</a><a class="level-3" href="#q36gpudirect-rdmagdsnvlink-有什么区别">Q36：GPUDirect RDMA、GDS、NVLink 有什么区别？</a><a class="level-3" href="#q37多网卡为什么不一定线性提速">Q37：多网卡为什么不一定线性提速？</a><a class="level-3" href="#q38lmcache-的-mooncake-adapter-有哪些接入陷阱">Q38：LMCache 的 Mooncake adapter 有哪些接入陷阱？</a><a class="level-3" href="#q39sglang-hicache-的-l2-等于-lmcache-l2-吗">Q39：SGLang HiCache 的 L2 等于 LMCache L2 吗？</a><a class="level-3" href="#q40s3redis远端内存谁最适合-kv">Q40：S3、Redis、远端内存谁最适合 KV？</a><a class="level-2" href="#性能与高级主题q41q50">性能与高级主题（Q41–Q50）</a><a class="level-3" href="#q41命中率高但-ttft-更差怎么排查">Q41：命中率高但 TTFT 更差，怎么排查？</a><a class="level-3" href="#q42怎样判断读取还是重算">Q42：怎样判断读取还是重算？</a><a class="level-3" href="#q43chunk-应越大越好吗">Q43：chunk 应越大越好吗？</a><a class="level-3" href="#q44为什么异步不一定提高吞吐">Q44：为什么异步不一定提高吞吐？</a><a class="level-3" href="#q45lru-有什么不足如何改进">Q45：LRU 有什么不足，如何改进？</a><a class="level-3" href="#q46缓存感知路由为何不能只选最长命中">Q46：缓存感知路由为何不能只选最长命中？</a><a class="level-3" href="#q47cacheblend-是否无损复用任意片段">Q47：CacheBlend 是否无损复用任意片段？</a><a class="level-3" href="#q48压缩-kv-何时划算">Q48：压缩 KV 何时划算？</a><a class="level-3" href="#q49pd-分离和共享缓存分别解决什么">Q49：P/D 分离和共享缓存分别解决什么？</a><a class="level-3" href="#q50怎么证明缓存没有破坏结果">Q50：怎么证明缓存没有破坏结果？</a><a class="level-2" href="#系统设计与故障分析q51q60">系统设计与故障分析（Q51–Q60）</a><a class="level-3" href="#q51设计-kv-cache-服务前先问什么">Q51：设计 KV Cache 服务前先问什么？</a><a class="level-3" href="#q52存储掉一台机器缓存可重算所以不用管吗">Q52：存储掉一台机器，缓存可重算所以不用管吗？</a><a class="level-3" href="#q53怎样避免并发重复加载同一个大对象">Q53：怎样避免并发重复加载同一个大对象？</a><a class="level-3" href="#q54请求取消时可以立即释放-buffer-吗">Q54：请求取消时可以立即释放 buffer 吗？</a><a class="level-3" href="#q55如何处理热门-system-prompt">Q55：如何处理热门 system prompt？</a><a class="level-3" href="#q56cache_salt-能替代认证吗">Q56：cache_salt 能替代认证吗？</a><a class="level-3" href="#q57为什么冷热基准常常失真">Q57：为什么冷/热基准常常失真？</a><a class="level-3" href="#q58怎样设计一个新的-l2-adapter">Q58：怎样设计一个新的 L2 adapter？</a><a class="level-3" href="#q59面试官让你讲一个-kv-cache-优化项目怎么组织">Q59：面试官让你讲一个 KV Cache 优化项目，怎么组织？</a><a class="level-3" href="#q60被问到没读过的版本或实现细节怎么办">Q60：被问到没读过的版本或实现细节怎么办？</a><a class="level-2" href="#面试前最后一页">面试前最后一页</a></aside>
 <dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
 <button id="search-close" aria-label="关闭搜索">关闭</button></div>
 <input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">

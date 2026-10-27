@@ -102,32 +102,29 @@
 </nav></aside>
 <main id="content"><div class="breadcrumbs">07 实验与验证 · 专注 KV Cache 存储</div>
 <article><h1 id="page-title">LMCache：实验、基准与验收</h1>
-<div class="note"><p><strong>白话导读</strong>：LMCache 的分级实验：A 级只需 Python，B 级需要 Linux/GPU，C 级需要 Mooncake，D 级做故障和总结。</p><ul><li>没有 GPU 也能做 A 级：容量与盈亏计算、前缀 hash 与缺口。</li><li>B2 专门排除引擎自带前缀缓存（APC）造成的“假收益”，做对照时别漏。</li><li>所有故障实验只在独立测试实例上做。</li></ul><p>结果按<a href="../../measurement-and-drills.html#4-结果记录模板">统一记录模板</a>整理。</p></div>
-<p>实验分为 A（仅 Python 标准库）、B（兼容的 Linux/GPU 推理环境）、
-C（Mooncake 服务与 native 扩展）和 D（系统设计）。
-本文给的是操作与验收步骤，不代表 GPU/RDMA 实验已经在你的机器上运行成功。
-不要在生产集群清空缓存、停止服务或做故障注入；所有实验使用独立实例与数据目录。</p>
-<section id="section-2">
-<h2 id="heading-实验-0记录版本与边界">实验 0：记录版本与边界</h2>
+<div class="note"><p><strong>白话导读</strong>：LMCache 的分级实验：A 级只需 Python，B 级需要 Linux/GPU，C 级需要 Mooncake，D 级做故障和总结。</p><ul><li>没有 GPU 也能做 A 级：容量与盈亏计算、前缀 hash 与缺口。</li><li>B2 专门排除引擎自带前缀缓存（APC）造成的“假收益”，做对照时别漏。</li><li>所有故障实验只在独立测试实例上做。</li></ul><p>结果按<a href="../../measurement-and-drills.html#5-结果记录模板">统一记录模板</a>整理。</p></div>
+<p>实验分四级，按条件选做：</p>
+<div class="table-scroll"><table>
+<thead><tr><th>级别</th><th>需要什么</th><th>练什么</th></tr></thead>
+<tbody>
+<tr><td>A</td><td>只要 Python 标准库</td><td>容量与盈亏计算、前缀 hash 与缺口</td></tr>
+<tr><td>B</td><td>兼容的 Linux + GPU 推理环境</td><td>冷写热读、排除 APC 干扰、L2 与性能矩阵</td></tr>
+<tr><td>C</td><td>Mooncake 服务和 LMCache 的 native 扩展</td><td>LMCache 接 Mooncake Store</td></tr>
+<tr><td>D</td><td>无硬件也能做</td><td>故障推演和结业报告</td></tr>
+</tbody></table></div>
+<p>这里给的是操作步骤和验收标准，不代表这些 GPU/RDMA 实验已经在你的机器上跑通。<strong>不要在生产集群上清空缓存、停服务或做故障注入</strong>；所有实验都用独立的实例和数据目录。</p>
+
+<h2 id="0-先记录版本和环境">0. 先记录版本和环境</h2>
 <p>在仓库根目录执行：</p>
 <pre class="code bash literal-block"><code>git<span class="whitespace"> </span>rev-parse<span class="whitespace"> </span>HEAD<span class="whitespace">
 </span>python<span class="whitespace"> </span>--version<span class="whitespace">
 </span>python<span class="whitespace"> </span>-m<span class="whitespace"> </span>pip<span class="whitespace"> </span>show<span class="whitespace"> </span>lmcache<span class="whitespace"> </span>vllm<span class="whitespace"> </span>torch<span class="whitespace"> </span>mooncake-transfer-engine<span class="whitespace">
 </span>lmcache<span class="whitespace"> </span>server<span class="whitespace"> </span>--help</code></pre>
-<p>未安装的包应记为“未安装”，而不是先任意升级全部依赖。
-安装路径见 <a class="reference external" href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/getting_started/installation.rst">安装指南</a>、
-<a class="reference external" href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/getting_started/compatibility.rst">兼容性</a>；优先采用已经验证的 wheel/container 组合。
-macOS 无 GPU 的 source-only 安装不等于可以运行 Linux eventfd、CUDA IPC 或 RDMA 路径。</p>
-<p>记录模型 revision、tokenizer/chat template、KV dtype、TP/PP、GPU/NIC、
-驱动、CPU NUMA、host memory、chunk/block size、transfer mode、adapter 配置。
-模型权重和运行时不一致的结果不能直接横向比较。</p>
-</section>
-<section id="a1-gpu">
-<h2 id="heading-实验-a1容量与读取盈亏无-gpu">实验 A1：容量与读取盈亏（无 GPU）</h2>
-<p>先运行 <a class="reference external" href="../../../03-kv-cache/semantics-and-costs.html">公共基础</a> 的容量算例，再运行下面的敏感性分析。
-假设 8K 的 KV 为 1 GiB，可省 prefill 时间为 120 ms，
-固定开销为 3 ms，H2D 有效带宽为 24 GiB/s。
-表中的 load 是串行模型，overlap 是理想两阶段流水的下界近似：</p>
+<p>没装的包就记为“未安装”，不要为了跑实验先把所有依赖都升级一遍。安装方法见<a href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/getting_started/installation.rst">安装指南</a>和<a href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/getting_started/compatibility.rst">兼容性说明</a>，优先用已经验证过的 wheel 或容器组合。在没有 GPU 的 macOS 上只装源码，并不能跑 Linux eventfd、CUDA IPC 或 RDMA 这些路径。</p>
+<p>还要记录：模型 revision、分词器和对话模板、KV dtype、TP/PP、GPU 和网卡型号、驱动、CPU NUMA、主机内存、chunk/block 大小、传输模式、adapter 配置。模型权重或运行时不同的结果不能直接比较。完整的环境记录表见<a href="../../measurement-and-drills.html#1-先记录环境">实测与故障演练</a>。</p>
+
+<h2 id="a1-容量与盈亏无-gpu">A1. 容量与盈亏（无 GPU）</h2>
+<p>先跑<a href="../../../03-kv-cache/semantics-and-costs.html#21-算一个例子">KV 原理</a>里的容量小程序，再跑下面的敏感性分析。假设：8K token 的 KV 是 1 GiB，命中后能省 120 ms 的 Prefill，固定开销 3 ms，H2D 有效带宽 24 GiB/s。“serial”是串行估算，“ideal_pipeline”是理想两段流水的乐观下界：</p>
 <pre class="code python literal-block"><code><span class="comment single"># SPDX-License-Identifier: Apache-2.0</span><span class="whitespace">
 </span><span class="name">payload_gib</span> <span class="operator">=</span> <span class="literal number float">1.0</span><span class="whitespace">
 </span><span class="name">saved_prefill_ms</span> <span class="operator">=</span> <span class="literal number float">120.0</span><span class="whitespace">
@@ -142,15 +139,10 @@ macOS 无 GPU 的 source-only 安装不等于可以运行 Linux eventfd、CUDA I
 </span>        <span class="literal string affix">f</span><span class="literal string double">&quot;ideal_pipeline=</span><span class="literal string interpol">{</span><span class="name">pipelined_ms</span><span class="literal string interpol">:</span><span class="literal string double">6.1f</span><span class="literal string interpol">}</span><span class="literal string double"> ms, &quot;</span><span class="whitespace">
 </span>        <span class="literal string affix">f</span><span class="literal string double">&quot;serial_gain=</span><span class="literal string interpol">{</span><span class="name">saved_prefill_ms</span><span class="whitespace"> </span><span class="operator">-</span><span class="whitespace"> </span><span class="name">serial_ms</span><span class="literal string interpol">:</span><span class="literal string double">6.1f</span><span class="literal string interpol">}</span><span class="literal string double"> ms&quot;</span><span class="whitespace">
 </span>    <span class="punctuation">)</span></code></pre>
-<p>验收：4 GiB/s 时串行约 294.7 ms，应选择重算或避免该慢路径；
-24 GiB/s 时串行约 86.3 ms，在这些假设下可获益。
-进一步把命中量减到 64 MiB、固定延迟改为 10 ms，解释小对象场景为什么不同。
-理想流水忽略启动/收尾、争用和分块，是边界分析而非预测实测值。</p>
-</section>
-<section id="a2-gpu">
-<h2 id="heading-实验-a2前缀哈希与缺口无-gpu">实验 A2：前缀哈希与缺口（无 GPU）</h2>
-<p>这是教学模型，使用 SHA-256 和 JSON 编码，<strong>不与 LMCache 的真实 key 协议兼容</strong>。
-它只验证前缀身份、namespace 隔离和连续命中语义：</p>
+<p><strong>验收</strong>：网络 4 GiB/s 时串行约 294.7 ms，比重算还慢，应该重算或避开这条慢路径；24 GiB/s 时串行约 86.3 ms，在这些假设下有收益。再把命中量改成 64 MiB、固定延迟改成 10 ms，解释为什么小对象的结论不同。理想流水忽略了启动、收尾、争用和分块，只用来看边界，不是对实测的预测。也可以直接用<a href="../../../01-foundations/interactive.html#加载还是重算">互动盈亏计算器</a>。</p>
+
+<h2 id="a2-前缀-hash-与缺口无-gpu">A2. 前缀 hash 与缺口（无 GPU）</h2>
+<p>这是一个教学模型，用 SHA-256 和 JSON 编码，<strong>和 LMCache 真实的 key 格式不兼容</strong>。它只用来验证三件事：前缀身份、命名空间隔离、只能复用连续前缀。</p>
 <pre class="code python literal-block"><code><span class="comment single"># SPDX-License-Identifier: Apache-2.0</span><span class="whitespace">
 </span><span class="keyword namespace">import</span> <span class="name namespace">hashlib</span><span class="whitespace">
 </span><span class="keyword namespace">import</span> <span class="name namespace">json</span><span class="whitespace">
@@ -211,30 +203,22 @@ macOS 无 GPU 的 source-only 安装不等于可以运行 Linux eventfd、CUDA I
 </span><span class="keyword">assert</span> <span class="name">prefix_hit_count</span><span class="punctuation">(</span><span class="name">first</span><span class="punctuation">,</span> <span class="punctuation">{</span><span class="name">first</span><span class="punctuation">[</span><span class="literal number integer">0</span><span class="punctuation">],</span> <span class="name">first</span><span class="punctuation">[</span><span class="literal number integer">2</span><span class="punctuation">]})</span> <span class="operator">==</span> <span class="literal number integer">1</span><span class="whitespace">
 </span><span class="keyword">assert</span> <span class="name builtin">len</span><span class="punctuation">(</span><span class="name">prefix_keys</span><span class="punctuation">([</span><span class="literal number integer">1</span><span class="punctuation">,</span> <span class="literal number integer">2</span><span class="punctuation">,</span> <span class="literal number integer">3</span><span class="punctuation">],</span> <span class="literal number integer">2</span><span class="punctuation">,</span> <span class="literal string double">&quot;model-v1/tenant-a&quot;</span><span class="punctuation">))</span> <span class="operator">==</span> <span class="literal number integer">1</span><span class="whitespace">
 </span><span class="name builtin">print</span><span class="punctuation">(</span><span class="literal string double">&quot;prefix identity, isolation, gap and tail checks passed&quot;</span><span class="punctuation">)</span></code></pre>
-<p>验收：修改第一块使所有后续 key 改变；删掉中间一块后只能复用连续前缀。
-再思考：如果只保存 token chunk 自身的 hash，哪条断言会失去其语义保证？
-如果两个进程的序列化格式不同，即使算法同名还能共享吗？</p>
-</section>
-<section id="b1-mp-linux-gpu">
-<h2 id="heading-实验-b1mp-冷写与热读linuxgpu">实验 B1：MP 冷写与热读（Linux/GPU）</h2>
-<p>前提：已按兼容性文档安装，模型已可在纯 vLLM 上正常运行。
-下面采用仓库 quickstart 的 <span class="docutils literal"><span class="pre">Qwen/Qwen3-8B</span></span>，请按 GPU 显存选用已验证的模型。
-4 GiB L1 是演示预算，不包括引擎、权重、系统和额外 buffer。</p>
-<p>终端一，启动独立 server：</p>
+<p><strong>验收</strong>：改了第一块，后面所有 key 都会变；中间缺一块，只能复用缺口之前的部分。再想两个问题：如果每个 chunk 只对自己的 token 求 hash（不带前一块的 hash），哪条断言就不再成立？两个进程的序列化格式不同，即使算法名字一样，还能共享吗？</p>
+
+<h2 id="b1-mp-模式冷写与热读linuxgpu">B1. MP 模式冷写与热读（Linux/GPU）</h2>
+<p>前提：已按兼容性文档装好，模型在纯 vLLM 上能正常运行。下面沿用仓库 quickstart 里的 <code>Qwen/Qwen3-8B</code>，请按显存换成你验证过的模型。4 GiB 的 L1 只是演示用的预算，不包括引擎、权重、系统和其他 buffer。</p>
+<p><strong>终端一</strong>，启动独立的 LMCache server：</p>
 <pre class="code bash literal-block"><code>lmcache<span class="whitespace"> </span>server<span class="whitespace"> </span><span class="literal string escape">\
 </span><span class="whitespace">  </span>--host<span class="whitespace"> </span><span class="literal number">127</span>.0.0.1<span class="whitespace"> </span>--port<span class="whitespace"> </span><span class="literal number">5555</span><span class="whitespace"> </span><span class="literal string escape">\
 </span><span class="whitespace">  </span>--http-host<span class="whitespace"> </span><span class="literal number">127</span>.0.0.1<span class="whitespace"> </span>--http-port<span class="whitespace"> </span><span class="literal number">8090</span><span class="whitespace"> </span><span class="literal string escape">\
 </span><span class="whitespace">  </span>--l1-size-gb<span class="whitespace"> </span><span class="literal number">4</span><span class="whitespace"> </span>--eviction-policy<span class="whitespace"> </span>LRU<span class="whitespace"> </span>--chunk-size<span class="whitespace"> </span><span class="literal number">256</span></code></pre>
-<p>终端二，以下 external connector 配置要求支持该加载方式的 vLLM
-（本基线兼容性文档的边界为 vLLM &gt;= 0.20.0）：</p>
+<p><strong>终端二</strong>，启动 vLLM。下面这种外部 connector 配置需要支持该加载方式的 vLLM（学习版本的兼容性文档写的是 vLLM ≥ 0.20.0）：</p>
 <pre class="code bash literal-block"><code>vllm<span class="whitespace"> </span>serve<span class="whitespace"> </span>Qwen/Qwen3-8B<span class="whitespace"> </span><span class="literal string escape">\
 </span><span class="whitespace">  </span>--host<span class="whitespace"> </span><span class="literal number">127</span>.0.0.1<span class="whitespace"> </span>--port<span class="whitespace"> </span><span class="literal number">8000</span><span class="whitespace"> </span><span class="literal string escape">\
 </span><span class="whitespace">  </span>--kv-transfer-config<span class="whitespace"> </span><span class="literal string escape">\
 </span><span class="whitespace">  </span><span class="literal string single">'{&quot;kv_connector&quot;:&quot;LMCacheMPConnector&quot;,&quot;kv_connector_module_path&quot;:&quot;lmcache.integration.vllm.lmcache_mp_connector&quot;,&quot;kv_role&quot;:&quot;kv_both&quot;,&quot;kv_connector_extra_config&quot;:{&quot;lmcache.mp.host&quot;:&quot;127.0.0.1&quot;,&quot;lmcache.mp.port&quot;:5555}}'</span></code></pre>
-<p>对于更旧的 vLLM 使用其受支持的 bundled connector，并核对 server 协议；
-不要只删掉 module path 就声称任何版本都兼容。
-端口仅监听本机，跨节点时必须改为可达地址并按服务边界配置访问控制。</p>
-<p>终端三，用 Python 标准库发两次相同请求：</p>
+<p>更老的 vLLM 要用它自带的、受支持的 connector，并核对与 server 的协议是否匹配；不要只删掉 module path 就说任何版本都能用。示例端口只监听本机，跨机器时要改成可达地址，并配置访问控制。</p>
+<p><strong>终端三</strong>，用 Python 标准库连续发两次相同的请求：</p>
 <pre class="code python literal-block"><code><span class="comment single"># SPDX-License-Identifier: Apache-2.0</span><span class="whitespace">
 </span><span class="keyword namespace">import</span> <span class="name namespace">json</span><span class="whitespace">
 </span><span class="keyword namespace">import</span> <span class="name namespace">time</span><span class="whitespace">
@@ -265,100 +249,53 @@ macOS 无 GPU 的 source-only 安装不等于可以运行 Linux eventfd、CUDA I
 </span>    <span class="name">elapsed</span> <span class="operator">=</span> <span class="name">time</span><span class="operator">.</span><span class="name">perf_counter</span><span class="punctuation">()</span> <span class="operator">-</span> <span class="name">start</span><span class="whitespace">
 </span>    <span class="name builtin">print</span><span class="punctuation">(</span><span class="name">run</span><span class="punctuation">,</span> <span class="literal string affix">f</span><span class="literal string double">&quot;end_to_end_s=</span><span class="literal string interpol">{</span><span class="name">elapsed</span><span class="literal string interpol">:</span><span class="literal string double">.3f</span><span class="literal string interpol">}</span><span class="literal string double">&quot;</span><span class="punctuation">,</span> <span class="name">body</span><span class="punctuation">[</span><span class="literal string double">&quot;usage&quot;</span><span class="punctuation">])</span><span class="whitespace">
 </span>    <span class="name builtin">print</span><span class="punctuation">(</span><span class="name">body</span><span class="punctuation">[</span><span class="literal string double">&quot;choices&quot;</span><span class="punctuation">][</span><span class="literal number integer">0</span><span class="punctuation">][</span><span class="literal string double">&quot;text&quot;</span><span class="punctuation">])</span></code></pre>
-<p>这是功能 smoke test，打印的是完整响应延迟，不是 TTFT。
-用返回的 prompt token 数确认实际长度大于最终协商的 chunk，
-不要用字符数猜 token 数。首次请求应产生可存储 KV；第二次可能由 APC 或
-LMCache 命中，必须结合指标/trace 才能归因。</p>
-<p>只读检查：</p>
+<p>这只是功能冒烟测试，打印的是完整响应时间，<strong>不是 TTFT</strong>。用返回的 prompt token 数确认长度确实超过最终协商的 chunk 大小，不要按字符数猜 token 数。第一次请求应该产生可以保存的 KV；第二次可能被 APC 命中，也可能被 LMCache 命中，必须结合指标或 trace 才能判断是谁的功劳。</p>
+<p>只读检查服务状态：</p>
 <pre class="code bash literal-block"><code>curl<span class="whitespace"> </span>--fail<span class="whitespace"> </span>http://127.0.0.1:8090/healthcheck<span class="whitespace">
 </span>curl<span class="whitespace"> </span>--fail<span class="whitespace"> </span>http://127.0.0.1:8090/status<span class="whitespace">
 </span>curl<span class="whitespace"> </span>--fail<span class="whitespace"> </span>http://127.0.0.1:8090/metrics</code></pre>
-<p>如果配置了 HTTP 认证，使用自己的合法凭据，不要把凭据写入报告或仓库。
-HTTP 200 只按 endpoint 文档解释，不能当作所有后端完整健康的证明。</p>
-</section>
-<section id="b2-apc">
-<h2 id="heading-实验-b2排除-apc-的假收益">实验 B2：排除 APC 的假收益</h2>
-<ol class="arabic simple">
-<li><p>保留 LMCache server，确认首轮 STORE 已完成。</p></li>
-<li><p>在自己的测试终端优雅停止并重新启动 <strong>仅 vLLM</strong>，保持模型与配置相同。</p></li>
-<li><p>发相同 prompt。新引擎没有上一进程的 GPU APC，但可从仍存活的 LMCache 加载。</p></li>
-<li><p>记录 LMCache retrieve/load、有效命中 token 和端到端数据。</p></li>
-<li><p>改动 prompt 开头，验证普通前缀命中缩短；保留开头只改末尾则应保留可复用前缀。</p></li>
+<p>如果配置了 HTTP 认证，用你自己的合法凭据，不要把凭据写进报告或仓库。HTTP 200 的含义以接口文档为准，不能当作“所有后端都健康”的证明。</p>
+
+<h2 id="b2-排除-apc-造成的假收益">B2. 排除 APC 造成的假收益</h2>
+<p>第二次请求变快，可能只是 vLLM 自己的 GPU 前缀缓存（APC）在起作用。下面的步骤把它排除掉：</p>
+<ol>
+<li>保持 LMCache server 运行，确认第一轮的 STORE 已经完成。</li>
+<li>在测试终端里优雅地停止并重启<strong>只有 vLLM</strong>，模型和配置不变。</li>
+<li>再发同样的 prompt。新的引擎进程没有上一个进程的 GPU APC，只能从仍在运行的 LMCache 加载。</li>
+<li>记录 LMCache 的 retrieve/load 次数、实际命中的 token 数和端到端数据。</li>
+<li>改动 prompt 的开头，验证命中变短；只改结尾，前面的部分应该仍能复用。</li>
 </ol>
-<p>新进程也有权重/kernel 初始化影响；在正式测量前用不共享前缀的请求预热计算路径。
-不要把进程重启后的第一次请求直接和旧进程稳定态比较。
-若 restart 导致缓存也消失，应先查 server 生命周期、容量淘汰和 key 兼容性，
-不能直接判定“LMCache 不支持复用”。</p>
-</section>
-<section id="b3-l2">
-<h2 id="heading-实验-b3l2-与性能矩阵">实验 B3：L2 与性能矩阵</h2>
-<p>先阅读 <a class="reference external" href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/mp/l2_storage/fs.rst">文件系统 adapter</a>。在专用测试目录配置文件 adapter；
-需要确保目录有权限与足够空间，不能指向已有生产数据。
-每次实验使用一个新目录，避免通过删除旧数据制造冷缓存。</p>
+<p>注意：新进程还有权重加载和 kernel 初始化的影响。正式测量前，先用不共享前缀的请求把计算路径预热；不要拿重启后的第一次请求和旧进程稳定后的结果比较。如果重启后缓存也没了，先检查 server 的生命周期、容量淘汰和 key 是否兼容，不要直接下结论说“LMCache 不能复用”。</p>
+
+<h2 id="b3-l2-与性能矩阵">B3. L2 与性能矩阵</h2>
+<p>先读<a href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/mp/l2_storage/fs.rst">文件系统 adapter</a>。在专用的测试目录里配置文件 adapter，确认有权限、空间够，绝不能指向已有的生产数据。每次实验用一个新目录，不要靠删除旧数据来制造“冷缓存”。</p>
 <pre class="code bash literal-block"><code>lmcache<span class="whitespace"> </span>server<span class="whitespace"> </span><span class="literal string escape">\
 </span><span class="whitespace">  </span>--host<span class="whitespace"> </span><span class="literal number">127</span>.0.0.1<span class="whitespace"> </span>--port<span class="whitespace"> </span><span class="literal number">5555</span><span class="whitespace"> </span><span class="literal string escape">\
 </span><span class="whitespace">  </span>--http-host<span class="whitespace"> </span><span class="literal number">127</span>.0.0.1<span class="whitespace"> </span>--http-port<span class="whitespace"> </span><span class="literal number">8090</span><span class="whitespace"> </span><span class="literal string escape">\
 </span><span class="whitespace">  </span>--l1-size-gb<span class="whitespace"> </span><span class="literal number">4</span><span class="whitespace"> </span>--eviction-policy<span class="whitespace"> </span>LRU<span class="whitespace"> </span>--chunk-size<span class="whitespace"> </span><span class="literal number">256</span><span class="whitespace"> </span><span class="literal string escape">\
 </span><span class="whitespace">  </span>--l2-adapter<span class="whitespace"> </span><span class="literal string single">'{&quot;type&quot;:&quot;fs&quot;,&quot;base_path&quot;:&quot;/tmp/lmcache-study-run-001&quot;}'</span></code></pre>
-<p>此命令是 B1 server 的替代配置，不要同时占用相同端口。
-等待 L2 写完成，在测试环境优雅重启 LMCache 与引擎，再验证新进程从同一目录读取。
-文件系统 page cache 可能仍是热的，必须将“L1 冷/文件页热”和“介质真正冷”分开报告。</p>
-<p>正式 TTFT/ITL 使用支持 streaming token 时间戳的 benchmark，
-参考 <a class="reference external" href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/getting_started/benchmarking.rst">Benchmarking</a>；按所安装 vLLM 版本的
-<span class="docutils literal">vllm bench serve <span class="pre">--help</span></span> 选项运行，而不是复制不匹配版本的脚本。
-模型、请求 trace、输出 token 上限和并发保持固定，只改变一个变量。</p>
+<p>这条命令是用来替换 B1 的 server 配置的，不要两个同时占用同一个端口。等 L2 写完后，在测试环境里优雅地重启 LMCache 和引擎，再验证新进程能从同一目录读到数据。注意操作系统的 page cache 可能还是热的，要把“L1 冷、文件页热”和“磁盘真正冷”分开报告。</p>
+<p>正式测 TTFT/ITL 要用支持流式 token 时间戳的压测工具，参考 <a href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/getting_started/benchmarking.rst">Benchmarking</a>；按你安装的 vLLM 版本的 <code>vllm bench serve --help</code> 选参数，不要照抄别的版本的脚本。模型、请求 trace、输出 token 上限和并发都固定，每次只改一个变量：</p>
 <div class="table-scroll"><table>
-<colgroup>
-<col style="width: 25%" />
-<col style="width: 35%" />
-<col style="width: 40%" />
-</colgroup>
-<thead>
-<tr><th class="head"><p>变量</p></th>
-<th class="head"><p>建议取值</p></th>
-<th class="head"><p>需要观察</p></th>
-</tr>
-</thead>
+<thead><tr><th>变量</th><th>建议取值</th><th>重点看</th></tr></thead>
 <tbody>
-<tr><td><p>前缀共享比例</p></td>
-<td><p>0%、25%、75%、接近全共享</p></td>
-<td><p>token 命中、实际省下的 prefill</p></td>
-</tr>
-<tr><td><p>上下文长度</p></td>
-<td><p>1K、8K、32K（不超过模型/显存能力）</p></td>
-<td><p>容量、lookup、网络/H2D 和排队</p></td>
-</tr>
-<tr><td><p>chunk</p></td>
-<td><p>128、256、512 的协商后实际值</p></td>
-<td><p>过取、对象数、尾部、提交开销</p></td>
-</tr>
-<tr><td><p>并发</p></td>
-<td><p>1、4、16，逐级到 SLO 边界</p></td>
-<td><p>goodput、p95/p99、staging 和抢占</p></td>
-</tr>
-<tr><td><p>层级</p></td>
-<td><p>APC、L1、文件 L2、远端 L2</p></td>
-<td><p>哪一级真正服务了命中</p></td>
-</tr>
-</tbody>
-</table></div>
-<p>结果模板：</p>
+<tr><td>前缀共享比例</td><td>0%、25%、75%、接近全部共享</td><td>token 命中、实际省下的 Prefill</td></tr>
+<tr><td>上下文长度</td><td>1K、8K、32K（不超过模型和显存能力）</td><td>容量、查找、网络/H2D、排队</td></tr>
+<tr><td>chunk</td><td>128、256、512（记录协商后的实际值）</td><td>多取的浪费、对象数、尾部、提交开销</td></tr>
+<tr><td>并发</td><td>1、4、16，逐步加到 SLO 边界</td><td>goodput、P95/P99、staging 占用和抢占</td></tr>
+<tr><td>层级</td><td>APC、L1、文件 L2、远端 L2</td><td>到底是哪一层服务了命中</td></tr>
+</tbody></table></div>
+<p>结果按下面的字段记录：</p>
 <pre class="code text literal-block"><code>run_id / versions / model / dtype / TP / block / effective_chunk
 request_count / input_distribution / output_distribution / concurrency
 APC_tokens / LMCache_L1_tokens / LMCache_L2_tokens / queried_tokens
 TTFT_p50_p95_p99 / ITL_p50_p95_p99 / goodput / errors
 transferred_bytes / L1_resident / L1_staging / host_peak_memory
 cold_or_warm_state / output_quality_check / raw_logs</code></pre>
-</section>
-<section id="c-mooncake-store-lmcache">
-<h2 id="heading-实验-cmooncake-store-与-lmcache-接入">实验 C：Mooncake Store 与 LMCache 接入</h2>
-<p>需要兼容的 Linux 环境、Mooncake Master/metadata 服务及 LMCache native
-Mooncake 扩展。先用 TCP 验证功能，再用具备 NIC/驱动/权限的 RDMA 环境测性能；
-TCP 成功不证明 RDMA 注册或 GPUDirect 路径正确。
-服务安装与启动以 Mooncake 当前版本 quickstart/API 文档为准：
-<a class="reference external" href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/docs/source/api-reference/python/mooncake-store.md">Store API</a>。</p>
-<p>以下假定本机隔离环境的 metadata 为 8080、Master 为 50051。
-先做独立 API smoke test；测试 key 加随机后缀，不覆盖别人的数据：</p>
+
+<h2 id="c-lmcache-接-mooncake-store">C. LMCache 接 Mooncake Store</h2>
+<p>需要兼容的 Linux 环境、Mooncake Master 和元数据服务，以及 LMCache 的 native Mooncake 扩展。<strong>先用 TCP 验证功能，再到有合适网卡、驱动和权限的环境里用 RDMA 测性能</strong>；TCP 跑通不能证明 RDMA 注册或 GPUDirect 路径是对的。服务的安装和启动以 Mooncake 当前版本的文档为准：<a href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/docs/source/api-reference/python/mooncake-store.md">Store API</a>。</p>
+<p>下面假设在本机隔离环境里，元数据服务在 8080 端口、Master 在 50051 端口。先单独做一次 API 冒烟测试；测试 key 加随机后缀，避免覆盖别人的数据：</p>
 <pre class="code python literal-block"><code><span class="comment single"># SPDX-License-Identifier: Apache-2.0</span><span class="whitespace">
 </span><span class="keyword namespace">import</span> <span class="name namespace">uuid</span><span class="whitespace">
 
@@ -388,39 +325,32 @@ TCP 成功不证明 RDMA 注册或 GPUDirect 路径正确。
 </span>    <span class="name builtin">print</span><span class="punctuation">(</span><span class="literal string double">&quot;Mooncake roundtrip passed&quot;</span><span class="punctuation">)</span><span class="whitespace">
 </span><span class="keyword">finally</span><span class="punctuation">:</span><span class="whitespace">
 </span>    <span class="name">store</span><span class="operator">.</span><span class="name">close</span><span class="punctuation">()</span></code></pre>
-<p>注意返回值不是“一律 0=成功”：<span class="docutils literal">get</span> 返回数据，<span class="docutils literal">is_exist</span> 返回存在性状态，
-buffer API 可能返回字节数，异步 API 返回任务/状态；必须按各自文档处理。</p>
-<p>然后按 <a class="reference external" href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/mp/l2_storage/mooncake_store.rst">Mooncake adapter 指南</a> 构建 native 扩展，在独立环境用下面配置
-替换 B1 server。此示例的 L1、Store segment 与 local buffer 总预算超过 10 GiB，
-还未计引擎与系统；应预留足够 RAM，或按模型实际 KV 和文档调整。</p>
+<p>注意返回值不是“一律 0 表示成功”：<code>get</code> 返回数据，<code>is_exist</code> 返回是否存在，buffer 类接口可能返回字节数，异步接口返回任务或状态，要按各自的文档处理。</p>
+<p>然后按 <a href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/mp/l2_storage/mooncake_store.rst">Mooncake adapter 指南</a>编译 native 扩展，在独立环境里用下面的配置替换 B1 的 server。这个例子里 L1、Store segment 和本地 buffer 加起来超过 10 GiB，还没算引擎和系统，要预留足够内存，或按模型实际的 KV 大小调整。</p>
 <pre class="code bash literal-block"><code>lmcache<span class="whitespace"> </span>server<span class="whitespace"> </span><span class="literal string escape">\
 </span><span class="whitespace">  </span>--host<span class="whitespace"> </span><span class="literal number">127</span>.0.0.1<span class="whitespace"> </span>--port<span class="whitespace"> </span><span class="literal number">5555</span><span class="whitespace"> </span><span class="literal string escape">\
 </span><span class="whitespace">  </span>--http-host<span class="whitespace"> </span><span class="literal number">127</span>.0.0.1<span class="whitespace"> </span>--http-port<span class="whitespace"> </span><span class="literal number">8090</span><span class="whitespace"> </span><span class="literal string escape">\
 </span><span class="whitespace">  </span>--l1-size-gb<span class="whitespace"> </span><span class="literal number">4</span><span class="whitespace"> </span>--eviction-policy<span class="whitespace"> </span>LRU<span class="whitespace"> </span>--chunk-size<span class="whitespace"> </span><span class="literal number">256</span><span class="whitespace"> </span><span class="literal string escape">\
 </span><span class="whitespace">  </span>--l2-adapter<span class="whitespace"> </span><span class="literal string single">'{&quot;type&quot;:&quot;mooncake_store&quot;,&quot;num_workers&quot;:4,&quot;local_hostname&quot;:&quot;127.0.0.1&quot;,&quot;metadata_server&quot;:&quot;http://127.0.0.1:8080/metadata&quot;,&quot;master_server_addr&quot;:&quot;127.0.0.1:50051&quot;,&quot;protocol&quot;:&quot;tcp&quot;,&quot;local_buffer_size&quot;:&quot;3221225472&quot;,&quot;global_segment_size&quot;:&quot;3221225472&quot;}'</span></code></pre>
-<p>验证顺序：STORE 完成→远端对象可查→通过另一组兼容引擎/LMCache 实例读取。
-远端存储 segment 的所有者必须持续存活；如果唯一副本来自将被停止的 Client，
-重启它会丢失对象，不能把这个现象当成共享缓存失效。
-做持久共享实验宜使用独立的 Store 贡献节点。</p>
-<p>RDMA 阶段改用可达地址、匹配 NIC、<span class="docutils literal">protocol: rdma</span> 与正确注册设置，
-并按文档考虑 <span class="docutils literal"><span class="pre">--no-l1-use-lazy</span></span>。采集 NIC 计数、CPU 使用、注册耗时和有效带宽，
-证明确实走目标路径；不能只根据配置字符串宣布使用了 RDMA。</p>
-</section>
-<section id="d">
-<h2 id="heading-实验-d故障与结业报告">实验 D：故障与结业报告</h2>
-<p>无需硬件也能做桌面推演：L2 返回部分命中、一个 TP rank 缺块、请求取消、
-metadata 变陈旧、1 个 Store 节点退出、in-flight load 超预算。
-逐项写出有效前缀、buffer 所有者、应释放的资源、回退方式与预期指标。</p>
-<p>硬件环境中只在独立测试实例验证这些场景，并在操作前保存日志和配置。
-验收不是“程序没崩”：还应验证输出正确、没有引用/锁泄漏、后续请求可以恢复。</p>
-<p>最终交付一张架构图、一张时序图、一份版本清单、一张实测或明确标为估算的性能表，
-以及一个含失败路径的设计复盘。结合 <a class="reference external" href="../../../08-career/implementations/lmcache/system-design.html">系统设计</a>
-准备 5 分钟技术讲述。</p>
-</section>
+<p><strong>验证顺序</strong>：STORE 完成 → 能在远端查到对象 → 用另一组兼容的引擎和 LMCache 实例读出来。贡献存储 segment 的那个进程必须一直活着；如果唯一的副本来自一个马上要停掉的客户端，重启它对象就没了——这不是共享缓存失效。做持久共享实验，最好用单独的 Store 贡献节点。</p>
+<p><strong>RDMA 阶段</strong>：改用可达地址、匹配的网卡、<code>protocol: rdma</code> 和正确的注册设置，并按文档考虑 <code>--no-l1-use-lazy</code>。采集网卡计数器、CPU 使用率、注册耗时和有效带宽，证明确实走了目标路径；不能只凭配置里写了 rdma 就说用上了 RDMA。常见硬件的公开带宽量级见<a href="../../measurement-and-drills.html#2-常见场景的公开参考数据">公开参考数据</a>，可以和你的实测对照。</p>
+
+<h2 id="d-故障推演与结业报告">D. 故障推演与结业报告</h2>
+<p>没有硬件也能做桌面推演。对下面每个场景，写出：还能用的有效前缀、各个 buffer 归谁管、要释放哪些资源、怎样回退、指标上应该看到什么：</p>
+<ul>
+<li>L2 只返回了部分命中；</li>
+<li>某个 TP rank 缺了一块；</li>
+<li>请求被取消；</li>
+<li>元数据过时；</li>
+<li>一个 Store 节点退出；</li>
+<li>在途加载超出内存预算。</li>
+</ul>
+<p>有硬件时只在独立测试实例上验证这些场景，操作前先保存日志和配置。验收标准不是“程序没崩”，而是：输出正确、没有引用或锁泄漏、后续请求能恢复正常。故障注入方法见<a href="../../measurement-and-drills.html#4-故障演练">故障演练</a>。</p>
+<p><strong>最终交付</strong>：一张架构图、一张时序图、一份版本清单、一张实测（或明确标为估算）的性能表、一份包含失败路径的设计复盘。再结合<a href="../../../08-career/implementations/lmcache/system-design.html">系统设计题</a>准备一段 5 分钟的技术讲述。</p>
 </article>
 <footer><a href="../../../index.html">返回总目录</a>
 <p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
-<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#heading-实验-0记录版本与边界">实验 0：记录版本与边界</a><a class="level-2" href="#heading-实验-a1容量与读取盈亏无-gpu">实验 A1：容量与读取盈亏（无 GPU）</a><a class="level-2" href="#heading-实验-a2前缀哈希与缺口无-gpu">实验 A2：前缀哈希与缺口（无 GPU）</a><a class="level-2" href="#heading-实验-b1mp-冷写与热读linuxgpu">实验 B1：MP 冷写与热读（Linux/GPU）</a><a class="level-2" href="#heading-实验-b2排除-apc-的假收益">实验 B2：排除 APC 的假收益</a><a class="level-2" href="#heading-实验-b3l2-与性能矩阵">实验 B3：L2 与性能矩阵</a><a class="level-2" href="#heading-实验-cmooncake-store-与-lmcache-接入">实验 C：Mooncake Store 与 LMCache 接入</a><a class="level-2" href="#heading-实验-d故障与结业报告">实验 D：故障与结业报告</a></aside>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#0-先记录版本和环境">0. 先记录版本和环境</a><a class="level-2" href="#a1-容量与盈亏无-gpu">A1. 容量与盈亏（无 GPU）</a><a class="level-2" href="#a2-前缀-hash-与缺口无-gpu">A2. 前缀 hash 与缺口（无 GPU）</a><a class="level-2" href="#b1-mp-模式冷写与热读linuxgpu">B1. MP 模式冷写与热读（Linux/GPU）</a><a class="level-2" href="#b2-排除-apc-造成的假收益">B2. 排除 APC 造成的假收益</a><a class="level-2" href="#b3-l2-与性能矩阵">B3. L2 与性能矩阵</a><a class="level-2" href="#c-lmcache-接-mooncake-store">C. LMCache 接 Mooncake Store</a><a class="level-2" href="#d-故障推演与结业报告">D. 故障推演与结业报告</a></aside>
 <dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
 <button id="search-close" aria-label="关闭搜索">关闭</button></div>
 <input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">

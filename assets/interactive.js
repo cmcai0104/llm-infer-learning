@@ -54,6 +54,18 @@
     return html;
   });
 
+  (() => {
+    const root = document.getElementById("lab-breakeven");
+    const preset = root && root.querySelector("[data-preset]");
+    if (!preset) return;
+    preset.addEventListener("change", () => {
+      if (!preset.value) return;
+      const [gbps, h2d] = preset.value.split(",");
+      root.querySelector('[data-k="gbps"]').value = gbps;
+      root.querySelector('[data-k="h2d"]').value = h2d;
+    });
+  })();
+
   bind("lab-breakeven", (v) => {
     const bytes = v.kib * 1024 * v.tokens;
     const netGiBs = ((v.gbps * 1e9) / 8 / GiB) * (v.eff / 100);

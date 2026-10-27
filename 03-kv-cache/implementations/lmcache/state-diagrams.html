@@ -103,12 +103,10 @@
 <main id="content"><div class="breadcrumbs">03 KV Cache 管理 · 专注 KV Cache 存储</div>
 <article><h1 id="page-title">LMCache：知识地图、架构与时序图</h1>
 <div class="note"><p><strong>白话导读</strong>：用图把 LMCache 的架构、冷请求、热请求、对象状态和与 Mooncake 的组合画出来。</p><ul><li>冷请求：先算再存；热请求：先查、再预取到 L1、最后回填 GPU。</li><li>LMCache 的 L1/L2 是它自己的管理层级（常见为主机内存/外部存储），不是 CPU 缓存，也不是 GPU。</li><li>图省略了错误分支和平台差异，失败路径看<a href="../../../01-foundations/design-atlas.html">设计图册 D10</a>。</li></ul><p>图看不懂时，对照<a href="internals.html">架构与源码主线</a>中同名小节。</p></div>
-<p>图中实线用于表示主要调用或数据路径，虚线用于表示管理、元数据或可选联系；
-具体含义由每幅图的说明限定。架构图省略了平台差异与错误分支，
-不能据此推断所有配置都支持任意两节点直传。
-图表保留可读字号；超过正文宽度时可在图表区域横向滚动。</p>
-<section id="section-2">
-<h2 id="heading-全景知识地图">全景知识地图</h2>
+<p><strong>怎么看这些图</strong>：实线是主要的调用或数据路径，虚线是管理、元数据或可选的联系。架构图省略了平台差异和错误分支，不能据此认为任意两个节点之间都能直接传输。失败路径（超时、租约过期、主节点切换）见<a href="../../../01-foundations/design-atlas.html">设计图册</a>。图太宽时可以在图上横向滚动。</p>
+
+<h2 id="1-全景知识地图">1. 全景知识地图</h2>
+<p>学 LMCache 要同时懂四块：推理语义（KV 为什么能复用）、LMCache 运行时（怎样查、取、存）、存储与传输（数据放哪、怎么搬）、性能与生产（值不值、出错怎么办）。</p>
 <figure class="diagram" data-status="pending"><div class="mermaid-target" aria-label="设计图"></div><details open><summary>查看图源</summary><pre class="mermaid-source"><code>flowchart LR
   A[&quot;KV Cache / 推理 infra&quot;] --&gt; B[&quot;推理语义&quot;]
   A --&gt; C[&quot;LMCache 运行时&quot;]
@@ -128,12 +126,11 @@
   E --&gt; E3[&quot;隔离 / 故障 / 可观测 / 正确性&quot;]
   C2 --&gt; F[&quot;高级复用&quot;]
   F --&gt; F1[&quot;CacheBlend / 压缩 / Layerwise&quot;]
-  F --&gt; F2[&quot;P/D 分离 / 跨实例共享&quot;]</code></pre></details></figure><p>对应阅读：推理语义见 <a class="reference external" href="../../semantics-and-costs.html">公共基础</a>；运行时见
-<a class="reference external" href="internals.html">LMCache 内核</a>；存储见 <a class="reference external" href="../../../04-storage/implementations/lmcache/backend-contracts.html">存储与 Mooncake</a>；
-生产问题见 <a class="reference external" href="../../../06-serving/implementations/lmcache/observability.html">性能与运维</a>。</p>
-</section>
-<section id="mp">
-<h2 id="heading-mp-架构谁决定谁执行谁存储">MP 架构：谁决定、谁执行、谁存储</h2>
+  F --&gt; F2[&quot;P/D 分离 / 跨实例共享&quot;]</code></pre></details></figure>
+<p>对应阅读：推理语义看<a href="../../semantics-and-costs.html">KV 原理</a>；运行时看<a href="internals.html">架构与源码主线</a>；存储看<a href="../../../04-storage/implementations/lmcache/backend-contracts.html">后端契约</a>；生产问题看<a href="../../../06-serving/implementations/lmcache/observability.html">优化与可观测</a>。</p>
+
+<h2 id="2-mp-架构谁决定谁执行谁存储">2. MP 架构：谁决定、谁执行、谁存储</h2>
+<p>一句话：<strong>引擎决定算什么，LMCache 服务负责查、搬、存，后端负责保存字节。</strong>引擎里的调度器通过 adapter 发 LOOKUP、查状态；worker 通过 adapter 发 STORE、RETRIEVE。LMCache 服务内部由 StorageManager 统一管理 L1 和各个 controller，再通过 L2 adapter 连接外部存储。</p>
 <figure class="diagram" data-status="pending"><div class="mermaid-target" aria-label="设计图"></div><details open><summary>查看图源</summary><pre class="mermaid-source"><code>flowchart TB
   U[&quot;请求 / tokenizer&quot;] --&gt; S[&quot;vLLM Scheduler&quot;]
   subgraph ENGINE[&quot;推理引擎进程&quot;]
@@ -163,22 +160,26 @@
   G &lt;--&gt;|&quot;设备传输；不等于普通 RPC payload&quot;| T
   AD &lt;--&gt; FS[&quot;文件 / 对象存储 / 远端 Store&quot;]
   CO[&quot;可选 Coordinator&quot;] -.-&gt; R
-  OBS[&quot;HTTP / Metrics / Traces&quot;] -.-&gt; SM</code></pre></details></figure><p>常见配置中 L1 是主机 DRAM，L2 是外部后端。当前实现还支持其他 L1 backing，
-因此 L1/L2 是 LMCache 的管理层级，不是 CPU 硬件 cache 层级。
-MP 也有 engine-driven transfer，图中的跨进程传输并不限定由 server 发起。</p>
-</section>
-<section id="section-3">
-<h2 id="heading-进程内模式对照">进程内模式对照</h2>
+  OBS[&quot;HTTP / Metrics / Traces&quot;] -.-&gt; SM</code></pre></details></figure>
+<p>三点说明：</p>
+<ul>
+<li>常见配置中 L1 是主机内存，L2 是外部后端。L1/L2 是 LMCache 自己的管理层级，不是 CPU 的硬件缓存层级；L1 也可以用其他内存来实现。</li>
+<li>GPU 与 LMCache 之间的数据走设备传输，不是塞进普通 RPC 消息里。</li>
+<li>MP 模式也支持由引擎发起传输，图中的跨进程传输不一定由 server 发起。</li>
+</ul>
+
+<h2 id="3-进程内模式对照">3. 进程内模式对照</h2>
+<p>早期教程多用进程内模式：LMCache 作为库跑在引擎进程里。了解它是为了看懂旧资料。</p>
 <figure class="diagram" data-status="pending"><div class="mermaid-target" aria-label="设计图"></div><details open><summary>查看图源</summary><pre class="mermaid-source"><code>flowchart LR
   V[&quot;vLLM / LMCacheConnectorV1&quot;] --&gt; E[&quot;inprocess LMCacheEngine&quot;]
   E --&gt; H[&quot;TokenDatabase&quot;]
   E --&gt; GC[&quot;GPU connector&quot;]
   E --&gt; BS[&quot;inprocess StorageManager&quot;]
-  BS --&gt; B[&quot;CPU / Disk / Remote backend&quot;]</code></pre></details></figure><p>这条路径适合理解旧教程。它与 MP 共享一些底层能力，但
-<span class="docutils literal">ObjectKey</span>、L2 adapter 和 MP server 参数不能直接套用到进程内配置。</p>
-</section>
-<section id="section-4">
-<h2 id="heading-冷请求计算后存储">冷请求：计算后存储</h2>
+  BS --&gt; B[&quot;CPU / Disk / Remote backend&quot;]</code></pre></details></figure>
+<p>它和 MP 模式共用一部分底层能力，但 <code>ObjectKey</code>、L2 adapter 和 MP server 的参数不能直接拿到进程内配置里用。</p>
+
+<h2 id="4-冷请求先算再存">4. 冷请求：先算再存</h2>
+<p>缓存里没有可用数据时：先查一遍确认没命中，引擎照常做 Prefill，然后把新算出的 KV 存进 L1，再按配置异步写到 L2。</p>
 <figure class="diagram" data-status="pending"><div class="mermaid-target" aria-label="设计图"></div><details open><summary>查看图源</summary><pre class="mermaid-source"><code>sequenceDiagram
   participant S as Scheduler
   participant M as LMCache server
@@ -198,12 +199,16 @@ MP 也有 engine-driven transfer，图中的跨进程传输并不限定由 serve
   M-&gt;&gt;L: finish_write，admit resident
   L-&gt;&gt;B: StoreController 异步写 L2（若配置）
   B--&gt;&gt;L: 完成后释放所持读锁
-  W--&gt;&gt;S: 继续生成；请求完成与存储完成分开处理</code></pre></details></figure><p>这是依赖关系图，并不表示每次 STORE 都同步阻塞 scheduler。
-只允许存储引擎声明已完成的有效 token 范围；尾部不完整 chunk 和 decode
-写回时机由具体路径及策略决定。</p>
-</section>
-<section id="l1-l2-gpu">
-<h2 id="heading-热请求l1l2-查找预取回填-gpu">热请求：L1/L2 查找、预取、回填 GPU</h2>
+  W--&gt;&gt;S: 继续生成；请求完成与存储完成分开处理</code></pre></details></figure>
+<p>注意：</p>
+<ul>
+<li>这是依赖关系图，不代表每次 STORE 都会让调度器同步等待。请求完成和存储完成是两件事。</li>
+<li>拷贝真正完成后才发布到 L1，之前对读者不可见。</li>
+<li>只能保存引擎声明已经算完的有效 token 范围。尾部不满一个 chunk 的部分、Decode 阶段新增 KV 什么时候写回，取决于具体路径和策略。</li>
+</ul>
+
+<h2 id="5-热请求查找预取回填-gpu">5. 热请求：查找、预取、回填 GPU</h2>
+<p>缓存里有数据时：查找触发预取，数据从 L2 先搬进 L1，再在 RETRIEVE 时拷贝到 GPU，最后引擎只计算没覆盖的部分。</p>
 <figure class="diagram" data-status="pending"><div class="mermaid-target" aria-label="设计图"></div><details open><summary>查看图源</summary><pre class="mermaid-source"><code>sequenceDiagram
   participant S as Scheduler
   participant M as LookupModule
@@ -228,11 +233,11 @@ MP 也有 engine-driven transfer，图中的跨进程传输并不限定由 serve
   W-&gt;&gt;M: RETRIEVE
   M-&gt;&gt;W: L1 到 GPU；发出完成事件
   W-&gt;&gt;W: 等待数据依赖后执行剩余计算
-  M-&gt;&gt;L: 读完成后释放；清理未使用的尾锁</code></pre></details></figure><p>关键区别是 <strong>lookup ack、预取完成、GPU 可读</strong> 三个时刻。多 server 的命中聚合
-在本基线采用共同可用前缀，不能取“最快 server 的最长结果”。</p>
-</section>
-<section id="l1">
-<h2 id="heading-l1-对象状态与生命周期">L1 对象状态与生命周期</h2>
+  M-&gt;&gt;L: 读完成后释放；清理未使用的尾锁</code></pre></details></figure>
+<p>要分清三个时刻：<strong>lookup 回执</strong>（只是登记）、<strong>预取完成</strong>（数据已在 L1 且被保护）、<strong>GPU 可读</strong>（拷贝事件完成）。有多个 server 时，学习版本取大家共同可用的前缀，而不是“最快那个 server 的最长结果”。</p>
+
+<h2 id="6-l1-对象的状态变化">6. L1 对象的状态变化</h2>
+<p>一个 L1 对象从无到有、被读、被回收的过程：</p>
 <figure class="diagram" data-status="pending"><div class="mermaid-target" aria-label="设计图"></div><details open><summary>查看图源</summary><pre class="mermaid-source"><code>stateDiagram-v2
   [*] --&gt; Absent
   Absent --&gt; Staging: reserve_write(key, tag)
@@ -244,13 +249,16 @@ MP 也有 engine-driven transfer，图中的跨进程传输并不限定由 serve
   Reading --&gt; Resident: finish_read（仍有副本）
   Reading --&gt; Absent: 最后读者结束且对象为 temporary
   Resident --&gt; Absent: 无锁时淘汰或删除
-  Discarded --&gt; Absent: 释放此 staging，其他 resident 不受影响</code></pre></details></figure><p>图中 staging 是 writer 的私有对象，resident 是同 key 的公共对象；
-“Discarded→Absent”只描述被丢弃的 staging 生命周期。多个 writer tag
-可以同时拥有同 key 的 staging；不应把这幅简图理解为整个 key 的单一互斥状态机。
-锁过期也不等于 GPU/DMA 自动停止，设备操作的完成与内存回收必须另行协调。</p>
-</section>
-<section id="lmcache-mooncake">
-<h2 id="heading-lmcache-与-mooncake-组合">LMCache 与 Mooncake 组合</h2>
+  Discarded --&gt; Absent: 释放此 staging，其他 resident 不受影响</code></pre></details></figure>
+<p>读图时注意三点：</p>
+<ul>
+<li>staging 是某个写者私有的，resident 是同一个 key 对所有人公开的那一份。同一个 key 可以同时有多个写者的 staging，这张简图不是“整个 key 只有一个状态”的互斥状态机。</li>
+<li>“Discarded → Absent”只是被丢弃的那份 staging 被释放，已经发布的 resident 不受影响。</li>
+<li>写锁过期不等于 GPU 或 DMA 操作自动停止；设备操作结束和内存回收要另外协调。</li>
+</ul>
+
+<h2 id="7-lmcache-与-mooncake-组合">7. LMCache 与 Mooncake 组合</h2>
+<p>LMCache 通过 native L2 adapter 内嵌一个 Mooncake Client：控制信息找 Master（分配、副本位置、租约），数据通过 Transfer Engine 直接和远端 segment 传输。</p>
 <figure class="diagram" data-status="pending"><div class="mermaid-target" aria-label="设计图"></div><details open><summary>查看图源</summary><pre class="mermaid-source"><code>flowchart LR
   G[&quot;推理 GPU&quot;] &lt;--&gt;|&quot;D2H / H2D&quot;| L[&quot;LMCache L1 buffer&quot;]
   L &lt;--&gt; A[&quot;Mooncake native L2 adapter&quot;]
@@ -261,13 +269,11 @@ MP 也有 engine-driven transfer，图中的跨进程传输并不限定由 serve
   RT &lt;--&gt; R[&quot;已注册的远端 segment&quot;]
   T -.-&gt; MS[&quot;segment / endpoint metadata&quot;]
   RT -.-&gt; MS
-  M -.-&gt; R</code></pre></details></figure><p>Master 管对象位置与生命周期；Transfer Engine metadata 管 segment、
-buffer 和 endpoint 信息，两者不是同一层元数据。
-本图展示常见的主机 L1 路径，不承诺该 adapter 自动执行 GPU 到远端 GPU 的
-GPUDirect RDMA，也不把控制 RPC 画成大对象传输路径。</p>
-</section>
-<section id="p-d">
-<h2 id="heading-pd-分离与跨请求复用">P/D 分离与跨请求复用</h2>
+  M -.-&gt; R</code></pre></details></figure>
+<p>两类元数据别混：Master 管“对象在哪、能不能读、何时回收”；Transfer Engine 的元数据管“segment、buffer 和网络端点怎么访问”。这张图画的是常见的主机 L1 路径，并不表示这个 adapter 会自动做 GPU 直连远端 GPU 的 GPUDirect RDMA，控制 RPC 也不传大块数据。完整的保存与恢复步骤见<a href="../../../04-storage/implementations/lmcache/mooncake-walkthrough.html">联合链路</a>。</p>
+
+<h2 id="8-pd-分离与跨请求复用">8. PD 分离与跨请求复用</h2>
+<p>这是两件不同的事：PD 分离让 Prefill 和 Decode 分开扩缩容、互不干扰；跨请求复用让后来的请求少算重复的 Prefill。两者可以组合。</p>
 <figure class="diagram" data-status="pending"><div class="mermaid-target" aria-label="设计图"></div><details open><summary>查看图源</summary><pre class="mermaid-source"><code>flowchart TB
   R[&quot;Router&quot;] --&gt; P[&quot;Prefill engine&quot;]
   R --&gt; D[&quot;Decode engine&quot;]
@@ -275,12 +281,11 @@ GPUDirect RDMA，也不把控制 RPC 画成大对象传输路径。</p>
   P &lt;--&gt; LP[&quot;Prefill 的 LMCache server&quot;]
   D &lt;--&gt; LD[&quot;Decode 的 LMCache server&quot;]
   LP &lt;--&gt; SH[&quot;可选共享存储 / P2P&quot;]
-  LD &lt;--&gt; SH</code></pre></details></figure><p>P/D 分离解决阶段独立扩缩与干扰；跨请求缓存解决重复 prefill。
-当前仓库的 MP P/D recipe 使用 <span class="docutils literal">MultiConnector</span> 组合 NIXL 与 LMCache，
-并要求两个引擎各自配套 server；它不是“把 Mooncake Store 开关打开就自动完成 P/D”。</p>
-</section>
-<section id="section-5">
-<h2 id="heading-性能分析因果链">性能分析因果链</h2>
+  LD &lt;--&gt; SH</code></pre></details></figure>
+<p>学习版本仓库里的 MP PD 示例用 <code>MultiConnector</code> 同时接 NIXL（负责本次请求的 KV 交接）和 LMCache（负责跨请求复用），并且两个引擎各配一个 LMCache server。它不是“打开 Mooncake Store 开关就自动有了 PD 分离”。</p>
+
+<h2 id="9-性能分析因果链">9. 性能分析因果链</h2>
+<p>命中更多，一方面少做了 Prefill，另一方面多了查询、网络和 H2D，还可能带来排队、内存和锁的竞争。最终 TTFT、goodput 和 Decode 的 ITL 是变好还是变差，取决于这两方面谁更大。</p>
 <figure class="diagram" data-status="pending"><div class="mermaid-target" aria-label="设计图"></div><details open><summary>查看图源</summary><pre class="mermaid-source"><code>flowchart LR
   H[&quot;更多缓存命中&quot;] --&gt; S[&quot;少做重复 prefill&quot;]
   H --&gt; IO[&quot;更多查询 / 网络 / H2D&quot;]
@@ -290,12 +295,12 @@ GPUDirect RDMA，也不把控制 RPC 画成大对象传输路径。</p>
   Q --&gt; T
   Q --&gt; D[&quot;Decode ITL&quot;]
   POL[&quot;准入 / 路由 / chunk / 背压&quot;] --&gt; H
-  POL --&gt; Q</code></pre></details></figure><p>所以命中率只描述复用机会，不能单独证明性能收益。</p>
-</section>
+  POL --&gt; Q</code></pre></details></figure>
+<p>所以命中率只说明“有多少复用机会”，不能单独证明性能变好。可以用<a href="../../../01-foundations/interactive.html#加载还是重算">互动盈亏计算器</a>体会这个取舍。</p>
 </article>
 <footer><a href="../../../index.html">返回总目录</a>
 <p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
-<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#heading-全景知识地图">全景知识地图</a><a class="level-2" href="#heading-mp-架构谁决定谁执行谁存储">MP 架构：谁决定、谁执行、谁存储</a><a class="level-2" href="#heading-进程内模式对照">进程内模式对照</a><a class="level-2" href="#heading-冷请求计算后存储">冷请求：计算后存储</a><a class="level-2" href="#heading-热请求l1l2-查找预取回填-gpu">热请求：L1/L2 查找、预取、回填 GPU</a><a class="level-2" href="#heading-l1-对象状态与生命周期">L1 对象状态与生命周期</a><a class="level-2" href="#heading-lmcache-与-mooncake-组合">LMCache 与 Mooncake 组合</a><a class="level-2" href="#heading-pd-分离与跨请求复用">P/D 分离与跨请求复用</a><a class="level-2" href="#heading-性能分析因果链">性能分析因果链</a></aside>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-全景知识地图">1. 全景知识地图</a><a class="level-2" href="#2-mp-架构谁决定谁执行谁存储">2. MP 架构：谁决定、谁执行、谁存储</a><a class="level-2" href="#3-进程内模式对照">3. 进程内模式对照</a><a class="level-2" href="#4-冷请求先算再存">4. 冷请求：先算再存</a><a class="level-2" href="#5-热请求查找预取回填-gpu">5. 热请求：查找、预取、回填 GPU</a><a class="level-2" href="#6-l1-对象的状态变化">6. L1 对象的状态变化</a><a class="level-2" href="#7-lmcache-与-mooncake-组合">7. LMCache 与 Mooncake 组合</a><a class="level-2" href="#8-pd-分离与跨请求复用">8. PD 分离与跨请求复用</a><a class="level-2" href="#9-性能分析因果链">9. 性能分析因果链</a></aside>
 <dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
 <button id="search-close" aria-label="关闭搜索">关闭</button></div>
 <input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">

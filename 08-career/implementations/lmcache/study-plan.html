@@ -103,220 +103,192 @@
 <main id="content"><div class="breadcrumbs">08 专家能力与面试 · 专注 KV Cache 存储</div>
 <article><h1 id="page-title">LMCache 专项：28 天计划</h1>
 <div class="note"><p><strong>白话导读</strong>：LMCache 单项目的 28 天深读计划，每周一个主题。</p><ul><li>优先执行<a href="../../study-plan.html">全库统一计划</a>，本计划只在需要深挖 LMCache 时使用。</li><li>四周依次是：推理与缓存语义 → 源码主线 → 存储与性能 → 高级主题与面试。</li></ul><p>时间不够时看文末的裁剪建议。</p></div>
-<p>这是 LMCache 单项目深读计划。跨项目学习优先执行
-<a class="reference external" href="../../study-plan.html">全库统一计划</a>，
-本表用于补充缓存管理与后端集成专项任务。</p>
-<p>每天约 2 小时，周末每天约 3.5 小时，四周共约 68 小时。每天分配为概念学习
-30%、源码或实验 50%、复述与记录 20%。先保证 P0 的闭环，不以读完全部文件为目标。
-本计划共 28 天，不额外要求预备周。</p>
-<section id="section-2">
-<h2 id="heading-第一周推理容量与缓存语义">第一周：推理、容量与缓存语义</h2>
-<p>阅读 <a class="reference external" href="../../../03-kv-cache/semantics-and-costs.html">公共基础</a> 与 <a class="reference external" href="../../../03-kv-cache/implementations/lmcache/state-diagrams.html">知识地图</a>。</p>
+<p>这是只学 LMCache 时用的计划。同时学几个项目时，以<a href="../../study-plan.html">全库统一计划</a>为主，这张表用来补充缓存管理和后端集成的专项任务。</p>
+<p><strong>时间安排</strong>：工作日每天约 2 小时，周末每天约 3.5 小时，四周共约 68 小时。每天大致三成时间学概念、五成读源码或做实验、两成复述和记笔记。目标是把 P0 内容学成闭环，而不是读完所有文件。</p>
+
+<h2 id="1-第一周推理容量与缓存语义">第一周：推理、容量与缓存语义</h2>
+<p>主读 <a href="../../../03-kv-cache/semantics-and-costs.html">KV 原理</a> 和 <a href="../../../03-kv-cache/implementations/lmcache/state-diagrams.html">知识地图与时序图</a>。</p>
 <div class="table-scroll"><table>
-<colgroup>
-<col style="width: 8%" />
-<col style="width: 42%" />
-<col style="width: 50%" />
-</colgroup>
 <thead>
-<tr><th class="head"><p>日期</p></th>
-<th class="head"><p>学习与动作</p></th>
-<th class="head"><p>当日产物/验收</p></th>
+<tr><th>天</th>
+<th>学什么、做什么</th>
+<th>当天交付</th>
 </tr>
 </thead>
 <tbody>
-<tr><td><p>D1</p></td>
-<td><p>建立版本记录；读总览；画 Prefill→Decode</p></td>
-<td><p>用 3 分钟解释 LMCache 解决的重复计算问题</p></td>
+<tr><td>D1</td>
+<td>建立版本记录；读总览；画 Prefill→Decode</td>
+<td>用 3 分钟解释 LMCache 解决的重复计算问题</td>
 </tr>
-<tr><td><p>D2</p></td>
-<td><p>从 attention 方程推导 K/V 的作用；比较 MHA、GQA、MQA</p></td>
-<td><p>手算 32 层、8 KV heads、8K 上下文的容量</p></td>
+<tr><td>D2</td>
+<td>从 attention 方程推导 K/V 的作用；比较 MHA、GQA、MQA</td>
+<td>手算 32 层、8 KV heads、8K 上下文的容量</td>
 </tr>
-<tr><td><p>D3</p></td>
-<td><p>学习 PagedAttention、APC、逻辑块与物理块</p></td>
-<td><p>画两个请求共享前缀、独占尾块的示意图</p></td>
+<tr><td>D3</td>
+<td>学习 PagedAttention、APC、逻辑块与物理块</td>
+<td>画两个请求共享前缀、独占尾块的示意图</td>
 </tr>
-<tr><td><p>D4</p></td>
-<td><p>分析 token、模型、位置和上下文依赖；运行离线哈希练习</p></td>
-<td><p>证明相同后缀不等于相同 KV；列出 key 隔离维度</p></td>
+<tr><td>D4</td>
+<td>分析 token、模型、位置和上下文依赖；运行离线哈希练习</td>
+<td>证明相同后缀不等于相同 KV；列出 key 隔离维度</td>
 </tr>
-<tr><td><p>D5</p></td>
-<td><p>学习 chunk 与 block；比较不同 chunk 大小</p></td>
-<td><p>算 255/256/257 tokens 在 chunk=256 下的完整块数</p></td>
+<tr><td>D5</td>
+<td>学习 chunk 与 block；比较不同 chunk 大小</td>
+<td>算 255/256/257 tokens 在 chunk=256 下的完整块数</td>
 </tr>
-<tr><td><p>D6</p></td>
-<td><p>阅读 MP quickstart、兼容性文档；有 GPU 者完成最小请求</p></td>
-<td><p>环境清单与日志；无 GPU 者完成容量及带宽计算脚本</p></td>
+<tr><td>D6</td>
+<td>阅读 MP quickstart、兼容性文档；有 GPU 者完成最小请求</td>
+<td>环境清单与日志；无 GPU 者完成容量及带宽计算脚本</td>
 </tr>
-<tr><td><p>D7</p></td>
-<td><p>做 Q1–Q12；闭卷复画知识地图</p></td>
-<td><p>一页基础笔记，列出仍不能解释的三个问题</p></td>
+<tr><td>D7</td>
+<td>做 Q1–Q12；闭卷复画知识地图</td>
+<td>一页基础笔记，列出仍不能解释的三个问题</td>
 </tr>
 </tbody>
 </table></div>
-</section>
-<section id="lmcache">
-<h2 id="heading-第二周lmcache-源码主线">第二周：LMCache 源码主线</h2>
-<p>阅读 <a class="reference external" href="../../../03-kv-cache/implementations/lmcache/internals.html">LMCache 内核</a>。按设计文档→公共接口→主调用→测试的顺序，
-不要从一个几千行文件的第一行机械读到底。</p>
+
+
+<h2 id="2-第二周lmcache-源码主线">第二周：LMCache 源码主线</h2>
+<p>主读<a href="../../../03-kv-cache/implementations/lmcache/internals.html">架构与源码主线</a>。顺序是：设计文档 → 公开接口 → 主要调用 → 测试。不要打开一个几千行的文件从第一行硬读到底。</p>
 <div class="table-scroll"><table>
-<colgroup>
-<col style="width: 8%" />
-<col style="width: 42%" />
-<col style="width: 50%" />
-</colgroup>
 <thead>
-<tr><th class="head"><p>日期</p></th>
-<th class="head"><p>学习与动作</p></th>
-<th class="head"><p>当日产物/验收</p></th>
+<tr><th>天</th>
+<th>学什么、做什么</th>
+<th>当天交付</th>
 </tr>
 </thead>
 <tbody>
-<tr><td><p>D8</p></td>
-<td><p>读 connector 与 scheduler/worker adapter</p></td>
-<td><p>标出调度器查命中与 worker 搬数据的边界</p></td>
+<tr><td>D8</td>
+<td>读 connector 与 scheduler/worker adapter</td>
+<td>标出调度器查命中与 worker 搬数据的边界</td>
 </tr>
-<tr><td><p>D9</p></td>
-<td><p>读 LookupState、LookupModule</p></td>
-<td><p>画 LOOKUP ack、查询完成、超时、尾锁释放时序</p></td>
+<tr><td>D9</td>
+<td>读 LookupState、LookupModule</td>
+<td>画 LOOKUP ack、查询完成、超时、尾锁释放时序</td>
 </tr>
-<tr><td><p>D10</p></td>
-<td><p>读 ObjectKey、GroupedObjectKeys、PrefetchTaskSpec</p></td>
-<td><p>手工画两 rank、两 group、三 chunk 的命中矩阵</p></td>
+<tr><td>D10</td>
+<td>读 ObjectKey、GroupedObjectKeys、PrefetchTaskSpec</td>
+<td>手工画两 rank、两 group、三 chunk 的命中矩阵</td>
 </tr>
-<tr><td><p>D11</p></td>
-<td><p>读 L1Manager staging/resident 契约与测试</p></td>
-<td><p>解释并发写同 key、读中淘汰、过期写的处理</p></td>
+<tr><td>D11</td>
+<td>读 L1Manager staging/resident 契约与测试</td>
+<td>解释并发写同 key、读中淘汰、过期写的处理</td>
 </tr>
-<tr><td><p>D12</p></td>
-<td><p>读 retrieve/store 与设备事件、内存所有权</p></td>
-<td><p>画 buffer 从申请到 DMA 完成再到释放的生命周期</p></td>
+<tr><td>D12</td>
+<td>读 retrieve/store 与设备事件、内存所有权</td>
+<td>画 buffer 从申请到 DMA 完成再到释放的生命周期</td>
 </tr>
-<tr><td><p>D13</p></td>
-<td><p>读 PrefetchController、StoreController、L2AdapterInterface</p></td>
-<td><p>解释 None/pending 与空 bitmap/miss 的区别</p></td>
+<tr><td>D13</td>
+<td>读 PrefetchController、StoreController、L2AdapterInterface</td>
+<td>解释 None/pending 与空 bitmap/miss 的区别</td>
 </tr>
-<tr><td><p>D14</p></td>
-<td><p>复盘冷缓存、L1 命中、L2 命中三条路径；做 Q13–Q25</p></td>
-<td><p>写 800 字源码导读，附符号与设计文档位置</p></td>
+<tr><td>D14</td>
+<td>复盘冷缓存、L1 命中、L2 命中三条路径；做 Q13–Q25</td>
+<td>写 800 字源码导读，附符号与设计文档位置</td>
 </tr>
 </tbody>
 </table></div>
-</section>
-<section id="mooncake">
-<h2 id="heading-第三周存储mooncake-与性能">第三周：存储、Mooncake 与性能</h2>
-<p>阅读 <a class="reference external" href="../../../04-storage/implementations/lmcache/backend-contracts.html">存储与 Mooncake</a>、<a class="reference external" href="../../../06-serving/implementations/lmcache/observability.html">性能与运维</a>；
-按 <a class="reference external" href="../../../07-practice/implementations/lmcache/labs.html">实验手册</a> 选择硬件允许的实验。</p>
+
+
+<h2 id="3-第三周存储mooncake-与性能">第三周：存储、Mooncake 与性能</h2>
+<p>主读<a href="../../../04-storage/implementations/lmcache/backend-contracts.html">存储后端契约</a>和<a href="../../../06-serving/implementations/lmcache/observability.html">优化与可观测</a>；按硬件条件从<a href="../../../07-practice/implementations/lmcache/labs.html">实验手册</a>里选做实验。</p>
 <div class="table-scroll"><table>
-<colgroup>
-<col style="width: 8%" />
-<col style="width: 42%" />
-<col style="width: 50%" />
-</colgroup>
 <thead>
-<tr><th class="head"><p>日期</p></th>
-<th class="head"><p>学习与动作</p></th>
-<th class="head"><p>当日产物/验收</p></th>
+<tr><th>天</th>
+<th>学什么、做什么</th>
+<th>当天交付</th>
 </tr>
 </thead>
 <tbody>
-<tr><td><p>D15</p></td>
-<td><p>比较 DRAM、SSD、对象存储、远端内存；学习准入与淘汰</p></td>
-<td><p>给三种 workload 选择 tier，并解释成本</p></td>
+<tr><td>D15</td>
+<td>比较 DRAM、SSD、对象存储、远端内存；学习准入与淘汰</td>
+<td>给三种 workload 选择 tier，并解释成本</td>
 </tr>
-<tr><td><p>D16</p></td>
-<td><p>读 Mooncake Store 架构、Put/Get、租约与副本</p></td>
-<td><p>画 Master 不经手 payload 的读写时序</p></td>
+<tr><td>D16</td>
+<td>读 Mooncake Store 架构、Put/Get、租约与副本</td>
+<td>画 Master 不经手 payload 的读写时序</td>
 </tr>
-<tr><td><p>D17</p></td>
-<td><p>学习 RDMA、MR、QP/CQ、NUMA、GPUDirect</p></td>
-<td><p>解释“提交成功、传输完成、对象可读”三个时刻</p></td>
+<tr><td>D17</td>
+<td>学习 RDMA、MR、QP/CQ、NUMA、GPUDirect</td>
+<td>解释“提交成功、传输完成、对象可读”三个时刻</td>
 </tr>
-<tr><td><p>D18</p></td>
-<td><p>阅读 LMCache Mooncake native adapter 配置/实现</p></td>
-<td><p>标出 L1 注册、配置转发、操作线程池边界</p></td>
+<tr><td>D18</td>
+<td>阅读 LMCache Mooncake native adapter 配置/实现</td>
+<td>标出 L1 注册、配置转发、操作线程池边界</td>
 </tr>
-<tr><td><p>D19</p></td>
-<td><p>设计并运行 APC 与 LMCache 归因对照</p></td>
-<td><p>冷/热状态清单；token 命中率与 TTFT 表</p></td>
+<tr><td>D19</td>
+<td>设计并运行 APC 与 LMCache 归因对照</td>
+<td>冷/热状态清单；token 命中率与 TTFT 表</td>
 </tr>
-<tr><td><p>D20</p></td>
-<td><p>改变 chunk、并发或共享前缀比例中的一个变量</p></td>
-<td><p>一张带原始记录的曲线；无硬件者提供敏感性分析</p></td>
+<tr><td>D20</td>
+<td>改变 chunk、并发或共享前缀比例中的一个变量</td>
+<td>一张带原始记录的曲线；无硬件者提供敏感性分析</td>
 </tr>
-<tr><td><p>D21</p></td>
-<td><p>做 Q26–Q40；分析命中高但变慢的案例</p></td>
-<td><p>5 分钟讲清读取与重算的盈亏条件</p></td>
+<tr><td>D21</td>
+<td>做 Q26–Q40；分析命中高但变慢的案例</td>
+<td>5 分钟讲清读取与重算的盈亏条件</td>
 </tr>
 </tbody>
 </table></div>
-</section>
-<section id="section-3">
-<h2 id="heading-第四周高级主题与面试交付">第四周：高级主题与面试交付</h2>
+
+
+<h2 id="4-第四周高级主题与面试交付">第四周：高级主题与面试交付</h2>
 <div class="table-scroll"><table>
-<colgroup>
-<col style="width: 8%" />
-<col style="width: 42%" />
-<col style="width: 50%" />
-</colgroup>
 <thead>
-<tr><th class="head"><p>日期</p></th>
-<th class="head"><p>学习与动作</p></th>
-<th class="head"><p>当日产物/验收</p></th>
+<tr><th>天</th>
+<th>学什么、做什么</th>
+<th>当天交付</th>
 </tr>
 </thead>
 <tbody>
-<tr><td><p>D22</p></td>
-<td><p>学习 P/D 分离、NIXL、MultiConnector</p></td>
-<td><p>分开画当前请求 KV 交接与跨请求复用</p></td>
+<tr><td>D22</td>
+<td>学习 P/D 分离、NIXL、MultiConnector</td>
+<td>分开画当前请求 KV 交接与跨请求复用</td>
 </tr>
-<tr><td><p>D23</p></td>
-<td><p>学习 CacheBlend、CacheGen/serde、量化与质量评估</p></td>
-<td><p>给出一个适用场景和一个不适用场景</p></td>
+<tr><td>D23</td>
+<td>学习 CacheBlend、CacheGen/serde、量化与质量评估</td>
+<td>给出一个适用场景和一个不适用场景</td>
 </tr>
-<tr><td><p>D24</p></td>
-<td><p>学习混合模型、MLA、滑窗、抢占恢复</p></td>
-<td><p>说明为什么总容量不能机械除以 TP</p></td>
+<tr><td>D24</td>
+<td>学习混合模型、MLA、滑窗、抢占恢复</td>
+<td>说明为什么总容量不能机械除以 TP</td>
 </tr>
-<tr><td><p>D25</p></td>
-<td><p>故障桌面演练：超时、节点退出、半写、取消、租户热点</p></td>
-<td><p>故障→检测→回退→资源释放的检查表</p></td>
+<tr><td>D25</td>
+<td>故障桌面演练：超时、节点退出、半写、取消、租户热点</td>
+<td>故障→检测→回退→资源释放的检查表</td>
 </tr>
-<tr><td><p>D26</p></td>
-<td><p>完成系统设计题，预算容量、流量、元数据与冗余</p></td>
-<td><p>2–4 页方案和架构图</p></td>
+<tr><td>D26</td>
+<td>完成系统设计题，预算容量、流量、元数据与冗余</td>
+<td>2–4 页方案和架构图</td>
 </tr>
-<tr><td><p>D27</p></td>
-<td><p>45 分钟模拟面试：基础 10 分钟、源码 10 分钟、设计 25 分钟</p></td>
-<td><p>对每个回答标注“有证据/需验证/不知道”</p></td>
+<tr><td>D27</td>
+<td>45 分钟模拟面试：基础 10 分钟、源码 10 分钟、设计 25 分钟</td>
+<td>对每个回答标注“有证据/需验证/不知道”</td>
 </tr>
-<tr><td><p>D28</p></td>
-<td><p>修正薄弱点；整理实验、源码导航和面试速记</p></td>
-<td><p>完成下述毕业验收，并保留可复现命令</p></td>
+<tr><td>D28</td>
+<td>修正薄弱点；整理实验、源码导航和面试速记</td>
+<td>完成下述毕业验收，并保留可复现命令</td>
 </tr>
 </tbody>
 </table></div>
-</section>
-<section id="section-4">
-<h2 id="heading-毕业验收与时间调整">毕业验收与时间调整</h2>
-<p>每项按 0/1/2 评分：0=讲不清；1=能解释；2=有计算、源码或实验支撑。</p>
-<ol class="arabic simple">
-<li><p>正确计算 KV 容量，并解释 GQA、TP、MLA 的适用条件。</p></li>
-<li><p>画出 MP 冷写、热读、L2 预取与完成事件。</p></li>
-<li><p>解释 key、layout、跨 rank 完整性和取消后的资源释放。</p></li>
-<li><p>画出 LMCache + Mooncake 的控制与数据路径。</p></li>
-<li><p>用测量或带假设的模型判断何时重算更划算。</p></li>
-<li><p>设计容量、带宽、SLO、隔离和故障回退，并回答追问。</p></li>
+
+
+<h2 id="5-毕业验收与时间调整">毕业验收与时间调整</h2>
+<p>下面六项各按 0、1、2 打分：0 = 讲不清；1 = 能解释；2 = 有计算、源码或实验作依据。</p>
+<ol>
+<li>正确计算 KV 容量，并解释 GQA、TP、MLA 的适用条件。</li>
+<li>画出 MP 冷写、热读、L2 预取与完成事件。</li>
+<li>解释 key、layout、跨 rank 完整性和取消后的资源释放。</li>
+<li>画出 LMCache + Mooncake 的控制与数据路径。</li>
+<li>用测量或带假设的模型判断何时重算更划算。</li>
+<li>设计容量、带宽、SLO、隔离和故障回退，并回答追问。</li>
 </ol>
-<p>达到 10/12 且没有 0 分，说明已具备初步岗位讨论能力；这不是生产经验的替代。
-每天只有 1 小时时，保留 D1–D21 的 P0 内容和 D26–D28，压缩 P1/P2 深挖，
-仍在 28 天内完成。已有分布式存储经验者把基础时间转移到 KV 语义、设备同步和引擎集成。</p>
-</section>
+<p>总分达到 10 分（满分 12）且没有 0 分，说明已经能和面试官深入讨论这个方向；但这替代不了生产经验。</p>
+<p><strong>时间不够时</strong>：每天只有 1 小时，就保留 D1–D21 的 P0 内容和 D26–D28，压缩 P1/P2 的深挖，仍在 28 天内完成。已经有分布式存储经验的，把基础部分的时间挪给 KV 语义、设备同步和引擎集成。</p>
 </article>
 <footer><a href="../../../index.html">返回总目录</a>
 <p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
-<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#heading-第一周推理容量与缓存语义">第一周：推理、容量与缓存语义</a><a class="level-2" href="#heading-第二周lmcache-源码主线">第二周：LMCache 源码主线</a><a class="level-2" href="#heading-第三周存储mooncake-与性能">第三周：存储、Mooncake 与性能</a><a class="level-2" href="#heading-第四周高级主题与面试交付">第四周：高级主题与面试交付</a><a class="level-2" href="#heading-毕业验收与时间调整">毕业验收与时间调整</a></aside>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-第一周推理容量与缓存语义">第一周：推理、容量与缓存语义</a><a class="level-2" href="#2-第二周lmcache-源码主线">第二周：LMCache 源码主线</a><a class="level-2" href="#3-第三周存储mooncake-与性能">第三周：存储、Mooncake 与性能</a><a class="level-2" href="#4-第四周高级主题与面试交付">第四周：高级主题与面试交付</a><a class="level-2" href="#5-毕业验收与时间调整">毕业验收与时间调整</a></aside>
 <dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
 <button id="search-close" aria-label="关闭搜索">关闭</button></div>
 <input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">

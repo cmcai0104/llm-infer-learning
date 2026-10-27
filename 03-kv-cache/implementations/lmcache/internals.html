@@ -103,227 +103,139 @@
 <main id="content"><div class="breadcrumbs">03 KV Cache 管理 · 专注 KV Cache 存储</div>
 <article><h1 id="page-title">LMCache：架构与源码主线</h1>
 <div class="note"><p><strong>白话导读</strong>：沿源码走一遍 LMCache MP 模式：引擎怎样通过 Connector 查找、加载、保存 KV，L1 和 L2 各管什么。</p><ul><li>lookup 的回执只说明“任务已登记”，最终命中数要等结果出来，多个 server 取共同最短前缀。</li><li>L1 写入先进入对外不可见的 staging，数据填完再发布，读者永远看不到半成品。</li><li>L2 adapter 是“提交 → 通知 → 取结果”的异步接口，接口叫 lock，不代表后端一定提供了强锁。</li></ul><p>先读<a href="overview.html">LMCache 概览</a>和<a href="state-diagrams.html">时序图</a>，再带着“谁持有数据、谁宣布完成、谁负责释放”读本篇。</p></div>
-<section id="section-1">
-<h2 id="heading-先建立阅读边界">先建立阅读边界</h2>
-<p>本章描述学习基线的 MP 模式。先读 <span class="docutils literal">docs/design/</span> 中与模块路径对应的文档，
-再读实现与测试。每条路径都追问三个问题：谁持有数据、谁宣布完成、谁负责释放。
-运行图见 <a class="reference external" href="state-diagrams.html">知识地图</a>。</p>
-<p>直接可看的静态架构与运行图，以及 Mooncake 接入的逐步说明，见
-<a class="reference external" href="../../../04-storage/implementations/lmcache/mooncake-walkthrough.html">联合链路</a>。
-其中专门区分 native adapter 本地锁计数、Store 读租约和设备完成的保证范围。</p>
+<h2 id="1-读之前先定好三个问题">1. 读之前先定好三个问题</h2>
+<p>本篇只讲学习版本里的 MP 模式（LMCache 作为独立进程运行）。读每一条代码路径时，都只追问三件事：</p>
+<ol>
+<li><strong>数据现在归谁管？</strong>（谁持有这块内存）</li>
+<li><strong>谁宣布“完成了”？</strong>（什么事件之后别人才能用）</li>
+<li><strong>谁负责释放？</strong>（什么时候能回收）</li>
+</ol>
+<p>答得上这三个问题，才算读懂了一段路径。读法建议：先看 <code>docs/design/</code> 下与模块同路径的设计文档，再看实现，最后看测试。图形化的流程见<a href="state-diagrams.html">知识地图与时序图</a>；LMCache 接 Mooncake 的完整链路见<a href="../../../04-storage/implementations/lmcache/mooncake-walkthrough.html">联合链路</a>。</p>
+<p>下面这张表是源码入口，路径相对 LMCache 仓库根目录：</p>
 <div class="table-scroll"><table>
-<colgroup>
-<col style="width: 23%" />
-<col style="width: 43%" />
-<col style="width: 34%" />
-</colgroup>
-<thead>
-<tr><th class="head"><p>层</p></th>
-<th class="head"><p>源码入口（相对仓库根目录）</p></th>
-<th class="head"><p>阅读目标</p></th>
-</tr>
-</thead>
+<thead><tr><th>层</th><th>源码入口</th><th>读它要回答什么</th></tr></thead>
 <tbody>
-<tr><td><p>引擎集成</p></td>
-<td><p><span class="docutils literal">lmcache/integration/vllm/lmcache_mp_connector.py</span></p></td>
-<td><p>vLLM callback 如何委派给 adapter</p></td>
-</tr>
-<tr><td><p>调度与 worker</p></td>
-<td><p><span class="docutils literal">lmcache/integration/vllm/vllm_multi_process_adapter.py</span></p></td>
-<td><p>命中计划、block 分配、加载和存储完成</p></td>
-</tr>
-<tr><td><p>查找状态</p></td>
-<td><p><span class="docutils literal">lmcache/integration/vllm/mp_lookup_state.py</span></p></td>
-<td><p>callback、deadline、多 server 聚合与清理</p></td>
-</tr>
-<tr><td><p>server 组合</p></td>
-<td><p><span class="docutils literal">lmcache/v1/multiprocess/server.py</span></p></td>
-<td><p>module、服务与存储管理器的装配</p></td>
-</tr>
-<tr><td><p>查找/预取</p></td>
-<td><p><span class="docutils literal">lmcache/v1/multiprocess/modules/lookup.py</span></p></td>
-<td><p>lookup 与消费一次的预取结果</p></td>
-</tr>
-<tr><td><p>设备传输</p></td>
-<td><p><span class="docutils literal">lmcache/v1/multiprocess/modules/lmcache_driven_transfer.py</span></p></td>
-<td><p>STORE/RETRIEVE、事件依赖与对象生命周期</p></td>
-</tr>
-<tr><td><p>存储协议</p></td>
-<td><p><span class="docutils literal">lmcache/v1/distributed/api.py</span></p></td>
-<td><p>ObjectKey、分组 key、内存布局与预取类型</p></td>
-</tr>
-<tr><td><p>L1</p></td>
-<td><p><span class="docutils literal">lmcache/v1/distributed/l1_manager.py</span></p></td>
-<td><p>staging、resident、读写保留与淘汰约束</p></td>
-</tr>
-<tr><td><p>跨层控制</p></td>
-<td><p><span class="docutils literal">lmcache/v1/distributed/storage_manager.py</span></p></td>
-<td><p>组合 L1、controller、adapter 的公共入口</p></td>
-</tr>
-<tr><td><p>L2 扩展</p></td>
-<td><p><span class="docutils literal">lmcache/v1/distributed/l2_adapters/base.py</span></p></td>
-<td><p>异步提交、通知、结果和解锁契约</p></td>
-</tr>
-</tbody>
-</table></div>
-</section>
-<section id="connector-put-get">
-<h2 id="heading-connector-不只是-putget-包装">Connector 不只是 put/get 包装</h2>
-<p>调度器需要知道多少输入可以跳过计算，worker 需要知道加载到哪些物理 GPU block，
-两者之间需要传递元数据。Connector 把这些引擎语义转成缓存请求，
-同时处理引擎结束请求、抢占、APC 已覆盖的 token 和异步存储。</p>
-<p>因此一个“支持 KV 缓存的后端”不等于“已经接好推理引擎”。
-后端即使能正确保存 bytes，若 connector 错误标记 computed tokens、
-把数据搬到旧 block，或提前释放 page，仍会产生模型错误。</p>
-<p>建议先在 <span class="docutils literal">lmcache_mp_connector.py</span> 找
-<span class="docutils literal">get_num_new_matched_tokens</span>、<span class="docutils literal">start_load_kv</span>、<span class="docutils literal">wait_for_save</span>、
-<span class="docutils literal">get_finished</span> 等 callback，再沿委派进入 adapter。
-名字和 vLLM 版本有关；学习目标是掌握调度与数据完成的关系。</p>
-</section>
-<section id="lookup">
-<h2 id="heading-一次-lookup-的精确含义">一次 lookup 的精确含义</h2>
-<p><span class="docutils literal">LookupState</span> 管理每个 server 的 LOOKUP 与 QUERY_PREFETCH_STATUS：</p>
-<ol class="arabic simple">
-<li><p>发送 LOOKUP。server 接受任务的 ack 只是确认查找/预取任务已登记。</p></li>
-<li><p>等该 server 自己的 ack 后再查状态，避免查询先于登记、被当成不存在的任务。</p></li>
-<li><p>返回 <span class="docutils literal">None</span> 表示还没完成；返回整数表示最终命中 chunk 数。</p></li>
-<li><p>在本基线的多 server 聚合中，取共同的最短命中前缀，
-并释放其他 server 多出来、最终不会 retrieve 的尾部锁。</p></li>
-<li><p>已确定的结果不再被迟到响应改写；超时和结束请求必须有清理路径。</p></li>
+<tr><td>引擎集成</td><td><code>lmcache/integration/vllm/lmcache_mp_connector.py</code></td><td>vLLM 的回调怎样转交给 adapter</td></tr>
+<tr><td>调度与 worker</td><td><code>lmcache/integration/vllm/vllm_multi_process_adapter.py</code></td><td>命中计划、block 分配、加载与保存何时完成</td></tr>
+<tr><td>查找状态</td><td><code>lmcache/integration/vllm/mp_lookup_state.py</code></td><td>回调、超时、多个 server 的结果怎样合并与清理</td></tr>
+<tr><td>server 装配</td><td><code>lmcache/v1/multiprocess/server.py</code></td><td>各模块、服务和存储管理器怎样组装起来</td></tr>
+<tr><td>查找与预取</td><td><code>lmcache/v1/multiprocess/modules/lookup.py</code></td><td>lookup 怎样触发预取，结果为什么只能取一次</td></tr>
+<tr><td>设备传输</td><td><code>lmcache/v1/multiprocess/modules/lmcache_driven_transfer.py</code></td><td>STORE/RETRIEVE 怎样等待设备事件、管理对象寿命</td></tr>
+<tr><td>存储协议</td><td><code>lmcache/v1/distributed/api.py</code></td><td>ObjectKey、分组 key、内存布局和预取类型的定义</td></tr>
+<tr><td>L1</td><td><code>lmcache/v1/distributed/l1_manager.py</code></td><td>staging、resident、读写保留和淘汰限制</td></tr>
+<tr><td>跨层控制</td><td><code>lmcache/v1/distributed/storage_manager.py</code></td><td>把 L1、各 controller 和 adapter 组合起来的统一入口</td></tr>
+<tr><td>L2 扩展</td><td><code>lmcache/v1/distributed/l2_adapters/base.py</code></td><td>异步提交、完成通知、取结果和解锁的接口约定</td></tr>
+</tbody></table></div>
+
+<h2 id="2-connector-不是简单的-putget">2. Connector 不是简单的 put/get</h2>
+<p><strong>结论</strong>：能正确存取字节的后端，不等于已经接好了推理引擎。中间的 Connector 负责把“引擎语义”翻译成“缓存请求”，这一层出错同样会导致模型输出错误。</p>
+<p>原因是引擎的两部分需要不同的信息：调度器要知道“有多少输入可以不算”，worker 要知道“数据该搬进哪些物理 GPU block”。Connector 在两者之间传递这些信息，同时还要处理请求结束、抢占、引擎自带前缀缓存（APC）已经覆盖的 token，以及异步保存。</p>
+<p>举三个即使后端完全正确也会出错的例子：Connector 把已计算 token 数标错；把数据搬进了已经被别的请求复用的旧 block；在保存完成前提前释放了 page。</p>
+<p><strong>怎么读</strong>：在 <code>lmcache_mp_connector.py</code> 里先找 <code>get_num_new_matched_tokens</code>、<code>start_load_kv</code>、<code>wait_for_save</code>、<code>get_finished</code> 这几个回调，再顺着调用进入 adapter。函数名会随 vLLM 版本变化，要抓住的是“调度决定”和“数据完成”之间的关系。</p>
+
+<h2 id="3-一次-lookup-到底返回了什么">3. 一次 lookup 到底返回了什么</h2>
+<p><strong>结论</strong>：lookup 的回执（ack）只表示“任务已经登记”，不是命中结果。最终命中多少 chunk，要单独查询。</p>
+<p><code>LookupState</code> 对每个 server 管理两类消息：LOOKUP 和 QUERY_PREFETCH_STATUS。顺序是：</p>
+<ol>
+<li>发送 LOOKUP，server 回 ack，表示查找/预取任务登记好了。</li>
+<li>收到这个 server 的 ack 之后才去查状态。否则可能查询比登记先到，被当成“没有这个任务”。</li>
+<li>查询返回 <code>None</code> 表示还没完成；返回整数表示最终命中的 chunk 数。</li>
+<li>有多个 server 时（学习版本的做法），取大家都命中的最短前缀；其他 server 多命中的尾部用不上，要把它们的锁释放掉。</li>
+<li>结果一旦确定，就不能被迟到的响应改掉；超时和请求结束都要有清理路径。</li>
 </ol>
-<p>当前实现用 future callback 减少 scheduler step 间的等待，
-但仍限制状态查询频率，避免“返回 pending→马上再查”的 RPC 忙循环。
-查询结果有消费语义，重复查询不一定幂等；复用 request id 也必须遵守会话生命周期。</p>
-<p>设计依据：<span class="docutils literal">docs/design/integration/vllm/mp_lookup_state.md</span>。
-该文档还记录了 mid-lookup abort 等已知边界；不要把目标契约说成所有路径已经完美覆盖。</p>
-</section>
-<section id="keychunk-group">
-<h2 id="heading-keychunk-与-group">key、chunk 与 group</h2>
-<p>本基线 <span class="docutils literal">ObjectKey</span> 明确包含：</p>
-<pre class="code text literal-block"><code>chunk_hash: bytes
-model_name: str
-kv_rank: int
-object_group_id: int = 0
-cache_salt: str = &quot;&quot;</code></pre>
-<p><span class="docutils literal">chunk_hash</span> 来自内容/前缀身份；<span class="docutils literal">kv_rank</span> 区分物理 KV 分片；
-<span class="docutils literal">object_group_id</span> 区分同一 chunk 的不同对象组；
-<span class="docutils literal">cache_salt</span> 支持命名隔离。模型修订号、dtype、LoRA 身份等是否由调用方
-正确编码或限制，必须沿实际输入链检查，不能只看字段名就假定兼容。</p>
-<p><span class="docutils literal">TokenHasher</span> 在 <span class="docutils literal">lmcache/v1/multiprocess/token_hasher.py</span>；
-本基线构造函数默认 <span class="docutils literal">blake3</span>，也有与 vLLM hash 接口兼容的路径。
-不同语言、进程和部署必须统一算法、seed、输入编码和 namespace。</p>
-<p>一个 hybrid chunk 可对应多个 object group 和 KV rank。
-<span class="docutils literal">GroupedObjectKeys</span> 把命中信息组织成行列矩阵：</p>
-<pre class="code text literal-block"><code>                chunk 0  chunk 1  chunk 2
-full group/r0      1        1        1
-full group/r1      1        0        1
-another group/r0   1        1        1
-another group/r1   1        1        1</code></pre>
-<p>若都按普通 full-attention 前缀要求解释，只能安全复用 chunk 0。
-不能把所有 1 相加当作可跳过的 token，也不能跨过 chunk 1 的缺口。
-滑窗 group 使用窗口语义，递归状态需要兼容的状态快照，不能机械沿用这个简化 AND。
-相关类型在 <span class="docutils literal">api.py</span>，策略在 bitmap 与 prefetch policy 实现。</p>
-</section>
-<section id="l1-staging">
-<h2 id="heading-l1-写入先-staging再发布">L1 写入：先 staging，再发布</h2>
-<p><span class="docutils literal">reserve_write(key, tag)</span> 为新数据预留 staging。staging 对读者不可见，
-直到真正完成数据填充并调用 finish 接口才进行 admission。
-这防止 lookup 看到“地址已经分配，但内容还没搬完”的对象。</p>
-<p>不同 writer tag 可以各自 staging 同 key；第一个发布者成为 resident，
-后来的完成者发现已有 resident 时丢弃自己的 staging。
-<span class="docutils literal">finish_write_and_reserve_read</span> 可在同一临界区发布并取读保留，
-避免在两步之间被淘汰。相同 tag 的写入仍受排他约束。</p>
-<p><span class="docutils literal">reserve_read</span> 保持对象在读期间有效；读完必须 <span class="docutils literal">finish_read</span>。
-正在使用、传输中或保留中的对象不能随意被普通淘汰策略回收。
-过期写锁可使 abandoned staging 进入回收范围，但内存生命周期仍需配合实际设备完成。</p>
-<p>三个容易混淆的标识：</p>
-<ul class="simple">
-<li><p>writer tag：区分对同 key 的不同 staging 写者。</p></li>
-<li><p>object key：标识缓存内容及分片。</p></li>
-<li><p>L1 owner id：多 L1 配置中标识分配对象的 manager，完成回调必须回到原 owner。</p></li>
+<p>实现细节上：用 future 回调减少调度器每一步之间的等待，同时限制查询频率，避免“返回 pending → 立刻再查”的空转。查询结果只能取一次，重复查询不保证结果相同；复用 request id 也要遵守会话生命周期。</p>
+<p>设计依据是 <code>docs/design/integration/vllm/mp_lookup_state.md</code>。这份文档也写明了“查找途中取消”等已知边界，所以不要把设计目标说成每条路径都已完美处理。</p>
+
+<h2 id="4-key-chunk-和-group">4. key、chunk 和 group</h2>
+<p><strong>结论</strong>：key 里有哪些字段，只说明“可以表达什么”；模型版本、dtype、LoRA 是否真的被区分开，要顺着调用链去确认。</p>
+<p>学习版本的 <code>ObjectKey</code> 包含五个字段：</p>
+<pre><code class="language-text">chunk_hash: bytes          内容和前缀身份
+model_name: str            模型
+kv_rank: int               第几个 KV 分片
+object_group_id: int = 0   同一 chunk 的哪一组对象
+cache_salt: str = ""       命名隔离</code></pre>
+<p>hash 由 <code>lmcache/v1/multiprocess/token_hasher.py</code> 中的 <code>TokenHasher</code> 计算，学习版本默认用 <code>blake3</code>，也提供与 vLLM hash 接口兼容的方式。跨语言、跨进程、跨部署共享缓存时，算法、seed、输入编码和命名空间必须完全一致。</p>
+<p>混合模型的一个 chunk 会对应多个对象组和多个 KV rank。<code>GroupedObjectKeys</code> 把命中情况排成矩阵，每行是一个“组 × rank”，每列是一个 chunk：</p>
+<pre><code class="language-text">                  chunk 0  chunk 1  chunk 2
+full group/r0        1        1        1
+full group/r1        1        0        1
+another group/r0     1        1        1
+another group/r1     1        1        1</code></pre>
+<p>按普通全注意力的规则，只有 chunk 0 能安全复用：chunk 1 有一格缺失，后面的 chunk 即使都在也不能用。不能把矩阵里的 1 加起来当作能跳过的 token。滑窗组按窗口规则判断，递归状态组需要对应边界的状态快照，都不能套用这个简单的“按列取与”。相关类型在 <code>api.py</code>，合并策略在 bitmap 和预取策略的实现里。可以在<a href="../../../01-foundations/interactive.html#前缀命中折叠">互动演示</a>里点格子体会这个规则。</p>
+
+<h2 id="5-l1-写入先-staging-再发布">5. L1 写入：先 staging，再发布</h2>
+<p><strong>结论</strong>：新数据先写进对外不可见的 staging 区，写完才发布。读者永远看不到“地址分配了、内容还没搬完”的对象。</p>
+<ul>
+<li><code>reserve_write(key, tag)</code> 预留 staging；数据填好后调用 finish 接口，才进入 admission（变成可读）。</li>
+<li>同一个 key 可以有多个写者（用不同 writer tag 区分）各自 staging。第一个发布的成为 resident，后完成的发现已经有了，就丢弃自己的 staging。同一个 tag 的写入仍然互斥。</li>
+<li><code>finish_write_and_reserve_read</code> 在同一个临界区里“发布 + 加读保留”，防止刚发布就被淘汰。</li>
+<li><code>reserve_read</code> 保证读的期间对象有效，读完必须调用 <code>finish_read</code>。正在被读、正在传输或被保留的对象，普通淘汰不能动它。</li>
+<li>写锁过期后，被放弃的 staging 可以回收；但真正释放内存前，仍要确认设备上的拷贝已经结束。</li>
 </ul>
-<p>owner id 不是内容 key，也不是跨机器持久化的地址。
-设计依据：<span class="docutils literal">docs/design/v1/distributed/l1_manager.md</span> 与
-<span class="docutils literal">docs/design/v1/distributed/storage_manager.md</span>。</p>
-</section>
-<section id="l2">
-<h2 id="heading-l2-预取不是固定串行扫描所有层">L2 预取：不是固定串行扫描所有层</h2>
-<p><span class="docutils literal">PrefetchController</span> 在 L1 通过读保留观察对象，在 L2 通过
-<span class="docutils literal">lookup_and_lock</span> 观察对象；把各层 bitmap 合并后规划来源。
-每个计划单元必须在所选来源中受保护，且不能重复加载。
-加载先进入 L1 staging，成功 admission 后成为供 retrieve 使用的对象。</p>
-<p>默认 L2 prefetch policy 在多个后端同时拥有对象时选择第一个 adapter；
-这不是自动测 RTT 后挑最快后端。默认加载对象为 temporary，在读者结束后删除；
-<span class="docutils literal">retain</span> 策略才保留。默认 store policy 向所有配置的 L2 adapter 写入并保留 L1；
-<span class="docutils literal">skip_l1</span> 则在写入后删除 L1 副本。见 <a class="reference external" href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/mp/configuration.rst">MP 配置</a>。</p>
-<p>本基线的预取准入按 L1 内存预算控制：
-同时计算 staging bytes 与已经 lookup、尚未分配的最坏加载 bytes，
-避免一批任务在“当前内存看起来很空”时全部涌入。不能只用任务个数限制，
-因为 1 个 128K 请求和 1 个 1K 请求的占用完全不同。</p>
-<p>各 adapter 完成后可分别 admission，不必等最慢后端才发布已经成功的数据。
-最终对成功且受保护的数据折叠出可用前缀；失败、取消和 shutdown
-根据已记录的锁/预留集合清理。具体故障能否重试、可否部分服务要读调用方契约。</p>
-</section>
-<section id="l2-adapter">
-<h2 id="heading-l2-adapter-的重要契约">L2 adapter 的重要契约</h2>
-<p>核心方式是 <span class="docutils literal">submit → 等待通知 → 查询结果</span>。需要掌握：</p>
-<ul class="simple">
-<li><p>store、lookup、load 有不同完成通知 fd，避免事件被错误路由。</p></li>
-<li><p>pending 与“已完成但全 miss/失败”的 bitmap 不同。</p></li>
-<li><p>lookup 结果是已找到且受锁保护的对象；load 仍须验证完成结果。</p></li>
-<li><p>部分 query 结果只消费一次；store 完成队列用 pop 排空。</p></li>
-<li><p><span class="docutils literal">submit_unlock</span> 的接口要求 adapter 保证最终成功，controller 不替它重试。</p></li>
-<li><p>controller 持有调用方 buffer 的相应保留，直到 adapter 完成后才能释放。</p></li>
+<p>三个名字容易混：</p>
+<div class="table-scroll"><table>
+<thead><tr><th>标识</th><th>用来区分什么</th><th>不是什么</th></tr></thead>
+<tbody>
+<tr><td>writer tag</td><td>同一个 key 的不同 staging 写者</td><td>不是内容身份</td></tr>
+<tr><td>object key</td><td>缓存内容和分片</td><td>不是内存地址</td></tr>
+<tr><td>L1 owner id</td><td>多个 L1 时，是哪个 manager 分配的对象；完成回调必须回到它</td><td>不是内容 key，也不是跨机器的持久地址</td></tr>
+</tbody></table></div>
+<p>设计依据：<code>docs/design/v1/distributed/l1_manager.md</code> 和 <code>docs/design/v1/distributed/storage_manager.md</code>。</p>
+
+<h2 id="6-l2-预取一次规划不是逐层扫描">6. L2 预取：一次规划，不是逐层扫描</h2>
+<p><strong>结论</strong>：预取不是“先查 L1、没有再查 L2”这样串行扫描，而是先把各层的命中情况都拿到，再一次性决定每个 chunk 从哪里取。</p>
+<p><code>PrefetchController</code> 在 L1 用“读保留”观察对象，在 L2 用 <code>lookup_and_lock</code> 观察对象，把各层的 bitmap 合并后规划来源。规划时有两条规则：每个要加载的格子必须在它的来源层被保护住；同一个格子不能加载两次。从 L2 加载的数据先进入 L1 staging，发布后才能被 retrieve 使用。</p>
+<p>几个默认行为（学习版本，详见 <a href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/mp/configuration.rst">MP 配置</a>）：</p>
+<ul>
+<li>多个 L2 后端都有某个对象时，默认选第一个 adapter，并不会自动测延迟挑最快的。</li>
+<li>从 L2 加载上来的对象默认是临时的，读者用完就删；配置 <code>retain</code> 策略才会保留。</li>
+<li>保存时默认写入所有配置的 L2 并保留 L1 副本；配置 <code>skip_l1</code> 则写完 L2 后删掉 L1 副本。</li>
 </ul>
-<p>这是接口契约。具体后端的锁可能依赖租约或弱化实现，故障时仍需核对适配层是否满足它；
-例如不能因为后端提供 exists，就假定原子地阻止了下一刻淘汰。
-设计依据：<span class="docutils literal">docs/design/v1/distributed/l2_adapters/overall.md</span>。</p>
-</section>
-<section id="section-2">
-<h2 id="heading-设备拷贝布局与异步完成">设备拷贝、布局与异步完成</h2>
-<p>GPU paged KV 与 L1 连续 chunk 的布局往往不同，需要 gather/scatter 或转换。
-本基线把布局识别集中在 <span class="docutils literal">normalize_kv_and_discover_format</span>，
-其他模块通过 <span class="docutils literal">EngineKVFormat</span> 与公开 helper 查询，不应到处猜 tensor 维度。</p>
-<p>LMCache-driven 路径可以使用 staging buffer 加 kernel，符合条件时也可选
-直接批量 copy 路径。选择取决于 layout、设备运行时/驱动和内存 backing；
-“所有复制都要消耗 SM”与“所有配置都能 direct copy”都不正确。</p>
-<p>一条正确依赖链是：</p>
-<pre class="code text literal-block"><code>引擎写 KV 完成事件
-    -&gt; 传输流等待
-    -&gt; gather/copy 或 direct copy
-    -&gt; 传输完成事件/回调
-    -&gt; 发布 L1 / 允许 GPU 消费 / 释放对应引用</code></pre>
-<p>RPC future 完成可能只代表 handler 提交了设备工作，不能无条件当作 DMA 完成。
-同理，删除 Python 变量不代表底层 buffer 已经安全回收。
-对 engine-driven 路径，传输发起位置不同，但上述依赖关系仍要满足。</p>
-</section>
-<section id="apc">
-<h2 id="heading-抢占apc-与混合模型">抢占、APC 与混合模型</h2>
-<p>抢占可能释放并复用 GPU page，异步 store 若继续读取旧 block id，会把其他请求的
-KV 写入错误 key。恢复时 computed-token 进度与可加载范围也必须一致。
-阅读 <span class="docutils literal">docs/design/integration/vllm/mp_preemption_correctness.md</span>，
-理解为什么需要低并发 reference、高并发无缓存、冷缓存、热缓存、抢占热缓存的阶梯验证。</p>
-<p>多种注意力 group 的 block size 和状态表示不同，chunk 协商与 group bitmap 是
-正确性机制，而不仅是性能优化。SGLang 还有自身 radix-tree 生命周期；
-阅读 <span class="docutils literal"><span class="pre">docs/design/integration/sglang/lmcache-unified-radix-cache.md</span></span>，
-不要把 vLLM scheduler 的细节直接投射过去。</p>
-</section>
-<section id="section-3">
-<h2 id="heading-源码阅读练习">源码阅读练习</h2>
-<ol class="arabic simple">
-<li><p>从 <span class="docutils literal">get_num_new_matched_tokens</span> 追到最终命中整数，标出每个异步边界。</p></li>
-<li><p>从 <span class="docutils literal">store</span> 追到 L1 admission，找到在哪确认设备数据已经完成。</p></li>
-<li><p>找到 prefetch 失败时释放 L1 staging、L1 读锁与 L2 锁的位置。</p></li>
-<li><p>阅读 <span class="docutils literal">tests/v1/distributed/test_l1_manager.py</span> 的 staging 行为，
-用公开接口解释“两个 writer、一个 resident”的预期。</p></li>
-<li><p>阅读 <span class="docutils literal">tests/v1/test_mp_lookup_state.py</span>，解释 ack 顺序与重复查询风险。</p></li>
+<p><strong>准入按内存算，不按任务数算</strong>：控制器同时统计 staging 已占用的字节，以及已经查完、还没分配空间的请求最坏要加载的字节。这样能避免一批请求在“内存看起来还很空”时同时涌入。只限制任务个数不行，因为一个 128K 请求和一个 1K 请求的占用差了上百倍。</p>
+<p>每个 adapter 完成后可以单独发布，不用等最慢的后端。最后只对“成功且受保护”的数据折叠出可用前缀；失败、取消和关闭时，按记录下来的锁和预留集合逐一清理。某个故障能不能重试、能不能只用一部分，要看调用方的约定。</p>
+
+<h2 id="7-l2-adapter-的接口约定">7. L2 adapter 的接口约定</h2>
+<p><strong>结论</strong>：adapter 是“提交 → 等通知 → 取结果”的异步接口。接口里叫 lock，不代表每个后端都实现了强锁。</p>
+<ul>
+<li>保存、查找、加载各有自己的完成通知 fd，事件不会串。</li>
+<li>“还没完成”和“完成了但全部没命中或失败”是两种不同的结果。</li>
+<li>查找结果表示“找到了并且已经锁住”；加载完仍要检查每一项是否成功。</li>
+<li>部分查询结果只能取一次；保存完成队列用 pop 方式取空。</li>
+<li><code>submit_unlock</code> 要求 adapter 自己保证最终解锁成功，控制器不会替它重试。</li>
+<li>在 adapter 完成之前，控制器一直持有调用方 buffer 的保留，不能提前释放。</li>
+</ul>
+<p>这些是接口层面的要求。具体后端可能用租约模拟锁，或者只做弱一些的保证，出故障时要核对 adapter 是否真的满足约定。比如后端只提供 exists 查询，就不能认为它能原子地阻止下一刻被淘汰。学习版本中接 Mooncake 的 native adapter 就是在客户端本地维护锁计数，详见<a href="../../../04-storage/implementations/lmcache/mooncake-walkthrough.html#5-三层保护三个不同保证">联合链路</a>。设计依据：<code>docs/design/v1/distributed/l2_adapters/overall.md</code>。</p>
+
+<h2 id="8-设备拷贝布局与异步完成">8. 设备拷贝、布局与异步完成</h2>
+<p><strong>结论</strong>：RPC 返回、Python 变量被删除，都不代表 GPU 上的拷贝已经完成。判断完成要靠设备事件。</p>
+<p>GPU 里的 KV 是分页存放的，L1 里的 chunk 是连续存放的，两边布局通常不同，需要收集/散射（gather/scatter）或格式转换。学习版本把布局识别集中在 <code>normalize_kv_and_discover_format</code> 一处，其他模块通过 <code>EngineKVFormat</code> 和公开的辅助函数查询，不应该各自猜 tensor 维度。</p>
+<p>LMCache 驱动的传输可以走“staging buffer + kernel”，条件满足时也可以走直接批量拷贝。用哪条取决于布局、驱动和内存类型。所以“所有拷贝都要占用 SM”和“所有配置都能直接拷贝”这两种说法都不对。</p>
+<p>一条正确的依赖链是：</p>
+<pre><code class="language-text">引擎写完 KV，记录完成事件
+  → 传输 stream 等待这个事件
+  → 执行 gather/拷贝 或 直接拷贝
+  → 传输完成事件或回调
+  → 发布到 L1 / 允许 GPU 使用 / 释放对应引用</code></pre>
+<p>由引擎发起传输的路径，发起位置不同，但这条依赖关系同样要满足。stream 和 event 的基础见 <a href="../../../06-serving/gpu-kernel-basics.html#4-stream-与-event判断完成的正确方式">GPU 与 kernel 基础</a>。</p>
+
+<h2 id="9-抢占apc-与混合模型">9. 抢占、APC 与混合模型</h2>
+<p><strong>抢占</strong>：抢占会释放 GPU page 并交给别的请求。如果异步保存还在按旧的 block id 读数据，就会把别的请求的 KV 存到这个请求的 key 下——这是很隐蔽的错误。恢复时，“已计算 token 进度”和“可加载范围”也必须对得上。<code>docs/design/integration/vllm/mp_preemption_correctness.md</code> 讲了为什么要按阶梯验证：低并发参考 → 高并发无缓存 → 冷缓存 → 热缓存 → 有抢占的热缓存。</p>
+<p><strong>混合模型</strong>：不同注意力组的 block 大小和状态形式不同，chunk 大小协商和分组 bitmap 是保证正确性的机制，不只是性能优化。各类结构的规则见<a href="../../model-variants.html">复杂模型与 KV 存储</a>。</p>
+<p><strong>SGLang</strong>：SGLang 有自己的 radix 树生命周期，接入方式见 <code>docs/design/integration/sglang/lmcache-unified-radix-cache.md</code>，不要把 vLLM 调度器的细节直接套过去。</p>
+
+<h2 id="10-源码阅读练习">10. 源码阅读练习</h2>
+<ol>
+<li>从 <code>get_num_new_matched_tokens</code> 一路追到最终的命中整数，标出每一个异步边界。</li>
+<li>从 <code>store</code> 追到 L1 admission，找到确认“设备数据已经写完”的位置。</li>
+<li>找到预取失败时释放 L1 staging、L1 读锁和 L2 锁的代码。</li>
+<li>读 <code>tests/v1/distributed/test_l1_manager.py</code> 中关于 staging 的测试，用公开接口解释“两个写者、一个 resident”应有的结果。</li>
+<li>读 <code>tests/v1/test_mp_lookup_state.py</code>，解释 ack 顺序为什么重要、重复查询有什么风险。</li>
 </ol>
-<p>如果只能记住函数名却讲不出拥有者与释放者，继续追踪同一个请求即可，不必扩大阅读范围。</p>
-</section>
+<p>如果只记住了函数名，却说不出“谁持有、谁释放”，就继续跟踪同一个请求，不必扩大阅读范围。</p>
 </article>
 <footer><a href="../../../index.html">返回总目录</a>
 <p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
-<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#heading-先建立阅读边界">先建立阅读边界</a><a class="level-2" href="#heading-connector-不只是-putget-包装">Connector 不只是 put/get 包装</a><a class="level-2" href="#heading-一次-lookup-的精确含义">一次 lookup 的精确含义</a><a class="level-2" href="#heading-keychunk-与-group">key、chunk 与 group</a><a class="level-2" href="#heading-l1-写入先-staging再发布">L1 写入：先 staging，再发布</a><a class="level-2" href="#heading-l2-预取不是固定串行扫描所有层">L2 预取：不是固定串行扫描所有层</a><a class="level-2" href="#heading-l2-adapter-的重要契约">L2 adapter 的重要契约</a><a class="level-2" href="#heading-设备拷贝布局与异步完成">设备拷贝、布局与异步完成</a><a class="level-2" href="#heading-抢占apc-与混合模型">抢占、APC 与混合模型</a><a class="level-2" href="#heading-源码阅读练习">源码阅读练习</a></aside>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-读之前先定好三个问题">1. 读之前先定好三个问题</a><a class="level-2" href="#2-connector-不是简单的-putget">2. Connector 不是简单的 put/get</a><a class="level-2" href="#3-一次-lookup-到底返回了什么">3. 一次 lookup 到底返回了什么</a><a class="level-2" href="#4-key-chunk-和-group">4. key、chunk 和 group</a><a class="level-2" href="#5-l1-写入先-staging-再发布">5. L1 写入：先 staging，再发布</a><a class="level-2" href="#6-l2-预取一次规划不是逐层扫描">6. L2 预取：一次规划，不是逐层扫描</a><a class="level-2" href="#7-l2-adapter-的接口约定">7. L2 adapter 的接口约定</a><a class="level-2" href="#8-设备拷贝布局与异步完成">8. 设备拷贝、布局与异步完成</a><a class="level-2" href="#9-抢占apc-与混合模型">9. 抢占、APC 与混合模型</a><a class="level-2" href="#10-源码阅读练习">10. 源码阅读练习</a></aside>
 <dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
 <button id="search-close" aria-label="关闭搜索">关闭</button></div>
 <input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">

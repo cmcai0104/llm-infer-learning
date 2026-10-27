@@ -2,7 +2,7 @@
 window.INFRA_SEARCH = [
   {title:"复杂模型与 KV 存储：MLA、滑窗、混合状态、MoE 与量化",url:"03-kv-cache/model-variants.html",text:"MLA latent、DeepSeek-V3 每 token 68.6 KiB、TP 复制、滑窗注意力窗口复用、混合状态 Mamba SSM 检查点快照、MoE 专家不改变 KV、FP8 KV 量化缩放、多模态 hash、LoRA、投机解码。"},
   {title:"GPU 与 kernel 基础：带宽、异步拷贝与性能分析",url:"06-serving/gpu-kernel-basics.html",text:"SM、warp、HBM、L2、共享内存、Roofline 算术强度、Decode 带宽受限、KV 读取、kernel 融合、CUDA Graph、stream event 异步完成、锁页内存 pinned、PCIe 带宽、GPUDirect RDMA、Nsight Systems、Nsight Compute。"},
-  {title:"实测与故障演练：测什么、怎么测、怎样记录",url:"07-practice/measurement-and-drills.html",text:"环境记录、H2D D2H 带宽测试、ib_write_bw、transfer_engine_bench、Store 读写、端到端压测、故障演练：节点退出、主节点切换、网络变慢、租约过期、取消、缓存全冷、格式不匹配、结果模板。"},
+  {title:"实测与故障演练：测什么、怎么测、怎样记录",url:"07-practice/measurement-and-drills.html",text:"环境记录、H2D D2H 带宽测试、ib_write_bw、transfer_engine_bench、Store 读写、端到端压测、故障演练：节点退出、主节点切换、网络变慢、租约过期、取消、缓存全冷、格式不匹配、结果模板。公开参考数据：A100 H100 H200 显存带宽算力、PCIe Gen4 Gen5、200G 400G RDMA 网卡、Mooncake 87 GB/s 190 GB/s、Kimi K2 部署、LLaMA3-70B 32K 估算。"},
   {title:"互动演示：容量、盈亏、命中折叠与超时",url:"01-foundations/interactive.html",text:"互动计算器：KV 容量、TP 切分、chunk 对象数、加载与重算盈亏点、前缀命中折叠、超时与租约时间线、共享 KV 池容量规划。"},
   {title:"P7–P8 KV Cache 存储深挖问答",url:"08-career/expert-qa.html",text:"P7 P8 深挖问答 16 题：KV 身份、rank 缺失、发布、租约 引用计数 设备事件、超时释放、命中率与 TTFT、盈亏点、chunk 大小、容量、副本与故障域、主节点切换、重算风暴、升级、LMCache Mooncake 链路、在途合并、项目讲述。"},
   {title:"LLM Infra 学习资料库",url:"index.html",text:"总目录：推理运行时、KV Cache、分布式存储、传输、Serving、实验、P7 P8 专家面试。直接打开 HTML 阅读。"},

@@ -164,7 +164,7 @@ batch = 1 和 batch = 32 时，这 4.8 ms 基本一样 → 批处理能大幅提
 <pre><code class="language-text">PCIe Gen4 x16：理论约 32 GB/s 每方向，实际常见约 25 GB/s
 PCIe Gen5 x16：理论约 64 GB/s 每方向，实际常见约 50 GB/s
 1 GiB KV 走 Gen4（按 24 GiB/s）≈ 42 ms</code></pre>
-<p>H2D 往往和网络一样是 KV 加载的瓶颈。多块 GPU 共用一个 PCIe 交换芯片、或网卡和 GPU 不在同一 NUMA 节点时，实际带宽会更低。用 <code>nvidia-smi topo -m</code> 查看 GPU、网卡之间的拓扑。</p>
+<p>更多 GPU、PCIe 和网卡的公开数据见<a href="../07-practice/measurement-and-drills.html#2-常见场景的公开参考数据">公开参考数据</a>。H2D 往往和网络一样是 KV 加载的瓶颈。多块 GPU 共用一个 PCIe 交换芯片、或网卡和 GPU 不在同一 NUMA 节点时，实际带宽会更低。用 <code>nvidia-smi topo -m</code> 查看 GPU、网卡之间的拓扑。</p>
 <h3 id="53-gpudirect-rdma">5.3 GPUDirect RDMA</h3>
 <p>在支持的硬件和驱动上，网卡可以直接读写 GPU 显存，跳过 host 内存这一步（GDR）。它能省掉一次 H2D/D2H 拷贝，但要求注册 GPU 内存、拓扑合适，且并不是所有缓存集成路径都使用它。分析时要画出真实路径：数据到底有没有经过 host。</p>
 

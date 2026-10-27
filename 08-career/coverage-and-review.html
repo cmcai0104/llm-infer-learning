@@ -112,6 +112,7 @@
 <li>面试资料按“专家总纲 → 深挖问答 → 基础面试 → 项目题库”的顺序使用，重复的题以深挖问答为准。</li>
 <li>基础概念以<a href="../01-foundations/concepts.html">公共概念</a>为准，其余基础篇标明是推导还是速查。</li>
 </ul>
+<p><strong>正文改写</strong>：从原 RST 教材转来的 10 个页面（LMCache 架构、时序图、后端契约、优化与可观测、实验，KV 原理，LMCache 专项目录、计划、系统设计、题库）已按“先说结论、再讲原因、最后说边界”重写正文，图、代码和公式保持不变；题库原本就是短答结构，只做了措辞和格式整理。</p>
 <p><strong>本轮补充</strong>：复杂模型与 KV 存储（MLA、滑窗、混合状态、MoE、KV 量化、多模态）、GPU 与 kernel 基础、实测与故障演练模板；互动容量计算器增加了 MLA；19 篇专项与旧格式页面加了白话导读；统一了全部页面标题。</p>
 <p><strong>知识点核查</strong>：已逐条复核全库 77 处带数字的算例（容量、带宽、对象数、元数据、时延、盈亏与容量规划），未发现计算错误；并核对了 FlashAttention、PagedAttention、RadixAttention、MLA、TTFT/ITL/TPOT、RDMA 零拷贝等易错概念。MLA 的 TP 复制、多模态与 LoRA 进入前缀 hash 等实现细节对照了 vLLM 学习版本源码；LMCache 与 Mooncake 对照资料中固定版本的源码，版本变化后需要重新核对。</p>
 <p>覆盖目标是<strong>在线推理 Infra，重点 KV Cache 存储的学习、设计与面试准备</strong>；这不等于覆盖所有 LLM Infra 方向，也不等于已经完成生产或硬件验证。</p>
@@ -252,12 +253,11 @@
 <h2 id="4-不能声称已经完备的部分">4. 不能声称已经完备的部分</h2>
 <ul>
 <li><strong>专家实践证据</strong>：文档不能替代独立负责子系统、处理复杂故障和推进跨团队接口的经历。阅读完整不等于达到某个职级。</li>
-<li><strong>真实 GPU/RDMA 数据与故障记录</strong>：<a href="../07-practice/measurement-and-drills.html">实测与故障演练</a>给出了步骤、命令和记录模板，但数据必须在你的环境中测出来，文档里的数字都是推导或公开规格。</li>
+<li><strong>自己的 GPU/RDMA 实测与故障记录</strong>：<a href="../07-practice/measurement-and-drills.html#2-常见场景的公开参考数据">公开参考数据</a>已整理 A100/H100/H200 规格、PCIe 与 RDMA 网卡的常见实测量级、Mooncake 公开测试结果，并用它们做了完整估算；但面试中“我测过”的证据仍需在自己的环境里按同页步骤测得。</li>
 <li><strong>kernel 开发</strong>：<a href="../06-serving/gpu-kernel-basics.html">GPU 与 kernel 基础</a>覆盖 KV 存储岗需要的程度（带宽、异步完成、分析工具、评估方法）；以写 kernel 为主业的岗位还需要专门的 CUDA/Triton 训练。</li>
 <li><strong>复杂模型</strong>：<a href="../03-kv-cache/model-variants.html">复杂模型与 KV 存储</a>讲清了各类结构的容量和复用规则；具体模型仍要按其配置和所用引擎的 KV 规格核对。</li>
 <li><strong>平台运维落地</strong>：已有 SLO、故障、配额与演进设计；具体 Kubernetes 编排、自动扩缩容、发布流水线与安全集成仍需结合目标平台。</li>
 <li><strong>训练与其他 LLM Infra</strong>：分布式训练、训练 checkpoint、数据平台和完整编译器工程不在这套推理主线的覆盖承诺内。</li>
-<li><strong>旧专项页面的文风</strong>：从原 RST 教材转来的专项页面加了白话导读，正文仍偏书面，按需再逐页改写。</li>
 </ul>
 <h2 id="5-面向专家岗位的验收门槛">5. 面向专家岗位的验收门槛</h2>
 <p>至少形成一份含正常、超时、取消和故障路径的设计；一套容量、网络、元数据与成本预算；一条可以定位到源码的联合实现；一份有退化条件的实验或明确未测项的验证计划。</p>

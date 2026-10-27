@@ -103,122 +103,102 @@
 <main id="content"><div class="breadcrumbs">08 专家能力与面试 · 专注 KV Cache 存储</div>
 <article><h1 id="page-title">LMCache 专项：学习指南目录</h1>
 <div class="note"><p><strong>白话导读</strong>：LMCache 专项资料的目录页，保留原教材的阅读顺序。</p><ul><li>跨项目学习以<a href="../../study-plan.html">统一计划</a>为主，这里是单项目备选。</li><li>KV 存储方向最该读的是 LMCache 内核、后端契约和联合链路。</li></ul><p>直接从下方专题目录进入需要的章节。</p></div>
-<p>跨项目学习先读 <a class="reference external" href="../../../index.html">全库总目录</a> 和
-<a class="reference external" href="../../../03-kv-cache/implementations/lmcache/overview.html">LMCache 白话介绍</a>，按
-<a class="reference external" href="../../study-plan.html">统一学习计划</a> 推进。
-本页保留 LMCache 专题深读导航，以下 28 天安排是单项目备选。</p>
-<p>这套资料面向希望进入 LLM 推理基础设施、KV Cache 存储与数据传输岗位的工程师。
-目标是在 <strong>28 天、约 70 小时</strong> 内，从容量计算和缓存正确性出发，读懂 LMCache
-主路径，解释它如何与 Mooncake 组合，并完成一份有实验依据的系统设计。
-默认掌握 Python、基本 C++、操作系统与网络基础；不要求先读完 Transformer 论文。</p>
-<section id="section-1">
-<h2 id="heading-阅读基线与边界">阅读基线与边界</h2>
-<p>资料核对日期为 2026-10-26，源码基线为：</p>
-<ul class="simple">
-<li><p><a class="reference external" href="https://github.com/LMCache/LMCache/tree/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be">LMCache ff9185d419e1</a>
-（2026-10-23）：以推荐的 multiprocess（MP）独立服务模式为主。</p></li>
-<li><p><a class="reference external" href="https://github.com/kvcache-ai/Mooncake/tree/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0">Mooncake dd1217b6c461</a>
-（2026-10-23）：重点是 Store 与 Transfer Engine。</p></li>
+<p>这是 LMCache 专项资料的入口。如果你同时学几个项目，先按<a href="../../study-plan.html">统一学习计划</a>走，这里的内容作为深入 LMCache 时的补充。第一次接触 LMCache，先读<a href="../../../03-kv-cache/implementations/lmcache/overview.html">LMCache 白话介绍</a>。</p>
+<p><strong>适合谁</strong>：想做 LLM 推理基础设施、KV Cache 存储或数据传输的工程师。需要会 Python、基本 C++，懂操作系统和网络基础；不要求先读完 Transformer 论文。</p>
+<p><strong>目标</strong>：用 <strong>28 天、约 70 小时</strong>，从容量计算和缓存正确性入手，读懂 LMCache 的主路径，讲清它怎样和 Mooncake 配合，最后交出一份有实验依据的系统设计。</p>
+
+<h2 id="1-对应的源码版本">1. 对应的源码版本</h2>
+<p>资料在 2026-10-26 核对，对应的源码版本是：</p>
+<ul>
+<li><a href="https://github.com/LMCache/LMCache/tree/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be">LMCache ff9185d419e1</a>
+（2026-10-23）：以推荐的多进程（MP）独立服务模式为主。</li>
+<li><a href="https://github.com/kvcache-ai/Mooncake/tree/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0">Mooncake dd1217b6c461</a>
+（2026-10-23）：重点是 Store 与 Transfer Engine。</li>
 </ul>
-<p>这是针对上述提交的学习资料，不代表任意 PyPI 版本的功能承诺。旧文章中的
-<span class="docutils literal">lmcache/v1/cache_engine.py</span> 在当前树中对应
-<span class="docutils literal">lmcache/inprocess/v1/cache_engine.py</span>；MP 主线使用另一组 server、module、
-StorageManager 接口。实验前记录自己的提交、包版本和运行时，
-并阅读 <a class="reference external" href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/getting_started/compatibility.rst">兼容性说明</a>。</p>
-<p>全文区分三种内容：标明源码路径的内容描述本基线实现；公式与取舍讨论是通用原理；
-明确写为“教学模型”“设计建议”的内容不是 LMCache 已实现的算法。
-性能数字若无实测说明，均为带假设的算例。</p>
-</section>
-<section id="section-2">
-<h2 id="heading-学习大纲与岗位优先级">学习大纲与岗位优先级</h2>
+<p>这些资料只对上面的提交负责，不代表任意 PyPI 版本都有同样的功能。两个常见的版本差异：旧文章里的 <code>lmcache/v1/cache_engine.py</code>，在现在的代码里搬到了 <code>lmcache/inprocess/v1/cache_engine.py</code>；MP 主线用的是另一套 server、module 和 StorageManager 接口。做实验前记下自己的提交、包版本和运行时，并看一遍<a href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/getting_started/compatibility.rst">兼容性说明</a>。</p>
+<p>阅读时注意区分三类内容：写了源码路径的，描述的是这个版本的实现；公式和取舍讨论是通用原理；明确标成“教学模型”“设计建议”的，不是 LMCache 已有的算法。没有注明实测的性能数字，都是带假设的估算。</p>
+
+
+<h2 id="2-学什么先学什么">2. 学什么，先学什么</h2>
 <div class="table-scroll"><table>
-<colgroup>
-<col style="width: 12%" />
-<col style="width: 28%" />
-<col style="width: 35%" />
-<col style="width: 25%" />
-</colgroup>
 <thead>
-<tr><th class="head"><p>优先级</p></th>
-<th class="head"><p>模块</p></th>
-<th class="head"><p>必须理解</p></th>
-<th class="head"><p>可展示成果</p></th>
+<tr><th>优先级</th>
+<th>模块</th>
+<th>必须理解</th>
+<th>可展示成果</th>
 </tr>
 </thead>
 <tbody>
-<tr><td><p>P0</p></td>
-<td><p>推理与 KV 基础</p></td>
-<td><p>Prefill/Decode、MHA/GQA/MLA、容量、TTFT/ITL、前缀依赖</p></td>
-<td><p>独立推导容量与传输下界</p></td>
+<tr><td>P0</td>
+<td>推理与 KV 基础</td>
+<td>Prefill/Decode、MHA/GQA/MLA、容量、TTFT/ITL、前缀依赖</td>
+<td>独立推导容量与传输下界</td>
 </tr>
-<tr><td><p>P0</p></td>
-<td><p>LMCache 主路径</p></td>
-<td><p>Connector、lookup、prefetch、retrieve、store、会话与完成事件</p></td>
-<td><p>不看资料画请求时序图</p></td>
+<tr><td>P0</td>
+<td>LMCache 主路径</td>
+<td>Connector、lookup、prefetch、retrieve、store、会话与完成事件</td>
+<td>不看资料画请求时序图</td>
 </tr>
-<tr><td><p>P0</p></td>
-<td><p>KV 存储正确性</p></td>
-<td><p>key、layout、分片、staging、锁、淘汰、失败与回收</p></td>
-<td><p>解释三种竞争条件和解决办法</p></td>
+<tr><td>P0</td>
+<td>KV 存储正确性</td>
+<td>key、layout、分片、staging、锁、淘汰、失败与回收</td>
+<td>解释三种竞争条件和解决办法</td>
 </tr>
-<tr><td><p>P0</p></td>
-<td><p>Mooncake 与网络</p></td>
-<td><p>Master/Client/Transfer Engine、RDMA、注册内存、控制与数据路径</p></td>
-<td><p>画出 LMCache + Mooncake 组合图</p></td>
+<tr><td>P0</td>
+<td>Mooncake 与网络</td>
+<td>Master/Client/Transfer Engine、RDMA、注册内存、控制与数据路径</td>
+<td>画出 LMCache + Mooncake 组合图</td>
 </tr>
-<tr><td><p>P0</p></td>
-<td><p>性能与系统设计</p></td>
-<td><p>读取/重算盈亏、带宽预算、命中率口径、SLO、回源风暴</p></td>
-<td><p>一份可复现实验或离线预算报告</p></td>
+<tr><td>P0</td>
+<td>性能与系统设计</td>
+<td>读取/重算盈亏、带宽预算、命中率口径、SLO、回源风暴</td>
+<td>一份可复现实验或离线预算报告</td>
 </tr>
-<tr><td><p>P1</p></td>
-<td><p>分布式推理</p></td>
-<td><p>P/D 分离、TP 完整性、缓存感知路由、抢占恢复</p></td>
-<td><p>设计跨节点共享缓存</p></td>
+<tr><td>P1</td>
+<td>分布式推理</td>
+<td>P/D 分离、TP 完整性、缓存感知路由、抢占恢复</td>
+<td>设计跨节点共享缓存</td>
 </tr>
-<tr><td><p>P1</p></td>
-<td><p>高级复用</p></td>
-<td><p>CacheBlend、压缩、layerwise、混合注意力、滑窗与递归状态</p></td>
-<td><p>说明适用条件及质量验证</p></td>
+<tr><td>P1</td>
+<td>高级复用</td>
+<td>CacheBlend、压缩、layerwise、混合注意力、滑窗与递归状态</td>
+<td>说明适用条件及质量验证</td>
 </tr>
-<tr><td><p>P2</p></td>
-<td><p>专项深挖</p></td>
-<td><p>GDS/Device-DAX、多 L1、native adapter、PG/EP、调度策略扩展</p></td>
-<td><p>选择一个方向做源码专题</p></td>
+<tr><td>P2</td>
+<td>专项深挖</td>
+<td>GDS/Device-DAX、多 L1、native adapter、PG/EP、调度策略扩展</td>
+<td>选择一个方向做源码专题</td>
 </tr>
 </tbody>
 </table></div>
-<p>“熟练掌握”意味着：能讲清概念，能算数量级，能找到代码证据，能设计反例，
-能用实验区分原因。只记住配置项或背“RDMA 零拷贝”不满足这一标准。</p>
-</section>
-<section id="section-3">
-<h2 id="heading-如何使用">如何使用</h2>
-<p>单项目深读可按 <a class="reference external" href="study-plan.html">专项计划</a> 推进；先读 <a class="reference external" href="../../../03-kv-cache/semantics-and-costs.html">公共基础</a>，再对照
-<a class="reference external" href="../../../03-kv-cache/implementations/lmcache/state-diagrams.html">知识地图</a> 阅读源码。无 GPU 的 Mac/普通笔记本可完成容量、
-前缀哈希、时延模型和源码练习；GPU 推理与 RDMA 实验需要相应 Linux 环境。
-不具备硬件时，把结果明确写为“理论估算/未测”，不要填造吞吐数据。</p>
-<p>面试准备优先读 <a class="reference external" href="questions.html">面试问答</a> 的 Q1–Q40，再完成
-<a class="reference external" href="system-design.html">系统设计</a> 的容量与故障设计题。
-已有 Mooncake 基础者可先读 <a class="reference external" href="../../../03-kv-cache/implementations/lmcache/internals.html">LMCache 内核</a>，补足推理引擎与缓存之间的契约。</p>
-</section>
-<section id="section-4">
-<h2 id="heading-专题目录">专题目录</h2>
-<ul class="simple">
-<li><p><a class="reference external" href="study-plan.html">01 专项学习计划</a></p></li>
-<li><p><a class="reference external" href="../../../03-kv-cache/implementations/lmcache/state-diagrams.html">02 知识地图与设计图</a></p></li>
-<li><p><a class="reference external" href="../../../03-kv-cache/semantics-and-costs.html">03 推理与缓存基础</a></p></li>
-<li><p><a class="reference external" href="../../../03-kv-cache/implementations/lmcache/internals.html">04 LMCache 内核</a></p></li>
-<li><p><a class="reference external" href="../../../04-storage/implementations/lmcache/backend-contracts.html">05 存储与 Mooncake</a></p></li>
-<li><p><a class="reference external" href="../../../06-serving/implementations/lmcache/observability.html">06 性能与运维</a></p></li>
-<li><p><a class="reference external" href="../../../07-practice/implementations/lmcache/labs.html">07 实验手册</a></p></li>
-<li><p><a class="reference external" href="questions.html">08 面试问答</a></p></li>
-<li><p><a class="reference external" href="system-design.html">09 系统设计与阅读</a></p></li>
+<p>“熟练掌握”是指五件事都做得到：讲得清概念、算得出数量级、找得到代码依据、举得出反例、能用实验分辨原因。只记住配置项，或者会背“RDMA 零拷贝”，都不算。</p>
+
+
+<h2 id="3-怎么用这些资料">3. 怎么用这些资料</h2>
+<ul>
+<li><strong>按计划深读</strong>：跟着<a href="study-plan.html">专项计划</a>走。先读<a href="../../../03-kv-cache/semantics-and-costs.html">KV 原理</a>，再对照<a href="../../../03-kv-cache/implementations/lmcache/state-diagrams.html">知识地图与时序图</a>读源码。</li>
+<li><strong>没有 GPU</strong>：普通笔记本也能完成容量计算、前缀 hash、时延模型和源码练习；GPU 推理和 RDMA 实验需要 Linux 环境。没有硬件时，把结果写成“理论估算/未测”，不要编吞吐数据。</li>
+<li><strong>准备面试</strong>：先做<a href="questions.html">面试问答</a>的 Q1–Q40，再做<a href="system-design.html">系统设计</a>里的容量和故障设计题。</li>
+<li><strong>已经熟悉 Mooncake</strong>：直接读<a href="../../../03-kv-cache/implementations/lmcache/internals.html">LMCache 架构与源码主线</a>，补上推理引擎和缓存之间的接口约定。</li>
 </ul>
-</section>
+
+
+<h2 id="4-专题目录">4. 专题目录</h2>
+<ul>
+<li><a href="study-plan.html">专项学习计划</a></li>
+<li><a href="../../../03-kv-cache/implementations/lmcache/state-diagrams.html">知识地图与时序图</a></li>
+<li><a href="../../../03-kv-cache/semantics-and-costs.html">KV 原理：复用条件与容量推导</a></li>
+<li><a href="../../../03-kv-cache/implementations/lmcache/internals.html">架构与源码主线</a></li>
+<li><a href="../../../04-storage/implementations/lmcache/backend-contracts.html">存储后端契约与 Mooncake 接入</a></li>
+<li><a href="../../../06-serving/implementations/lmcache/observability.html">优化、可观测与生产设计</a></li>
+<li><a href="../../../07-practice/implementations/lmcache/labs.html">实验、基准与验收</a></li>
+<li><a href="questions.html">60 道面试题与参考回答</a></li>
+<li><a href="system-design.html">系统设计题与源码阅读</a></li>
+</ul>
 </article>
 <footer><a href="../../../index.html">返回总目录</a>
 <p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
-<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#heading-阅读基线与边界">阅读基线与边界</a><a class="level-2" href="#heading-学习大纲与岗位优先级">学习大纲与岗位优先级</a><a class="level-2" href="#heading-如何使用">如何使用</a><a class="level-2" href="#heading-专题目录">专题目录</a></aside>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-对应的源码版本">1. 对应的源码版本</a><a class="level-2" href="#2-学什么先学什么">2. 学什么，先学什么</a><a class="level-2" href="#3-怎么用这些资料">3. 怎么用这些资料</a><a class="level-2" href="#4-专题目录">4. 专题目录</a></aside>
 <dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
 <button id="search-close" aria-label="关闭搜索">关闭</button></div>
 <input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">

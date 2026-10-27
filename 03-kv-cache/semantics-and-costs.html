@@ -103,10 +103,9 @@
 <main id="content"><div class="breadcrumbs">03 KV Cache 管理 · 专注 KV Cache 存储</div>
 <article><h1 id="page-title">KV Cache 原理：复用条件与容量推导</h1>
 <div class="note"><p><strong>本篇定位：KV 存储方向推荐</strong></p><p>聚焦“什么时候能复用、谁负责什么”：容量公式的例外、PagedAttention/APC/LMCache 的分工、为什么文本相同不等于能复用、缓存不是持久化数据库。</p><p>收益与 chunk、分层的定量分析在<a href="capacity-and-reuse.html">KV 容量与性能模型</a>；复杂模型见<a href="model-variants.html">复杂模型与 KV 存储</a>。</p></div>
-<section id="k-v">
-<h2 id="heading-为什么缓存-kv">为什么缓存 K/V</h2>
-<p>对单层单个 attention head，令当前位置的表示为 x，投影得到 Q、K、V。
-生成下一个 token 时，新的 query 要关注历史所有有效位置：</p>
+<h2 id="1-为什么缓存-k-和-v">1. 为什么缓存 K 和 V</h2>
+<p><strong>一句话</strong>：生成新 token 时，模型要“回头看”前面所有 token 的 K 和 V。把它们存下来，就不用每一步都把历史重新算一遍。</p>
+<p>以某一层的某一个注意力头为例，每个位置的表示经过投影得到 Q、K、V。生成下一个 token 时，新 token 的 Q 要和历史上所有有效位置的 K、V 做注意力：</p>
 <div>
 <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
   <mi mathvariant="normal">Attention</mi>
@@ -140,19 +139,16 @@
   <mi>V</mi>
 </math>
 </div>
-<p>自回归 causal mask 保证历史 token 不会依赖未来 token。已有历史 K/V 可以保留，
-只为新增 token 计算新的投影；历史 Q 在普通自回归解码中不再使用。
-缓存省去的是历史前向计算，attention 仍要访问历史 K/V，所以长上下文 decode
-仍可能受内存带宽和容量限制。KV 是模型运行时状态，不是原文、embedding、
-检索向量或最终回答。</p>
-<p>Prefill 同时处理 prompt 的多个位置，通常有更高的计算并行度；
-Decode 每条序列每步通常产生一个新 token，在许多配置中更受内存带宽限制。
-这不是绝对硬件分类：batch、模型、context 长度、attention kernel 与量化都会改变瓶颈。
-连续批处理把不同请求的阶段交错，P/D 分离则把两种阶段部署到不同资源池。</p>
-</section>
-<section id="section-1">
-<h2 id="heading-容量公式与例外">容量公式与例外</h2>
-<p>对于各层具有相同 K/V head 数、head dimension 和 dtype 的普通 attention：</p>
+<p>其中 M 是因果掩码，保证每个 token 只看得到它之前的 token。所以历史 token 的 K、V 一旦算出就不会再变，可以保存下来；新 token 只需要算自己的投影。历史的 Q 在普通自回归解码里用不到，所以不缓存。</p>
+<p>要注意两点：</p>
+<ul>
+<li>缓存省掉的是<strong>历史部分的计算</strong>，不是读取。注意力每一步仍要把历史 K、V 读一遍，所以长上下文的 Decode 依然可能受显存带宽和容量限制。</li>
+<li>KV 是模型运行时的中间状态，不是原文、embedding、检索向量，也不是最终答案。</li>
+</ul>
+<p><strong>Prefill 和 Decode 的差别</strong>：Prefill 一次处理 prompt 的很多位置，并行度高，通常更吃算力；Decode 每条序列每步只生成一个 token，很多情况下更吃显存带宽。这不是绝对的——batch 大小、模型、上下文长度、attention kernel 和量化都会改变瓶颈。连续批处理把不同请求的两个阶段交错在一起执行；PD 分离则把两个阶段放到不同的机器池里。</p>
+
+<h2 id="2-容量公式和它的例外">2. 容量公式和它的例外</h2>
+<p>当每一层的 KV head 数、head 维度和数据类型都相同时（普通注意力）：</p>
 <div>
 <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
   <msub>
@@ -176,58 +172,29 @@ Decode 每条序列每步通常产生一个新 token，在许多配置中更受�
   <mi>b</mi>
 </math>
 </div>
-<p>其中 2 表示 K 和 V；L 为层数；T 为有效 token 数；
-H_KV 为 KV heads 数；D 为每个 head 的维度；b 为每个元素的字节数。
-容量是模型的逻辑 KV payload，不含 allocator 空洞、对齐、量化 scale、
-对象元数据、临时 buffer 和副本。多个不同序列应按各自有效长度求和；
-共享前缀只在确实共享物理对象时去重。</p>
+<p>2 表示 K 和 V 各一份；L 是层数；T 是有效 token 数；H<sub>KV</sub> 是 KV head 数；D 是每个 head 的维度；b 是每个元素的字节数。</p>
+<p>这个公式算的是<strong>逻辑上的 KV 数据量</strong>，不包括分配器的空洞、对齐、量化缩放因子、对象元数据、临时 buffer 和副本。多条不同序列按各自长度相加；共享前缀只有在真的共用同一份物理数据时才能去重。</p>
+<p>不同注意力结构算法不同：</p>
 <div class="table-scroll"><table>
-<colgroup>
-<col style="width: 22%" />
-<col style="width: 38%" />
-<col style="width: 40%" />
-</colgroup>
-<thead>
-<tr><th class="head"><p>结构</p></th>
-<th class="head"><p>应如何计算</p></th>
-<th class="head"><p>容易犯的错误</p></th>
-</tr>
-</thead>
+<thead><tr><th>结构</th><th>怎么算</th><th>常见错误</th></tr></thead>
 <tbody>
-<tr><td><p>MHA</p></td>
-<td><p>H_KV 通常等于 query heads</p></td>
-<td><p>把参数量直接当 KV 容量</p></td>
-</tr>
-<tr><td><p>GQA</p></td>
-<td><p>多个 query heads 共享一组 KV，使用实际 H_KV</p></td>
-<td><p>仍用 query heads，估算高出多倍</p></td>
-</tr>
-<tr><td><p>MQA</p></td>
-<td><p>H_KV 通常为 1</p></td>
-<td><p>假定任意 TP 度数都能无副本地切分</p></td>
-</tr>
-<tr><td><p>MLA</p></td>
-<td><p>读取引擎实际缓存的 latent、RoPE 分量及 dtype 后相加</p></td>
-<td><p>机械套入 2×heads×D；或把每 rank 缓存当作总量/TP</p></td>
-</tr>
-<tr><td><p>Hybrid / SWA</p></td>
-<td><p>按 full-attention、滑窗、递归状态各 group 求和</p></td>
-<td><p>让所有层都线性乘上下文长度</p></td>
-</tr>
-</tbody>
-</table></div>
-<p>算例：L=32、H_KV=8、D=128、FP16/BF16（b=2）：</p>
-<ul class="simple">
-<li><p>每 token：131,072 bytes = 128 KiB。</p></li>
-<li><p>8,192 tokens：1 GiB；256-token chunk：32 MiB。</p></li>
-<li><p>64 条各 8K 且不共享的序列：64 GiB 逻辑 KV。</p></li>
-<li><p>4 路 TP 若恰好均匀切分 KV heads：每 rank 256 MiB/8K 请求。
-如果 KV 被复制、层数被 PP 切分或存在额外状态，应按实际布局重算。</p></li>
+<tr><td>MHA</td><td>H<sub>KV</sub> 通常等于 query head 数</td><td>把参数量当成 KV 容量</td></tr>
+<tr><td>GQA</td><td>多个 query head 共用一组 KV，用实际的 H<sub>KV</sub></td><td>仍按 query head 数算，结果大好几倍</td></tr>
+<tr><td>MQA</td><td>H<sub>KV</sub> 通常为 1</td><td>以为任意 TP 都能不复制地切开</td></tr>
+<tr><td>MLA</td><td>按引擎实际缓存的 latent 和 RoPE 分量相加，没有单独的 V</td><td>套用 2 × head × D；或以为每个 rank 只存总量的 1/TP</td></tr>
+<tr><td>混合 / 滑窗</td><td>全局层、滑窗层、递归状态层分别算再相加</td><td>让所有层都随上下文长度线性增长</td></tr>
+</tbody></table></div>
+<p>复杂结构的详细算法见<a href="model-variants.html">复杂模型与 KV 存储</a>。</p>
+<h3 id="21-算一个例子">2.1 算一个例子</h3>
+<p>L = 32、H<sub>KV</sub> = 8、D = 128、BF16（b = 2）：</p>
+<ul>
+<li>每 token：131,072 字节 = 128 KiB。</li>
+<li>8,192 token：1 GiB；一个 256 token 的 chunk：32 MiB。</li>
+<li>64 条互不共享的 8K 序列：64 GiB。</li>
+<li>TP = 4 且 KV head 正好均分：每个 rank 每个 8K 请求 256 MiB。如果 KV 被复制、PP 切分了层，或者模型有额外状态，要按实际布局重算。</li>
 </ul>
-<p>GB 使用 10^9，GiB 使用 2^30。200 Gbit/s 网卡的理论线速为
-25 GB/s；传 1 GiB 的纯网络下界约 42.95 ms，不是 5 ms，也不是 1/200 秒。
-H2D、协议、排队和布局转换还会增加延迟。</p>
-<p>可以直接运行下面的独立算例：</p>
+<p><strong>单位别混</strong>：GB 是 10<sup>9</sup> 字节，GiB 是 2<sup>30</sup> 字节；网卡的 Gbit/s 是比特。200 Gbit/s 网卡的理论线速是 25 GB/s，传 1 GiB 的纯网络下界约 42.95 ms——不是 5 ms，也不是 1/200 秒。实际还要加上 H2D、协议、排队和布局转换。</p>
+<p>下面的小程序可以直接运行验证：</p>
 <pre class="code python literal-block"><code><span class="comment single"># SPDX-License-Identifier: Apache-2.0</span><span class="whitespace">
 </span><span class="name">layers</span> <span class="operator">=</span> <span class="literal number integer">32</span><span class="whitespace">
 </span><span class="name">kv_heads</span> <span class="operator">=</span> <span class="literal number integer">8</span><span class="whitespace">
@@ -242,33 +209,26 @@ H2D、协议、排队和布局转换还会增加延迟。</p>
 </span><span class="name builtin">print</span><span class="punctuation">(</span><span class="literal string affix">f</span><span class="literal string double">&quot;KV/request: </span><span class="literal string interpol">{</span><span class="name">request_bytes</span><span class="whitespace"> </span><span class="operator">/</span><span class="whitespace"> </span><span class="literal number integer">2</span><span class="operator">**</span><span class="literal number integer">30</span><span class="literal string interpol">:</span><span class="literal string double">.2f</span><span class="literal string interpol">}</span><span class="literal string double"> GiB&quot;</span><span class="punctuation">)</span><span class="whitespace">
 </span><span class="name builtin">print</span><span class="punctuation">(</span><span class="literal string affix">f</span><span class="literal string double">&quot;KV/chunk: </span><span class="literal string interpol">{</span><span class="name">chunk_bytes</span><span class="whitespace"> </span><span class="operator">/</span><span class="whitespace"> </span><span class="literal number integer">2</span><span class="operator">**</span><span class="literal number integer">20</span><span class="literal string interpol">:</span><span class="literal string double">.0f</span><span class="literal string interpol">}</span><span class="literal string double"> MiB&quot;</span><span class="punctuation">)</span><span class="whitespace">
 </span><span class="name builtin">print</span><span class="punctuation">(</span><span class="literal string affix">f</span><span class="literal string double">&quot;Network lower bound: </span><span class="literal string interpol">{</span><span class="name">request_bytes</span><span class="whitespace"> </span><span class="operator">/</span><span class="whitespace"> </span><span class="name">network_bytes_per_second</span><span class="whitespace"> </span><span class="operator">*</span><span class="whitespace"> </span><span class="literal number integer">1000</span><span class="literal string interpol">:</span><span class="literal string double">.2f</span><span class="literal string interpol">}</span><span class="literal string double"> ms&quot;</span><span class="punctuation">)</span></code></pre>
-<p>输出依次为 128 KiB、1.00 GiB、32 MiB、42.95 ms。这里没有测量任何真实硬件。</p>
-</section>
-<section id="pagedattentionapc-lmcache">
-<h2 id="heading-pagedattentionapc-和-lmcache-的分工">PagedAttention、APC 和 LMCache 的分工</h2>
-<p>引擎以逻辑 block 管理序列，把它映射到 GPU 物理页，避免为每个请求预留一整段
-最大长度的连续显存。分页降低分配浪费，但不消除内部碎片或所有复制。
-Automatic Prefix Caching（APC）进一步识别相同前缀，使多个请求复用已有 GPU block。</p>
-<p>LMCache 将复用扩展到更大的内存层级、远端后端或独立服务生命周期。
-如果请求已经由 APC 完全服务，LMCache 不一定增加读取收益；在某些配置中，
-它仍可能参与 offload 或为未来重用保留数据。测试时必须单独记录 APC 和外部 cache。</p>
-<pre class="code text literal-block"><code>请求 A: [共享 system prompt][共享文档][问题 A]
+<p>输出依次是 128 KiB、1.00 GiB、32 MiB、42.95 ms。这只是计算，没有测量任何真实硬件。也可以在<a href="../01-foundations/interactive.html#kv-容量计算器">互动容量计算器</a>里改参数看。</p>
+
+<h2 id="3-pagedattentionapc-和-lmcache-各管什么">3. PagedAttention、APC 和 LMCache 各管什么</h2>
+<ul>
+<li><strong>PagedAttention</strong>：引擎把每条序列的 KV 分成逻辑 block，映射到 GPU 上不连续的物理页，不用为每个请求预留一整段最大长度的显存。分页减少了浪费，但不能消除所有碎片和拷贝。</li>
+<li><strong>APC（自动前缀缓存）</strong>：在分页基础上识别相同前缀，让多个请求共用已有的 GPU block。</li>
+<li><strong>LMCache</strong>：把复用扩展到 GPU 之外——主机内存、远端存储，或者独立于引擎进程的服务。</li>
+</ul>
+<p>所以如果一个请求已经被 APC 在 GPU 上完全命中，LMCache 不一定再带来读取收益（在某些配置下它仍可能负责卸载或为将来保留数据）。做测试时，必须把 APC 的命中和外部缓存的命中分开记录。</p>
+<pre><code class="language-text">请求 A: [共享 system prompt][共享文档][问题 A]
 请求 B: [共享 system prompt][共享文档][问题 B]
-             GPU APC / LMCache 都可能复用这一连续前缀
+         ↑ GPU APC 和 LMCache 都可能复用这段连续前缀
 
 请求 C: [另一个 system prompt][相同文档][问题 C]
-             普通精确前缀缓存不能直接复用后面的文档 KV</code></pre>
-<p>block 是推理引擎分配单位；chunk 是 LMCache 哈希、对象与传输的逻辑分块单位。
-MP 会进行 chunk size 协商以满足 block/group 对齐要求，启动时的请求值不一定等于
-最终采用值。见 <a class="reference external" href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/mp/chunk_size_negotiation.rst">Chunk size 协商</a>。</p>
-<p>若只缓存完整 chunk，长度 T 可产生 floor(T/C) 个完整 chunk，剩余部分需要按
-引擎/connector 语义处理。chunk=256 时，255、256、257 tokens 分别只有 0、1、1
-个完整 chunk。不能据此断言最终一定复用 0、256、256 tokens：
-模型计算首个输出所需的末位 logits、mask、APC 覆盖和具体 API 约束还可能减少命中。</p>
-</section>
-<section id="section-2">
-<h2 id="heading-正确性比文本相同更严格">正确性比“文本相同”更严格</h2>
-<p>第 i 个 chunk 的标识可用教学式表示为：</p>
+         ↑ 前面不同，普通前缀缓存不能复用后面这段文档的 KV</code></pre>
+<p><strong>block 和 chunk 不是一回事</strong>：block 是引擎分配显存的单位；chunk 是 LMCache 计算 hash、组织对象和传输的单位。MP 模式会协商 chunk 大小，让它和 block、各个注意力组对齐，所以启动时填的值不一定是最终用的值，见 <a href="https://github.com/LMCache/LMCache/blob/ff9185d419e1ce55c9f4f1ad84a4f4f1f06af7be/docs/source/mp/chunk_size_negotiation.rst">Chunk size 协商</a>。</p>
+<p><strong>只存完整 chunk 时</strong>，长度 T 有 ⌊T / C⌋ 个完整 chunk，剩下的尾巴按引擎和 Connector 的规则处理。比如 chunk = 256 时，255、256、257 个 token 分别有 0、1、1 个完整 chunk。但不能因此断定最终一定复用 0、256、256 个 token：生成第一个输出需要最后一个位置的 logits，加上掩码、APC 覆盖范围和接口限制，实际命中可能更少。</p>
+
+<h2 id="4-能不能复用比文本相同更严格">4. 能不能复用，比“文本相同”更严格</h2>
+<p>第 i 个 chunk 的身份可以这样理解（教学写法）：</p>
 <div>
 <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
   <msub>
@@ -299,37 +259,33 @@ MP 会进行 chunk size 协商以满足 block/group 对齐要求，启动时的�
   <mo stretchy="false">)</mo>
 </math>
 </div>
-<p>前缀链使相同 chunk 内容在不同历史之后得到不同身份。实际实现还涉及初始 hash、
-序列化、算法和模型/租户命名空间。不能把 token ID 列表用任意语言的默认
-<span class="docutils literal">hash()</span> 就当作跨进程稳定协议。</p>
-<p>复用必须确保产生 KV 的计算等价，至少检查：</p>
-<ol class="arabic simple">
-<li><p>相同模型权重及版本，包括影响前向的 LoRA/adapter。</p></li>
-<li><p>相同 tokenization、模板展开结果与真实输入 token；多模态还包含对应输入身份。</p></li>
-<li><p>相同历史上下文、attention mask、位置/RoPE 设置及可见范围。</p></li>
-<li><p>兼容的 dtype、量化信息、layout、层/group、TP/PP 分片语义。</p></li>
-<li><p>正确的租户/授权隔离；同一字符串 key 不能替代身份认证。</p></li>
+<p>也就是说，每个 chunk 的 hash 都包含了前一个 chunk 的 hash（前缀链）。同样的一段文字，出现在不同的前文之后，身份就不同。实际实现还涉及初始 hash、序列化方式、算法选择和模型/租户命名空间。不能拿某种语言默认的 <code>hash()</code> 函数对 token ID 列表求值，就当作跨进程稳定的协议。</p>
+<p>复用必须保证“产生这份 KV 的计算完全等价”，至少要检查五项：</p>
+<ol>
+<li>模型权重和版本相同，包括影响前向计算的 LoRA/adapter。</li>
+<li>分词、模板展开后的 token 完全相同；多模态还要包含图片、音频等输入的身份。</li>
+<li>历史上下文、注意力掩码、位置编码（RoPE）设置和可见范围相同。</li>
+<li>dtype、量化信息、内存布局、层与组、TP/PP 切分方式兼容。</li>
+<li>租户和授权隔离正确——一个字符串 key 不能代替身份认证。</li>
 </ol>
-<p>这些是系统应保证的语义维度，<strong>不是说当前 ObjectKey 自动编码了全部维度</strong>。
-部署需要用模型命名空间、版本隔离与兼容性校验补齐实际接口没有表达的内容。
-采样 temperature/top-p 通常作用在 logits 之后，不改变固定 prompt 的 KV；
-生成的新 token 不同则后续 KV 自然不同。</p>
-<p>RoPE 改变位置相关的表示；仅旋转 K 并不能普遍修复“换了前文”的 KV。
-因为更深层 hidden state 已经通过 attention 依赖原上下文。
-因此 CacheBlend 属于有选择重算和质量评估的高级方法，
-不能当作任意文本片段 KV 的无损拼接。</p>
-</section>
-<section id="section-3">
-<h2 id="heading-缓存不是持久化数据库">缓存不是持久化数据库</h2>
-<p>KV 通常可由输入和模型重新计算，所以系统可以用 miss 回退换取简单生命周期，
-但必须做到“不把未完成或错误数据当命中”。复制提高可用性，
-内存副本不能自动提供跨断电持久化。写入完成的含义取决于层级：
-GPU copy 完成、L1 可读、L2 写成功、远端副本持久化是不同承诺。</p>
-<p>保留原始输入和模型版本是可重算的前提。高并发故障时所有请求一起重算，
-可能导致 GPU 和队列过载；缓存可丢失并不意味着故障没有服务成本。</p>
-</section>
-<section id="section-4">
-<h2 id="heading-延迟与收益的最小模型">延迟与收益的最小模型</h2>
+<p>这是系统<strong>应当保证</strong>的五个方面，<strong>并不是说当前的 ObjectKey 已经自动包含了全部</strong>。接口里没表达的部分，要靠模型命名空间、版本隔离和兼容性校验补上。</p>
+<p>两个常被问到的点：</p>
+<ul>
+<li><strong>temperature、top-p 会不会让 KV 失效？</strong>不会。采样作用在 logits 之后，不改变同一个 prompt 的 KV；只是生成的新 token 不同，后续 KV 自然不同。</li>
+<li><strong>换了前文，能不能把 K 重新旋转一下就复用？</strong>一般不能。RoPE 只改变位置相关的部分，而深层的隐藏状态已经通过注意力“吸收”了原来的上下文。CacheBlend 这类方法通过有选择地重算一部分 token 并评估质量来做非前缀复用，不是无损拼接。</li>
+</ul>
+
+<h2 id="5-缓存不是持久化数据库">5. 缓存不是持久化数据库</h2>
+<p>KV 通常可以由输入和模型重新算出来，所以缓存系统可以接受“丢了就重算”，换来更简单的生命周期管理。但有一条底线：<strong>绝不能把没写完或错误的数据当成命中</strong>。</p>
+<ul>
+<li>多副本能提高可用性，但内存里的副本不能防断电。</li>
+<li>“写入完成”在不同层含义不同：GPU 拷贝完成、L1 可读、L2 写成功、远端副本持久化，是四个不同的承诺。</li>
+<li>能重算的前提是保留了原始输入和模型版本。</li>
+<li>大规模故障时所有请求一起重算，可能把 GPU 和队列压垮。缓存能丢，不代表丢了没有代价。</li>
+</ul>
+
+<h2 id="6-什么时候复用才划算">6. 什么时候复用才划算</h2>
+<p>首 token 时间（TTFT）大致由这几段组成：</p>
 <div>
 <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
   <mi>T</mi>
@@ -409,9 +365,8 @@ GPU copy 完成、L1 可读、L2 写成功、远端副本持久化是不同承�
   </msub>
 </math>
 </div>
-<p>串行加载近似为查询、L2 读取、网络、解码和 H2D 之和；充分流水时更接近瓶颈阶段
-加启动/收尾。不能在同一数据路径上既把并行阶段全部相加，又宣称完全 overlap。</p>
-<p>可复用前缀的收益条件为：</p>
+<p>依次是：排队、查找、关键路径上的加载、剩余部分的 Prefill、生成第一个输出。加载如果是串行的，就是查询、L2 读取、网络、解码和 H2D 相加；如果充分流水，更接近最慢那一段再加上启动和收尾。不能一边把各阶段全部相加，一边又说它们完全重叠。</p>
+<p>复用划算的条件是：</p>
 <div>
 <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
   <msub>
@@ -464,23 +419,20 @@ GPU copy 完成、L1 可读、L2 写成功、远端副本持久化是不同承�
   </msub>
 </math>
 </div>
-<p>省下的 prefill 时间应通过对照测量，不能直接按命中 token 百分比线性缩放：
-attention 复杂度、剩余 query 仍需关注旧 KV、batch 效率和排队都会改变结果。
-当缓存命中短、后端 RTT 大或传输争抢 decode 带宽时，重算可能更快。</p>
-</section>
-<section id="section-5">
-<h2 id="heading-本章自测">本章自测</h2>
-<ul class="simple">
-<li><p>将算例 H_KV 改为 32，容量变为多少？答案：每 token 512 KiB，8K 为 4 GiB。</p></li>
-<li><p>为什么“把 KV 存 SSD 就能无限上下文”不成立？仍需计算、搬运及引擎可用工作集。</p></li>
-<li><p>为什么精确 key 命中但 layout 不兼容仍可能产生错误答案？内容身份没有定义物理解释。</p></li>
-<li><p>为什么请求数命中率 90% 不一定省掉 90% prefill？每次命中长度与代价不同。</p></li>
+<p>即：省下的重算时间，要大于查找时间、没能被隐藏的加载时间，以及对其他请求的干扰之和。</p>
+<p>省下多少 Prefill 时间要靠对照测量，不能按命中 token 的比例直接折算：注意力的计算量和长度不是线性关系，剩下的 query 仍要关注旧的 KV，batch 效率和排队也会变化。命中很短、后端往返时间长、或者传输抢了 Decode 的带宽时，重算反而更快。可以用<a href="../01-foundations/interactive.html#加载还是重算">互动盈亏计算器</a>试一试。</p>
+
+<h2 id="7-自测">7. 自测</h2>
+<ul>
+<li>把例子中的 H<sub>KV</sub> 改成 32，容量变成多少？答案：每 token 512 KiB，8K 是 4 GiB。</li>
+<li>为什么“把 KV 存到 SSD 就能无限长上下文”不成立？因为仍要计算、搬运，而且引擎能同时用的工作集有限。</li>
+<li>为什么 key 完全命中但布局不兼容，仍可能产生错误答案？因为内容身份只说明“是哪份数据”，没有说明“字节怎么解释”。</li>
+<li>为什么按请求数算的命中率 90%，不一定省掉 90% 的 Prefill？因为每次命中的长度和代价都不同。</li>
 </ul>
-</section>
 </article>
 <footer><a href="../index.html">返回总目录</a>
 <p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
-<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#heading-为什么缓存-kv">为什么缓存 K/V</a><a class="level-2" href="#heading-容量公式与例外">容量公式与例外</a><a class="level-2" href="#heading-pagedattentionapc-和-lmcache-的分工">PagedAttention、APC 和 LMCache 的分工</a><a class="level-2" href="#heading-正确性比文本相同更严格">正确性比“文本相同”更严格</a><a class="level-2" href="#heading-缓存不是持久化数据库">缓存不是持久化数据库</a><a class="level-2" href="#heading-延迟与收益的最小模型">延迟与收益的最小模型</a><a class="level-2" href="#heading-本章自测">本章自测</a></aside>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-为什么缓存-k-和-v">1. 为什么缓存 K 和 V</a><a class="level-2" href="#2-容量公式和它的例外">2. 容量公式和它的例外</a><a class="level-3" href="#21-算一个例子">2.1 算一个例子</a><a class="level-2" href="#3-pagedattentionapc-和-lmcache-各管什么">3. PagedAttention、APC 和 LMCache 各管什么</a><a class="level-2" href="#4-能不能复用比文本相同更严格">4. 能不能复用，比“文本相同”更严格</a><a class="level-2" href="#5-缓存不是持久化数据库">5. 缓存不是持久化数据库</a><a class="level-2" href="#6-什么时候复用才划算">6. 什么时候复用才划算</a><a class="level-2" href="#7-自测">7. 自测</a></aside>
 <dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
 <button id="search-close" aria-label="关闭搜索">关闭</button></div>
 <input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">

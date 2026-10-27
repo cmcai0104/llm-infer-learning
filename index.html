@@ -1,14 +1,14 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LLM Infra 学习资料库 · LLM Infra</title>
+<title>LLM Infer Infra 学习资料库 · LLM Infer Infra</title>
 <link rel="stylesheet" href="assets/site.css">
 <script defer src="assets/search-index.js"></script>
 <script defer src="assets/site.js"></script></head>
 <body data-root=".">
 <a class="skip" href="#content">跳到正文</a>
 <header class="topbar"><button id="nav-toggle" aria-controls="sidebar" aria-expanded="false">目录</button>
-<a class="brand" href="index.html">LLM Infra <span>学习资料库</span></a>
+<a class="brand" href="index.html">LLM Infer Infra <span>学习资料库</span></a>
 <button id="search-open">搜索内容 <kbd>/</kbd></button></header>
 <aside id="sidebar"><nav aria-label="学习主题">
 <a href="index.html" aria-current="page">总目录</a>
@@ -34,6 +34,7 @@
 <a href="03-kv-cache/index.html">03 KV Cache 管理：让正确的状态在正确的时间可用</a>
 <a href="03-kv-cache/semantics-and-costs.html">KV Cache 原理：复用条件与容量推导</a>
 <a href="03-kv-cache/capacity-and-reuse.html">KV Cache 基础：容量与性能模型</a>
+<a href="03-kv-cache/block-manager.html">块管理器深入：BlockPool、前缀 hash 与淘汰顺序</a>
 <a href="03-kv-cache/model-variants.html">复杂模型与 KV 存储：MLA、滑窗、混合状态、MoE 与量化</a>
 <a href="03-kv-cache/implementations/vllm/integration.html">vLLM：外部 KV 接入（LMCache 与 Mooncake）</a>
 <a href="03-kv-cache/implementations/sglang/prefix-cache.html">SGLang：KV 原理、分页与前缀复用</a>
@@ -101,9 +102,9 @@
 <a href="tools/index.html">维护说明：怎样直接修改 HTML</a>
 </nav></aside>
 <main id="content"><div class="breadcrumbs">学习资料库 · 专注 KV Cache 存储</div>
-<article><h1 id="llm-infra-学习资料库">LLM Infra 学习资料库</h1>
+<article><h1 id="llm-infra-学习资料库">LLM Infer Infra 学习资料库</h1>
 <p>这套资料围绕一个问题展开：<strong>怎样让大模型在有限的 GPU、内存和网络资源上，正确、稳定、低成本地服务更多请求？</strong></p>
-<p>资料按 <strong>LLM Infra 的技术问题</strong>组织：先理解共同原理和系统取舍，再比较具体实现，最后通过实验验证。vLLM、SGLang、LMCache、Mooncake 是深入源码的案例，放在各主题内部，不作为全库的学习分区。重点方向是 KV Cache 管理、分布式存储与数据传输。</p>
+<p>资料按 <strong>LLM Infer Infra 的技术问题</strong>组织：先理解共同原理和系统取舍，再比较具体实现，最后通过实验验证。vLLM、SGLang、LMCache、Mooncake 是深入源码的案例，放在各主题内部，不作为全库的学习分区。重点方向是 KV Cache 管理、分布式存储与数据传输。</p>
 <h2 id="先从这里开始">先从这里开始</h2>
 <div class="table-scroll"><table>
 <thead>

@@ -1,14 +1,15 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mooncake Transfer Engine：字节移动的实现案例 · LLM Infra</title>
+<title>Mooncake Transfer Engine：字节移动的实现案例 · LLM Infer Infra</title>
 <link rel="stylesheet" href="../../../assets/site.css">
 <script defer src="../../../assets/search-index.js"></script>
-<script defer src="../../../assets/site.js"></script></head>
+<script defer src="../../../assets/site.js"></script>
+<script defer src="../../../assets/stepper.js"></script></head>
 <body data-root="../../..">
 <a class="skip" href="#content">跳到正文</a>
 <header class="topbar"><button id="nav-toggle" aria-controls="sidebar" aria-expanded="false">目录</button>
-<a class="brand" href="../../../index.html">LLM Infra <span>学习资料库</span></a>
+<a class="brand" href="../../../index.html">LLM Infer Infra <span>学习资料库</span></a>
 <button id="search-open">搜索内容 <kbd>/</kbd></button></header>
 <aside id="sidebar"><nav aria-label="学习主题">
 <a href="../../../index.html">总目录</a>
@@ -34,6 +35,7 @@
 <a href="../../../03-kv-cache/index.html">03 KV Cache 管理：让正确的状态在正确的时间可用</a>
 <a href="../../../03-kv-cache/semantics-and-costs.html">KV Cache 原理：复用条件与容量推导</a>
 <a href="../../../03-kv-cache/capacity-and-reuse.html">KV Cache 基础：容量与性能模型</a>
+<a href="../../../03-kv-cache/block-manager.html">块管理器深入：BlockPool、前缀 hash 与淘汰顺序</a>
 <a href="../../../03-kv-cache/model-variants.html">复杂模型与 KV 存储：MLA、滑窗、混合状态、MoE 与量化</a>
 <a href="../../../03-kv-cache/implementations/vllm/integration.html">vLLM：外部 KV 接入（LMCache 与 Mooncake）</a>
 <a href="../../../03-kv-cache/implementations/sglang/prefix-cache.html">SGLang：KV 原理、分页与前缀复用</a>
@@ -166,6 +168,56 @@
 <li>CPU↔GPU、layout conversion、压缩/解压的搬运。</li>
 </ol>
 <p><code>put_from/get_into</code>、已注册 buffer、RDMA、GDR 分别消除或减少其中某些环节。性能报告应画真实路径，而不是只写“零拷贝”。</p>
+<h2 id="深入一次-batch-传输在-te-内部怎么走">深入：一次 batch 传输在 TE 内部怎么走</h2>
+<p>上面是接口层面的流程。下面打开 TE 内部，看一个请求怎样被切分、分到多张网卡、确认完成，以及出错时怎样重试。内容依据 Mooncake 学习版本的 <a href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/docs/source/design/transfer-engine/index.md">Transfer Engine 设计文档</a> 和 <code>mooncake-transfer-engine/</code> 源码。</p>
+<p><img src="../../../01-foundations/diagrams/d15-transfer-engine.svg" alt="Transfer Engine 内部结构" /></p>
+<div class="table-scroll"><table>
+<thead><tr><th>环节</th><th>具体做法</th><th>默认值（学习版本 <code>config.h</code>）</th><th>为什么这样设计</th></tr></thead>
+<tbody>
+<tr><td>切分</td><td>超过 64 KiB 的请求切成多个 slice，每个 slice 独立选路、独立完成</td><td><code>slice_size = 65536</code>，可用环境变量 <code>MC_SLICE_SIZE</code> 调整</td><td>让一个大请求同时用上多张网卡；slice 太小会增加提交和轮询开销</td></tr>
+<tr><td>选路</td><td>每台机器生成拓扑矩阵并广播。按本地 buffer 所在的 CPU/GPU 选优先网卡，按远端目标内存的位置选远端网卡</td><td>可用 <code>--auto_discovery</code> 自动生成</td><td>避免数据绕过 CPU 之间的 UPI 或共享的 PCIe 交换芯片</td></tr>
+<tr><td>连接</td><td>“本地网卡—远端网卡”之间用一对 endpoint 表示，每个 endpoint 含若干 QP；第一次用到时才建连，放入连接池</td><td><code>num_qp_per_ep = 2</code>，<code>max_ep_per_ctx = 65536</code></td><td>集群很大时不能两两预先建满连接；连接池满了按 SIEVE 算法淘汰</td></tr>
+<tr><td>执行</td><td>每张网卡一个 RdmaContext，由 worker 线程投递工作请求并轮询完成队列</td><td><code>workers_per_ctx = 2</code>，<code>num_cq_per_ctx = 1</code></td><td>投递和完成都在专门线程里做，应用线程不被阻塞</td></tr>
+<tr><td>容错</td><td>slice 失败时换一条可达路径重新提交；暂时避开出问题的网卡、上下文或完成队列；坏连接从两端连接池移除，下次再重建</td><td><code>retry_cnt = 9</code>（slice 重试上限相关配置）</td><td>多网卡环境里常见的是某一张网卡暂时不可用，换路径往往就能成功</td></tr>
+<tr><td>回收</td><td>被淘汰或删除的 endpoint 先进入等待列表，等它上面的在途 slice 全部结束后再异步回收</td><td>有约 1 Hz 的后台检查</td><td>直接销毁正在使用的 QP 会让在途传输出错</td></tr>
+</tbody></table></div>
+<p>下面一步步演示一次 256 KiB 的写入，其中一个 slice 第一次失败、换路径后成功：</p>
+<figure class="stepper"><div class="stepper-stage">
+<div class="st-row" data-on="1"><span class="st-label">应用调用</span><span class="st-box used" data-hl="1">申请 batch：allocateBatchID(1)</span></div>
+<div class="st-row" data-on="1"><span class="st-label">slice</span><span class="st-arrow">（还没有）</span></div>
+<div class="st-row" data-on="1"><span class="st-label">网卡与连接</span><span class="st-arrow">mlx5_0 空闲　mlx5_1 空闲</span></div>
+<div class="st-row" data-on="1"><span class="st-label">任务状态</span><span class="st-box free">无任务</span></div>
+<div class="st-row" data-on="2"><span class="st-label">应用调用</span><span class="st-box used" data-hl="2">submitTransfer：WRITE 256 KiB，本地 buffer → 远端 segment</span></div>
+<div class="st-row" data-on="2"><span class="st-label">slice</span><span class="st-arrow">（还没有）</span></div>
+<div class="st-row" data-on="2"><span class="st-label">网卡与连接</span><span class="st-arrow">mlx5_0 空闲　mlx5_1 空闲</span></div>
+<div class="st-row" data-on="2"><span class="st-label">任务状态</span><span class="st-box free">任务已提交，0/4 完成</span></div>
+<div class="st-row" data-on="3"><span class="st-label">应用调用</span><span class="st-box used" data-hl="3">按 64 KiB 切成 4 个 slice</span></div>
+<div class="st-row" data-on="3"><span class="st-label">slice</span><span class="st-box used">S0</span><span class="st-box used">S1</span><span class="st-box used">S2</span><span class="st-box used">S3</span></div>
+<div class="st-row" data-on="3"><span class="st-label">网卡与连接</span><span class="st-arrow">按拓扑矩阵选出 buffer 所在 CPU 的优先网卡：mlx5_0、mlx5_1</span></div>
+<div class="st-row" data-on="3"><span class="st-label">任务状态</span><span class="st-box free">0/4 完成</span></div>
+<div class="st-row" data-on="4"><span class="st-label">应用调用</span><span class="st-box used" data-hl="4">slice 分到不同网卡，worker 线程投递 RDMA WRITE</span></div>
+<div class="st-row" data-on="4"><span class="st-label">slice</span><span class="st-box used">S0→mlx5_0</span><span class="st-box used">S1→mlx5_1</span><span class="st-box used">S2→mlx5_0</span><span class="st-box used">S3→mlx5_1</span></div>
+<div class="st-row" data-on="4"><span class="st-label">网卡与连接</span><span class="st-arrow">两张网卡并行工作；与远端网卡的连接按需建立并放入连接池</span></div>
+<div class="st-row" data-on="4"><span class="st-label">任务状态</span><span class="st-box free">0/4 完成</span></div>
+<div class="st-row" data-on="5"><span class="st-label">应用调用</span><span class="st-box used" data-hl="5">轮询完成队列（CQ）：S0、S2 成功，S3 成功，S1 报错</span></div>
+<div class="st-row" data-on="5"><span class="st-label">slice</span><span class="st-box cached">S0 ✓</span><span class="st-box warn">S1 ✗</span><span class="st-box cached">S2 ✓</span><span class="st-box cached">S3 ✓</span></div>
+<div class="st-row" data-on="5"><span class="st-label">网卡与连接</span><span class="st-arrow">mlx5_1 这条路径出现链路错误</span></div>
+<div class="st-row" data-on="5"><span class="st-label">任务状态</span><span class="st-box warn">3/4 完成</span></div>
+<div class="st-row" data-on="6"><span class="st-label">应用调用</span><span class="st-box used" data-hl="6">S1 换一条可达路径重试（重试次数有上限）</span></div>
+<div class="st-row" data-on="6"><span class="st-label">slice</span><span class="st-box cached">S0 ✓</span><span class="st-box used">S1→mlx5_0</span><span class="st-box cached">S2 ✓</span><span class="st-box cached">S3 ✓</span></div>
+<div class="st-row" data-on="6"><span class="st-label">网卡与连接</span><span class="st-arrow">暂时避开出错的网卡/连接；坏连接从连接池移除，下次再重建</span></div>
+<div class="st-row" data-on="6"><span class="st-label">任务状态</span><span class="st-box free">3/4 完成</span></div>
+<div class="st-row" data-on="7"><span class="st-label">应用调用</span><span class="st-box used" data-hl="7">全部 slice 成功，任务状态变为 COMPLETED</span></div>
+<div class="st-row" data-on="7"><span class="st-label">slice</span><span class="st-box cached">S0 ✓</span><span class="st-box cached">S1 ✓</span><span class="st-box cached">S2 ✓</span><span class="st-box cached">S3 ✓</span></div>
+<div class="st-row" data-on="7"><span class="st-label">网卡与连接</span><span class="st-arrow">—</span></div>
+<div class="st-row" data-on="7"><span class="st-label">任务状态</span><span class="st-box cached">4/4 完成</span></div>
+<div class="st-row" data-on="8"><span class="st-label">应用调用</span><span class="st-box used" data-hl="8">freeBatchID；此后应用才能复用或释放本地 buffer</span></div>
+<div class="st-row" data-on="8"><span class="st-label">slice</span><span class="st-arrow">（还没有）</span></div>
+<div class="st-row" data-on="8"><span class="st-label">网卡与连接</span><span class="st-arrow">—</span></div>
+<div class="st-row" data-on="8"><span class="st-label">任务状态</span><span class="st-box free">batch 已释放</span></div>
+</div><ol class="stepper-captions"><li>应用先申请一个 batch ID，后面的请求都挂在这个 batch 下。</li><li>提交一个传输请求：操作类型（READ/WRITE）、本地地址、远端 segment、远端偏移、长度。函数返回只代表“已提交”，不代表已完成。</li><li>超过 64 KiB 的请求被切成多个 slice（默认 64 KiB，可用 MC_SLICE_SIZE 调整）。根据集群广播的拓扑矩阵，为本地 buffer 所在的 CPU/GPU 选出优先的网卡，远端也按目标内存位置选网卡。</li><li>不同 slice 可以走不同的网卡，多张网卡一起工作。本地网卡和远端网卡之间的连接（endpoint，内含若干 QP）在第一次用到时才建立，连接数有上限，超出时按 SIEVE 算法淘汰。</li><li>worker 线程轮询完成队列，逐个确认 slice 的结果。这里 S1 所走的路径出错了。</li><li>TE 会为失败的 slice 换一条可达路径重新提交，并暂时避开有问题的网卡或连接；超过重试上限仍失败，整个任务就标记为失败。</li><li>所有 slice 都成功，任务才算完成。应用通过 getTransferStatus / getBatchTransferStatus 查到这个状态。</li><li>释放 batch。只有确认任务完成（或确认失败且不再有在途 slice）之后，应用才能复用或释放本地 buffer、注销内存。</li></ol></figure>
+<p><strong>面试要点</strong>：①“提交成功”“slice 完成”“任务完成”“上层对象可读”是四个不同的时刻；② 多网卡不一定线性加速——Mooncake README 公布的 8×400G 结果约 190 GB/s，只用到线速的一半左右（见<a href="../../../07-practice/measurement-and-drills.html#23-项目公开结果">公开数据</a>）；③ 超时或失败后，必须等在途 slice 都结束才能释放本地 buffer，这和存储层的租约、上层的设备事件是不同层次的保护。</p>
+
 <h2 id="带着问题读源码和文档">带着问题读源码和文档</h2>
 <div class="table-scroll"><table>
 <thead>
@@ -199,7 +251,7 @@
 </article>
 <footer><a href="../../../index.html">返回总目录</a>
 <p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
-<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#执行与资源生命周期">执行与资源生命周期</a><a class="level-3" href="#rdma-需要理解的名词">RDMA 需要理解的名词</a><a class="level-3" href="#多网卡与-numa">多网卡与 NUMA</a><a class="level-3" href="#零拷贝的四个层次">零拷贝的四个层次</a><a class="level-2" href="#带着问题读源码和文档">带着问题读源码和文档</a><a class="level-2" href="#验证方式">验证方式</a></aside>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#执行与资源生命周期">执行与资源生命周期</a><a class="level-3" href="#rdma-需要理解的名词">RDMA 需要理解的名词</a><a class="level-3" href="#多网卡与-numa">多网卡与 NUMA</a><a class="level-3" href="#零拷贝的四个层次">零拷贝的四个层次</a><a class="level-2" href="#深入一次-batch-传输在-te-内部怎么走">深入：一次 batch 传输在 TE 内部怎么走</a><a class="level-2" href="#带着问题读源码和文档">带着问题读源码和文档</a><a class="level-2" href="#验证方式">验证方式</a></aside>
 <dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
 <button id="search-close" aria-label="关闭搜索">关闭</button></div>
 <input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">

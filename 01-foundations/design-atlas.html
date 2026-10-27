@@ -1,14 +1,14 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>设计图册：从请求执行到共享 KV 存储 · LLM Infra</title>
+<title>设计图册：从请求执行到共享 KV 存储 · LLM Infer Infra</title>
 <link rel="stylesheet" href="../assets/site.css">
 <script defer src="../assets/search-index.js"></script>
 <script defer src="../assets/site.js"></script></head>
 <body data-root="..">
 <a class="skip" href="#content">跳到正文</a>
 <header class="topbar"><button id="nav-toggle" aria-controls="sidebar" aria-expanded="false">目录</button>
-<a class="brand" href="../index.html">LLM Infra <span>学习资料库</span></a>
+<a class="brand" href="../index.html">LLM Infer Infra <span>学习资料库</span></a>
 <button id="search-open">搜索内容 <kbd>/</kbd></button></header>
 <aside id="sidebar"><nav aria-label="学习主题">
 <a href="../index.html">总目录</a>
@@ -34,6 +34,7 @@
 <a href="../03-kv-cache/index.html">03 KV Cache 管理：让正确的状态在正确的时间可用</a>
 <a href="../03-kv-cache/semantics-and-costs.html">KV Cache 原理：复用条件与容量推导</a>
 <a href="../03-kv-cache/capacity-and-reuse.html">KV Cache 基础：容量与性能模型</a>
+<a href="../03-kv-cache/block-manager.html">块管理器深入：BlockPool、前缀 hash 与淘汰顺序</a>
 <a href="../03-kv-cache/model-variants.html">复杂模型与 KV 存储：MLA、滑窗、混合状态、MoE 与量化</a>
 <a href="../03-kv-cache/implementations/vllm/integration.html">vLLM：外部 KV 接入（LMCache 与 Mooncake）</a>
 <a href="../03-kv-cache/implementations/sglang/prefix-cache.html">SGLang：KV 原理、分页与前缀复用</a>
@@ -260,6 +261,15 @@
 <p>租户配额约束整个过程：容量、写带宽和在途预取都要有上限；跨租户共享必须由授权决定，namespace 只做隔离标识，不等于访问控制。</p>
 <p><strong>专家追问</strong>：升级期间命中率骤降带来多少额外 GPU 重算？能否把“格式转换”做成后台任务？大租户预热会不会挤占小租户？</p>
 <p><a href="../04-storage/kv-cache-storage.html">存储详解：策略与多租户</a></p>
+<h2 id="实现层的深入图解">实现层的深入图解</h2>
+<p>D1–D13 讲共同的结构和流程。下面三张图连同可以一步步播放的动态演示，放在对应的实现页面里：</p>
+<div class="table-scroll"><table>
+<thead><tr><th>图</th><th>内容</th><th>所在页面</th></tr></thead>
+<tbody>
+<tr><td>D14</td><td>vLLM BlockPool：块、空闲队列、前缀 hash 表；动态演示前缀命中、释放顺序和淘汰</td><td><a href="../03-kv-cache/block-manager.html">块管理器深入</a></td></tr>
+<tr><td>D15</td><td>Transfer Engine 内部：切分 slice、按拓扑选网卡、连接池、完成与重试；动态演示一次带重试的写入</td><td><a href="../05-transfer/implementations/mooncake/transfer-engine.html#深入一次-batch-传输在-te-内部怎么走">Transfer Engine</a></td></tr>
+<tr><td>D16</td><td>Mooncake Store 副本状态；动态演示对象的写入、读取、租约与淘汰</td><td><a href="../04-storage/implementations/mooncake/internals.html#35-一步步看对象的一生">Store 内核</a></td></tr>
+</tbody></table></div>
 <h2 id="原有框架图与图源维护">原有框架图与图源维护</h2>
 <p>继续深入时看：<a href="../02-runtime/implementations/vllm/architecture.html">引擎架构图</a>、<a href="../02-runtime/implementations/sglang/runtime.html">SGLang 运行图</a>、<a href="../03-kv-cache/implementations/lmcache/state-diagrams.html">LMCache 状态与时序图</a>、<a href="../04-storage/implementations/mooncake/architecture.html">Mooncake 部署与读写图</a>。</p>
 <p>主线 SVG 位于 <code>01-foundations/diagrams/</code>，可直接编辑；原有框架图的 Mermaid 定义写在对应 HTML 中，修改后刷新即可。</p>

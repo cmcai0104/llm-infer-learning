@@ -1,14 +1,14 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>全景导读：先把一次请求的整条链路想明白 · LLM Infra</title>
+<title>全景导读：先把一次请求的整条链路想明白 · LLM Infer Infra</title>
 <link rel="stylesheet" href="../assets/site.css">
 <script defer src="../assets/search-index.js"></script>
 <script defer src="../assets/site.js"></script></head>
 <body data-root="..">
 <a class="skip" href="#content">跳到正文</a>
 <header class="topbar"><button id="nav-toggle" aria-controls="sidebar" aria-expanded="false">目录</button>
-<a class="brand" href="../index.html">LLM Infra <span>学习资料库</span></a>
+<a class="brand" href="../index.html">LLM Infer Infra <span>学习资料库</span></a>
 <button id="search-open">搜索内容 <kbd>/</kbd></button></header>
 <aside id="sidebar"><nav aria-label="学习主题">
 <a href="../index.html">总目录</a>
@@ -34,6 +34,7 @@
 <a href="../03-kv-cache/index.html">03 KV Cache 管理：让正确的状态在正确的时间可用</a>
 <a href="../03-kv-cache/semantics-and-costs.html">KV Cache 原理：复用条件与容量推导</a>
 <a href="../03-kv-cache/capacity-and-reuse.html">KV Cache 基础：容量与性能模型</a>
+<a href="../03-kv-cache/block-manager.html">块管理器深入：BlockPool、前缀 hash 与淘汰顺序</a>
 <a href="../03-kv-cache/model-variants.html">复杂模型与 KV 存储：MLA、滑窗、混合状态、MoE 与量化</a>
 <a href="../03-kv-cache/implementations/vllm/integration.html">vLLM：外部 KV 接入（LMCache 与 Mooncake）</a>
 <a href="../03-kv-cache/implementations/sglang/prefix-cache.html">SGLang：KV 原理、分页与前缀复用</a>
@@ -104,9 +105,9 @@
 <article><h1 id="llm-infra-总体介绍先把整条链路想明白">全景导读：先把一次请求的整条链路想明白</h1>
 <div class="note"><p><strong>本篇定位：第 1 篇，必读</strong></p><p>用一次聊天请求串起整个系统：各层负责什么、为什么 KV 存储岗要懂推理。只讲关系，不展开公式。</p><p>下一篇读<a href="concepts.html">公共概念</a>。</p></div>
 <p><a href="index.html">返回主题</a> · <a href="concepts.html">下一篇：公共基础</a></p>
-<h2 id="1-llm-infra-到底做什么">1. LLM Infra 到底做什么</h2>
+<h2 id="1-llm-infra-到底做什么">1. LLM Infer Infra 到底做什么</h2>
 <p>模型训练好以后，直接写一个 <code>generate()</code> 就能得到回答。但真实服务还要面对几百个用户同时提问、有人输入几万字、有人只问一句话、有人生成到一半取消请求。GPU 很贵，显存有限，机器也会故障。</p>
-<p>LLM Infra 做的就是把“能生成答案”变成“很多人一起用时，依然足够快、足够稳，成本还可控”。常见工作包括：</p>
+<p>LLM Infer Infra 做的就是把“能生成答案”变成“很多人一起用时，依然足够快、足够稳，成本还可控”。常见工作包括：</p>
 <div class="table-scroll"><table>
 <thead>
 <tr>
@@ -243,7 +244,7 @@
 </article>
 <footer><a href="../index.html">返回总目录</a>
 <p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
-<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-llm-infra-到底做什么">1. LLM Infra 到底做什么</a><a class="level-2" href="#2-一次聊天请求经历了什么">2. 一次聊天请求经历了什么</a><a class="level-2" href="#3-按职责理解系统分层">3. 按职责理解系统分层</a><a class="level-2" href="#4-先认清三条常见组合">4. 先认清三条常见组合</a><a class="level-3" href="#组合-a只有推理引擎">组合 A：只有推理引擎</a><a class="level-3" href="#组合-b推理引擎加共享缓存">组合 B：推理引擎加共享缓存</a><a class="level-3" href="#组合-cprefill-与-decode-分开">组合 C：Prefill 与 Decode 分开</a><a class="level-2" href="#5-为什么-kv-cache-存储岗需要懂推理">5. 为什么 KV Cache 存储岗需要懂推理</a><a class="level-2" href="#6-用三个问题检查整体认识">6. 用三个问题检查整体认识</a></aside>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-llm-infra-到底做什么">1. LLM Infer Infra 到底做什么</a><a class="level-2" href="#2-一次聊天请求经历了什么">2. 一次聊天请求经历了什么</a><a class="level-2" href="#3-按职责理解系统分层">3. 按职责理解系统分层</a><a class="level-2" href="#4-先认清三条常见组合">4. 先认清三条常见组合</a><a class="level-3" href="#组合-a只有推理引擎">组合 A：只有推理引擎</a><a class="level-3" href="#组合-b推理引擎加共享缓存">组合 B：推理引擎加共享缓存</a><a class="level-3" href="#组合-cprefill-与-decode-分开">组合 C：Prefill 与 Decode 分开</a><a class="level-2" href="#5-为什么-kv-cache-存储岗需要懂推理">5. 为什么 KV Cache 存储岗需要懂推理</a><a class="level-2" href="#6-用三个问题检查整体认识">6. 用三个问题检查整体认识</a></aside>
 <dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
 <button id="search-close" aria-label="关闭搜索">关闭</button></div>
 <input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">

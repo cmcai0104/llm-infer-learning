@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>块管理器深入：BlockPool、前缀 hash 与淘汰顺序 · LLM Infer Infra</title>
+<link rel="stylesheet" href="../assets/site.css">
+<script defer src="../assets/search-index.js"></script>
+<script defer src="../assets/site.js"></script>
+<script defer src="../assets/stepper.js"></script></head>
+<body data-root="..">
+<a class="skip" href="#content">跳到正文</a>
+<header class="topbar"><button id="nav-toggle" aria-controls="sidebar" aria-expanded="false">目录</button>
+<a class="brand" href="../index.html">LLM Infer Infra <span>学习资料库</span></a>
+<button id="search-open">搜索内容 <kbd>/</kbd></button></header>
+<aside id="sidebar"><nav aria-label="学习主题">
+<a href="../index.html">总目录</a>
+<details><summary>01 基础与设计图</summary>
+<a href="../01-foundations/index.html">01 基础与全景：先理解计算、资源和请求</a>
+<a href="../01-foundations/overview.html">全景导读：先把一次请求的整条链路想明白</a>
+<a href="../01-foundations/concepts.html">公共概念：推理、KV Cache、内存和性能指标</a>
+<a href="../01-foundations/attention-and-inference.html">推理基础：从 Transformer 到服务成本</a>
+<a href="../01-foundations/compute-and-memory.html">计算与显存：调度、GPU 优化与分布式基础</a>
+<a href="../01-foundations/design-atlas.html">设计图册：从请求执行到共享 KV 存储</a>
+<a href="../01-foundations/interactive.html">互动演示：容量、盈亏、命中折叠与超时</a>
+</details>
+<details><summary>02 推理运行时</summary>
+<a href="../02-runtime/index.html">02 推理运行时：把请求变成每一轮 GPU 工作</a>
+<a href="../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
+<a href="../02-runtime/implementations/vllm/architecture.html">vLLM：知识地图与设计图</a>
+<a href="../02-runtime/implementations/vllm/request-walkthrough.html">vLLM：跟踪一条请求的源码与资源</a>
+<a href="../02-runtime/implementations/sglang/overview.html">SGLang：请求调度、前缀复用与分层缓存</a>
+<a href="../02-runtime/implementations/sglang/knowledge-map.html">SGLang：学习大纲与知识地图</a>
+<a href="../02-runtime/implementations/sglang/runtime.html">SGLang：架构、运行图与源码路线</a>
+</details>
+<details open><summary>03 KV Cache 管理</summary>
+<a href="index.html">03 KV Cache 管理：让正确的状态在正确的时间可用</a>
+<a href="semantics-and-costs.html">KV Cache 原理：复用条件与容量推导</a>
+<a href="capacity-and-reuse.html">KV Cache 基础：容量与性能模型</a>
+<a href="block-manager.html" aria-current="page">块管理器深入：BlockPool、前缀 hash 与淘汰顺序</a>
+<a href="model-variants.html">复杂模型与 KV 存储：MLA、滑窗、混合状态、MoE 与量化</a>
+<a href="implementations/vllm/integration.html">vLLM：外部 KV 接入（LMCache 与 Mooncake）</a>
+<a href="implementations/sglang/prefix-cache.html">SGLang：KV 原理、分页与前缀复用</a>
+<a href="implementations/sglang/tiered-cache.html">SGLang：HiCache 分层缓存与 PD 分离</a>
+<a href="implementations/lmcache/overview.html">LMCache：把 KV 的保存、查找、加载和回收管起来</a>
+<a href="implementations/lmcache/state-diagrams.html">LMCache：知识地图、架构与时序图</a>
+<a href="implementations/lmcache/internals.html">LMCache：架构与源码主线</a>
+</details>
+<details><summary>04 分布式存储</summary>
+<a href="../04-storage/index.html">04 分布式存储：把可复用状态放进共享资源池</a>
+<a href="../04-storage/kv-cache-storage.html">KV Cache 存储详解：数据模型、协议、容量、性能与故障</a>
+<a href="../04-storage/implementations/mooncake/overview.html">Mooncake：KV 对象怎样共享、怎样安全地高速搬运</a>
+<a href="../04-storage/implementations/mooncake/architecture.html">Mooncake：知识地图与设计图</a>
+<a href="../04-storage/implementations/mooncake/internals.html">Mooncake：Store 内核与源码路线</a>
+<a href="../04-storage/implementations/mooncake/integrations.html">Mooncake：与 LMCache 和推理引擎集成</a>
+<a href="../04-storage/implementations/lmcache/backend-contracts.html">LMCache：存储后端契约与 Mooncake 接入</a>
+<a href="../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake：从一次保存到下一次恢复</a>
+</details>
+<details><summary>05 数据传输</summary>
+<a href="../05-transfer/index.html">05 数据传输：搬得动、搬得快，还要搬得安全</a>
+<a href="../05-transfer/implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine：字节移动的实现案例</a>
+</details>
+<details><summary>06 Serving 与性能</summary>
+<a href="../06-serving/index.html">06 Serving 与性能：让整条链路满足服务目标</a>
+<a href="../06-serving/component-selection.html">组件选型：在同一技术问题下比较实现</a>
+<a href="../06-serving/gpu-kernel-basics.html">GPU 与 kernel 基础：带宽、异步拷贝与性能分析</a>
+<a href="../06-serving/implementations/vllm/performance-and-parallelism.html">vLLM：性能、分布式与服务工程</a>
+<a href="../06-serving/implementations/lmcache/observability.html">LMCache：优化、可观测与生产设计</a>
+</details>
+<details><summary>07 实验与验证</summary>
+<a href="../07-practice/index.html">07 实验与验证：用证据回答系统问题</a>
+<a href="../07-practice/measurement-and-drills.html">实测与故障演练：测什么、怎么测、怎样记录</a>
+<a href="../07-practice/implementations/vllm/walkthrough.html">vLLM：运行步骤、源码作业与参考答案</a>
+<a href="../07-practice/implementations/vllm/experiments.html">vLLM：实验与项目</a>
+<a href="../07-practice/implementations/sglang/labs.html">SGLang：从单机基线到共享缓存与 PD</a>
+<a href="../07-practice/implementations/lmcache/labs.html">LMCache：实验、基准与验收</a>
+<a href="../07-practice/implementations/mooncake/labs.html">Mooncake：实验与性能诊断</a>
+</details>
+<details><summary>08 专家能力与面试</summary>
+<a href="../08-career/index.html">08 岗位、计划与面试：按能力组织成果</a>
+<a href="../08-career/expert-interview-guide.html">P7–P8 专家面试总纲：重点 KV Cache 存储</a>
+<a href="../08-career/expert-qa.html">P7–P8 KV Cache 存储深挖问答</a>
+<a href="../08-career/interview-and-design.html">基础面试与算例：能解释、能算账、能处理失败</a>
+<a href="../08-career/roles.html">岗位方向：什么必须熟练，什么可以后学</a>
+<a href="../08-career/study-plan.html">统一 28 天计划：基础只学一次，后面按岗位分流</a>
+<a href="../08-career/references.html">资料索引与版本基线</a>
+<a href="../08-career/coverage-and-review.html">资料结构与覆盖范围审阅</a>
+</details>
+<details><summary>专项题库与计划（按项目）</summary>
+<a href="../08-career/implementations/lmcache/questions.html">LMCache 专项：60 道面试题与参考回答</a>
+<a href="../08-career/implementations/lmcache/system-design.html">LMCache 专项：系统设计题与源码阅读</a>
+<a href="../08-career/implementations/lmcache/study-plan.html">LMCache 专项：28 天计划</a>
+<a href="../08-career/implementations/lmcache/index.html">LMCache 专项：学习指南目录</a>
+<a href="../08-career/implementations/mooncake/questions.html">Mooncake 专项：面试题与参考回答</a>
+<a href="../08-career/implementations/mooncake/system-design.html">Mooncake 专项：系统设计与毕业项目</a>
+<a href="../08-career/implementations/mooncake/study-plan.html">Mooncake 专项：28 天计划</a>
+<a href="../08-career/implementations/mooncake/index.html">Mooncake 专项：学习手册目录</a>
+<a href="../08-career/implementations/vllm/questions.html">vLLM 专项：60 道面试题与参考回答</a>
+<a href="../08-career/implementations/vllm/study-plan.html">vLLM 专项：28 天计划</a>
+<a href="../08-career/implementations/vllm/references.html">vLLM 专项：官方资料与版本说明</a>
+<a href="../08-career/implementations/sglang/questions.html">SGLang 专项：36 道面试题与系统设计</a>
+<a href="../08-career/implementations/sglang/study-plan.html">SGLang 专项：28 天计划</a>
+<a href="../08-career/implementations/sglang/assessment.html">SGLang 专项：参考资料与最终验收</a>
+</details>
+<a href="../tools/index.html">维护说明：怎样直接修改 HTML</a>
+</nav></aside>
+<main id="content"><div class="breadcrumbs">03 KV Cache 管理 · 专注 KV Cache 存储</div>
+<article><h1 id="page-title">块管理器深入：BlockPool、前缀 hash 与淘汰顺序</h1>
+<p><a href="index.html">KV 管理主题</a> · <a href="implementations/vllm/integration.html">vLLM 外部 KV 接入</a> · <a href="../02-runtime/implementations/vllm/request-walkthrough.html">vLLM 请求源码</a></p>
+<p>前缀缓存“为什么能命中”“什么时候失效”“空闲的块为什么还能被命中”，答案都在 vLLM 的块管理器里。这一页把它拆开讲：数据结构、前缀 hash 怎么算、分配和释放的顺序、为什么这样设计，最后用一个可以一步步播放的例子把全过程串起来。源码对应 vLLM 学习版本（<code>vllm/v1/core/block_pool.py</code>、<code>kv_cache_utils.py</code>、<code>kv_cache_manager.py</code>）。</p>
+<p><strong>一句话结论</strong>：块的“空闲”和“缓存失效”是两回事。请求结束后，装满的块被放到空闲队列的末尾但仍留在 hash 表里，下一个相同前缀的请求可以直接捡回来；只有当这个块被重新分配给别人时，它的缓存才真正失效。</p>
+
+<h2 id="1-三个核心数据结构">1. 三个核心数据结构</h2>
+<p><img src="../01-foundations/diagrams/d14-block-pool.svg" alt="vLLM BlockPool 数据结构" /></p>
+<div class="table-scroll"><table>
+<thead><tr><th>结构</th><th>里面有什么</th><th>作用</th></tr></thead>
+<tbody>
+<tr><td><code>KVCacheBlock</code></td><td><code>block_id</code>、<code>ref_cnt</code>（有几个请求在用）、<code>block_hash</code>（装满后才有）</td><td>代表 GPU 上的一个物理块。<code>ref_cnt</code> 决定能不能被回收，<code>block_hash</code> 决定能不能被命中</td></tr>
+<tr><td>空闲队列 <code>free_block_queue</code></td><td>所有 <code>ref_cnt = 0</code> 的块，按“先被拿走”的顺序排成双向链表</td><td>分配时从左端取；释放时按规则放到左端或右端。它同时就是 LRU 淘汰顺序</td></tr>
+<tr><td>hash 表 <code>cached_block_hash_to_block</code></td><td>前缀 hash → 块</td><td>新请求按 hash 查找可复用的块。空闲队列里的块也可能还在表里</td></tr>
+</tbody></table></div>
+<p>另外有一个特殊的 <code>null_block</code>（初始化时从队列取出的第一个块），用来占位不需要真实存储的位置（例如滑窗层窗口外的部分），它的引用计数不参与管理。</p>
+
+<h2 id="2-前缀-hash-怎么算">2. 前缀 hash 怎么算</h2>
+<p>每个装满的块算一个 hash，<strong>包含前一个块的 hash</strong>，形成一条链：</p>
+<pre><code class="language-text">h1 = hash(初始值, 块 1 的 token, 额外 key)
+h2 = hash(h1,     块 2 的 token, 额外 key)
+h3 = hash(h2,     块 3 的 token, 额外 key)</code></pre>
+<ul>
+<li><strong>初始值</strong>（<code>NONE_HASH</code>）由一个种子派生；多个进程要共享缓存时，必须用同一个种子。</li>
+<li><strong>额外 key</strong> 把会改变 KV 的因素也算进去：LoRA 名称、多模态内容的 hash、<code>cache_salt</code>（只加在第一个块上，用来隔离租户）等。</li>
+<li>因为有链，两个请求只要前面任何一个 token 不同，后面所有块的 hash 都不同——这正是“只能复用连续前缀”的来源。</li>
+<li>只有<strong>装满</strong>的块才有 hash；最后那个没装满的块不登记，也就不能被别人命中。</li>
+</ul>
+<p>还有一个细节：即使整个 prompt 都命中，vLLM 也最多复用到“长度减 1”。因为生成第一个输出 token 需要最后一个位置的 logits，至少要算最后一个 token。</p>
+
+<h2 id="3-分配释放与命中">3. 分配、释放与命中</h2>
+<div class="table-scroll"><table>
+<thead><tr><th>操作</th><th>函数</th><th>做了什么</th></tr></thead>
+<tbody>
+<tr><td>分配新块</td><td><code>get_new_blocks</code></td><td>从空闲队列<strong>左端</strong>取块；如果这个块还带着旧 hash，先调用 <code>_maybe_evict_cached_block</code> 把它从 hash 表删掉（这才是真正的淘汰）；然后 <code>ref_cnt = 1</code></td></tr>
+<tr><td>命中复用</td><td><code>touch</code></td><td>如果块的 <code>ref_cnt</code> 是 0（在空闲队列里），先把它从队列中取出；然后 <code>ref_cnt + 1</code>。多个请求共享同一个物理块，不拷贝</td></tr>
+<tr><td>登记缓存</td><td><code>cache_full_blocks</code></td><td>块装满后，给它设置 hash，加入 hash 表</td></tr>
+<tr><td>释放</td><td><code>free_blocks</code></td><td>请求的块<strong>倒序</strong>传入，<code>ref_cnt - 1</code>；归零的块中，<strong>没有 hash 的放到左端</strong>（最先被复用），<strong>有 hash 的放到右端</strong>（最后被复用）</td></tr>
+</tbody></table></div>
+<h3 id="31-为什么这样排顺序">3.1 为什么这样排顺序</h3>
+<ul>
+<li><strong>没有 hash 的块放左端</strong>：它们不可能被命中，留着没用，优先拿去复用；源码注释也提到这样对 GPU 局部性更好。</li>
+<li><strong>有 hash 的块放右端</strong>：越晚被拿走，越有机会被后来的请求命中，相当于 LRU。</li>
+<li><strong>倒序释放</strong>：一个请求的后面几个块，比前面的块更难被别人共享（前缀越长越特殊）。倒序放入右端，后面的块排在更靠左的位置，会先被淘汰，开头那几个通用的块保留得更久。</li>
+</ul>
+
+<h2 id="4-一步步看全过程">4. 一步步看全过程</h2>
+<p>下面用 6 个块、每块 4 个 token 演示。点“下一步”或“自动播放”，也可以直接点下方说明跳到某一步。黄色框是这一步发生变化的块；绿色表示已登记 hash、可以被命中。</p>
+<figure class="stepper"><div class="stepper-stage">
+<div class="st-row" data-on="1"><span class="st-label">GPU 块（ref 计数）</span><span class="st-box free">块1<small>ref=0</small></span><span class="st-box free">块2<small>ref=0</small></span><span class="st-box free">块3<small>ref=0</small></span><span class="st-box free">块4<small>ref=0</small></span><span class="st-box free">块5<small>ref=0</small></span><span class="st-box free">块6<small>ref=0</small></span></div>
+<div class="st-row" data-on="1"><span class="st-label">空闲队列（左边先被拿走）</span><span class="st-box free">1</span><span class="st-box free">2</span><span class="st-box free">3</span><span class="st-box free">4</span><span class="st-box free">5</span><span class="st-box free">6</span></div>
+<div class="st-row" data-on="1"><span class="st-label">前缀 hash 表</span><span class="st-arrow">（空）</span></div>
+<div class="st-row" data-on="1"><span class="st-label">请求块表</span><span class="st-arrow">（无）</span></div>
+<div class="st-row" data-on="2"><span class="st-label">GPU 块（ref 计数）</span><span class="st-box used">块1<small>ref=1</small></span><span class="st-box used">块2<small>ref=1</small></span><span class="st-box used">块3<small>ref=1</small></span><span class="st-box free">块4<small>ref=0</small></span><span class="st-box free">块5<small>ref=0</small></span><span class="st-box free">块6<small>ref=0</small></span></div>
+<div class="st-row" data-on="2"><span class="st-label">空闲队列（左边先被拿走）</span><span class="st-box free">4</span><span class="st-box free">5</span><span class="st-box free">6</span></div>
+<div class="st-row" data-on="2"><span class="st-label">前缀 hash 表</span><span class="st-arrow">（空）</span></div>
+<div class="st-row" data-on="2"><span class="st-label">请求块表</span><span class="st-arrow">A: [1, 2, 3]</span></div>
+<div class="st-row" data-on="3"><span class="st-label">GPU 块（ref 计数）</span><span class="st-box cached" data-hl="3">块1<small>ref=1</small></span><span class="st-box cached" data-hl="3">块2<small>ref=1</small></span><span class="st-box used">块3<small>ref=1</small></span><span class="st-box free">块4<small>ref=0</small></span><span class="st-box free">块5<small>ref=0</small></span><span class="st-box free">块6<small>ref=0</small></span></div>
+<div class="st-row" data-on="3"><span class="st-label">空闲队列（左边先被拿走）</span><span class="st-box free">4</span><span class="st-box free">5</span><span class="st-box free">6</span></div>
+<div class="st-row" data-on="3"><span class="st-label">前缀 hash 表</span><span class="st-arrow">h1→块1　h2→块2</span></div>
+<div class="st-row" data-on="3"><span class="st-label">请求块表</span><span class="st-arrow">A: [1, 2, 3]</span></div>
+<div class="st-row" data-on="4"><span class="st-label">GPU 块（ref 计数）</span><span class="st-box cached" data-hl="4">块1<small>ref=2</small></span><span class="st-box cached" data-hl="4">块2<small>ref=2</small></span><span class="st-box used">块3<small>ref=1</small></span><span class="st-box used" data-hl="4">块4<small>ref=1</small></span><span class="st-box free">块5<small>ref=0</small></span><span class="st-box free">块6<small>ref=0</small></span></div>
+<div class="st-row" data-on="4"><span class="st-label">空闲队列（左边先被拿走）</span><span class="st-box free">5</span><span class="st-box free">6</span></div>
+<div class="st-row" data-on="4"><span class="st-label">前缀 hash 表</span><span class="st-arrow">h1→块1　h2→块2</span></div>
+<div class="st-row" data-on="4"><span class="st-label">请求块表</span><span class="st-arrow">A: [1, 2, 3]　B: [1, 2, 4]</span></div>
+<div class="st-row" data-on="5"><span class="st-label">GPU 块（ref 计数）</span><span class="st-box cached">块1<small>ref=1</small></span><span class="st-box cached">块2<small>ref=1</small></span><span class="st-box free" data-hl="5">块3<small>ref=0</small></span><span class="st-box used">块4<small>ref=1</small></span><span class="st-box free">块5<small>ref=0</small></span><span class="st-box free">块6<small>ref=0</small></span></div>
+<div class="st-row" data-on="5"><span class="st-label">空闲队列（左边先被拿走）</span><span class="st-box free">3</span><span class="st-box free">5</span><span class="st-box free">6</span></div>
+<div class="st-row" data-on="5"><span class="st-label">前缀 hash 表</span><span class="st-arrow">h1→块1　h2→块2</span></div>
+<div class="st-row" data-on="5"><span class="st-label">请求块表</span><span class="st-arrow">B: [1, 2, 4]</span></div>
+<div class="st-row" data-on="6"><span class="st-label">GPU 块（ref 计数）</span><span class="st-box cached" data-hl="6">块1<small>ref=0</small></span><span class="st-box cached" data-hl="6">块2<small>ref=0</small></span><span class="st-box free">块3<small>ref=0</small></span><span class="st-box free">块4<small>ref=0</small></span><span class="st-box free">块5<small>ref=0</small></span><span class="st-box free">块6<small>ref=0</small></span></div>
+<div class="st-row" data-on="6"><span class="st-label">空闲队列（左边先被拿走）</span><span class="st-box free">4</span><span class="st-box free">3</span><span class="st-box free">5</span><span class="st-box free">6</span><span class="st-box free">2</span><span class="st-box free">1</span></div>
+<div class="st-row" data-on="6"><span class="st-label">前缀 hash 表</span><span class="st-arrow">h1→块1　h2→块2</span></div>
+<div class="st-row" data-on="6"><span class="st-label">请求块表</span><span class="st-arrow">（无）</span></div>
+<div class="st-row" data-on="7"><span class="st-label">GPU 块（ref 计数）</span><span class="st-box cached" data-hl="7">块1<small>ref=1</small></span><span class="st-box cached" data-hl="7">块2<small>ref=1</small></span><span class="st-box free">块3<small>ref=0</small></span><span class="st-box free">块4<small>ref=0</small></span><span class="st-box free">块5<small>ref=0</small></span><span class="st-box free">块6<small>ref=0</small></span></div>
+<div class="st-row" data-on="7"><span class="st-label">空闲队列（左边先被拿走）</span><span class="st-box free">4</span><span class="st-box free">3</span><span class="st-box free">5</span><span class="st-box free">6</span></div>
+<div class="st-row" data-on="7"><span class="st-label">前缀 hash 表</span><span class="st-arrow">h1→块1　h2→块2</span></div>
+<div class="st-row" data-on="7"><span class="st-label">请求块表</span><span class="st-arrow">C: [1, 2, …]</span></div>
+<div class="st-row" data-on="8"><span class="st-label">GPU 块（ref 计数）</span><span class="st-box used" data-hl="8">块1<small>ref=1</small></span><span class="st-box used" data-hl="8">块2<small>ref=1</small></span><span class="st-box used">块3<small>ref=1</small></span><span class="st-box used">块4<small>ref=1</small></span><span class="st-box used">块5<small>ref=1</small></span><span class="st-box used">块6<small>ref=1</small></span></div>
+<div class="st-row" data-on="8"><span class="st-label">空闲队列（左边先被拿走）</span><span class="st-arrow">（空）</span></div>
+<div class="st-row" data-on="8"><span class="st-label">前缀 hash 表</span><span class="st-arrow">（h1、h2 已被淘汰）</span></div>
+<div class="st-row" data-on="8"><span class="st-label">请求块表</span><span class="st-arrow">D: [4, 3, 5, 6, 2, 1]</span></div>
+</div><ol class="stepper-captions">
+<li>初始状态：6 个 GPU 块都在空闲队列里，hash 表为空。每块放 4 个 token。</li>
+<li>请求 A（10 个 token）到达，没有命中。get_new_blocks 从队列左端拿走块 1、2、3，ref 都变成 1。</li>
+<li>A 的 Prefill 完成。块 1、2 已经装满，cache_full_blocks 算出 h1 = hash(初始值, token 0–3)、h2 = hash(h1, token 4–7) 并登记到 hash 表；块 3 没满，不登记。</li>
+<li>请求 B 的前 8 个 token 和 A 相同。查 hash 表命中 h1、h2，touch 让块 1、2 的 ref 变成 2（共享，不拷贝）；剩下的部分再分配新块 4。</li>
+<li>A 结束，按倒序释放 [3, 2, 1]。块 3 没有 hash，ref 归零后放到队列最左边（最先被复用）；块 1、2 还被 B 用着，ref 只减到 1。</li>
+<li>B 结束，按倒序释放 [4, 2, 1]。块 4 没有 hash，放到最左边；块 2、1 有 hash，ref 归零后放到队列最右边——它们仍留在 hash 表里，随时可能被命中。</li>
+<li>请求 C 带着同样的前缀到达。hash 表命中块 1、2，虽然它们在空闲队列里，touch 会把它们从队列中取出、ref 变回 1——这就是“空闲但仍可命中”的前缀缓存。</li>
+<li>换一种情况：如果没有 C，而是显存紧张、不断有新请求分配块。队列从左往右被拿走，块 2、1 最后才轮到；被拿走时 _maybe_evict_cached_block 把它们从 hash 表删掉，前缀缓存才真正失效。</li>
+</ol></figure>
+
+<h2 id="5-和外部缓存怎样衔接">5. 和外部缓存怎样衔接</h2>
+<p>接入 LMCache、Mooncake 等外部缓存时，调度器的顺序是：</p>
+<ol>
+<li>先用本地 hash 表找出 GPU 上已经命中的块（<code>get_computed_blocks</code>）。</li>
+<li>再问 KV Connector：“在本地命中之后，外部还能再提供多少 token？”（<code>get_num_new_matched_tokens</code>）。</li>
+<li>为外部命中的部分分配新的 GPU 块，worker 把数据加载进去；加载完成之前，这些块不能被注意力计算使用。</li>
+<li>请求结束或块装满时，Connector 可以把新产生的 KV 保存出去。</li>
+</ol>
+<p>所以外部缓存只补“本地没命中的那一段”。实验时要分开统计本地命中和外部命中，否则会把 APC 的收益算到外部缓存头上。详见<a href="implementations/vllm/integration.html">vLLM 外部 KV 接入</a>。</p>
+
+<h2 id="6-常见问题">6. 常见问题</h2>
+<div class="table-scroll"><table>
+<thead><tr><th>问题</th><th>回答</th></tr></thead>
+<tbody>
+<tr><td>请求结束后显存为什么没降？</td><td>装满的块仍留在 hash 表里等待复用，看起来“占着”，但它们都在空闲队列里，随时可以分配给新请求，并不影响容量</td></tr>
+<tr><td>两个请求共享块，一个被抢占会怎样？</td><td>抢占只减少这个请求的引用；另一个请求还在用，块不会被回收</td></tr>
+<tr><td>命中率很高，为什么 TTFT 没降？</td><td>可能命中的是很短的前缀，或者命中的块很快被高并发挤出队列；也要看调度和排队是否才是瓶颈</td></tr>
+<tr><td>能不能写一个块已经被共享的块？</td><td>不能。只有 <code>ref_cnt = 1</code> 且还没登记 hash 的块才可以修改（<code>is_block_writable</code>），否则会破坏别人的数据</td></tr>
+<tr><td>多个进程能共享 GPU 前缀缓存吗？</td><td>GPU 块只属于一个引擎进程。跨进程、跨机器复用要靠外部缓存，而且各方的 hash 种子、额外 key 和布局必须一致</td></tr>
+</tbody></table></div>
+
+</article>
+<footer><a href="../index.html">返回总目录</a>
+<p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-三个核心数据结构">1. 三个核心数据结构</a><a class="level-2" href="#2-前缀-hash-怎么算">2. 前缀 hash 怎么算</a><a class="level-2" href="#3-分配释放与命中">3. 分配、释放与命中</a><a class="level-3" href="#31-为什么这样排顺序">3.1 为什么这样排顺序</a><a class="level-2" href="#4-一步步看全过程">4. 一步步看全过程</a><a class="level-2" href="#5-和外部缓存怎样衔接">5. 和外部缓存怎样衔接</a><a class="level-2" href="#6-常见问题">6. 常见问题</a></aside>
+<dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
+<button id="search-close" aria-label="关闭搜索">关闭</button></div>
+<input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">
+<p id="search-status" role="status">输入主题、术语或问题</p><ol id="search-results"></ol></dialog>
+</body></html>

@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>万卡集群的推理 Infra：挑战与常见做法 · LLM Infer Infra</title>
+<link rel="stylesheet" href="../assets/site.css">
+<script defer src="../assets/search-index.js"></script>
+<script defer src="../assets/site.js"></script></head>
+<body data-root="..">
+<a class="skip" href="#content">跳到正文</a>
+<header class="topbar"><button id="nav-toggle" aria-controls="sidebar" aria-expanded="false">目录</button>
+<a class="brand" href="../index.html">LLM Infer Infra <span>学习资料库</span></a>
+<button id="search-open">搜索内容 <kbd>/</kbd></button></header>
+<aside id="sidebar"><nav aria-label="学习主题">
+<a href="../index.html">总目录</a>
+<details><summary>01 基础与设计图</summary>
+<a href="../01-foundations/index.html">01 基础与全景：先理解计算、资源和请求</a>
+<a href="../01-foundations/overview.html">全景导读：先把一次请求的整条链路想明白</a>
+<a href="../01-foundations/concepts.html">公共概念：推理、KV Cache、内存和性能指标</a>
+<a href="../01-foundations/attention-and-inference.html">推理基础：从 Transformer 到服务成本</a>
+<a href="../01-foundations/compute-and-memory.html">计算与显存：调度、GPU 优化与分布式基础</a>
+<a href="../01-foundations/design-atlas.html">设计图册：从请求执行到共享 KV 存储</a>
+<a href="../01-foundations/interactive.html">互动演示：容量、盈亏、命中折叠与超时</a>
+</details>
+<details><summary>02 推理运行时</summary>
+<a href="../02-runtime/index.html">02 推理运行时：把请求变成每一轮 GPU 工作</a>
+<a href="../02-runtime/inference-animations.html">推理过程动态图解：张量变化、连续批处理与 PagedAttention</a>
+<a href="../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
+<a href="../02-runtime/implementations/vllm/architecture.html">vLLM：知识地图与设计图</a>
+<a href="../02-runtime/implementations/vllm/request-walkthrough.html">vLLM：跟踪一条请求的源码与资源</a>
+<a href="../02-runtime/implementations/sglang/overview.html">SGLang：请求调度、前缀复用与分层缓存</a>
+<a href="../02-runtime/implementations/sglang/knowledge-map.html">SGLang：学习大纲与知识地图</a>
+<a href="../02-runtime/implementations/sglang/runtime.html">SGLang：架构、运行图与源码路线</a>
+</details>
+<details><summary>03 KV Cache 管理</summary>
+<a href="../03-kv-cache/index.html">03 KV Cache 管理：让正确的状态在正确的时间可用</a>
+<a href="../03-kv-cache/semantics-and-costs.html">KV Cache 原理：复用条件与容量推导</a>
+<a href="../03-kv-cache/capacity-and-reuse.html">KV Cache 基础：容量与性能模型</a>
+<a href="../03-kv-cache/block-manager.html">块管理器深入：BlockPool、前缀 hash 与淘汰顺序</a>
+<a href="../03-kv-cache/model-variants.html">复杂模型与 KV 存储：MLA、滑窗、混合状态、MoE 与量化</a>
+<a href="../03-kv-cache/implementations/vllm/integration.html">vLLM：外部 KV 接入（LMCache 与 Mooncake）</a>
+<a href="../03-kv-cache/implementations/sglang/prefix-cache.html">SGLang：KV 原理、分页与前缀复用</a>
+<a href="../03-kv-cache/implementations/sglang/tiered-cache.html">SGLang：HiCache 分层缓存与 PD 分离</a>
+<a href="../03-kv-cache/implementations/lmcache/overview.html">LMCache：把 KV 的保存、查找、加载和回收管起来</a>
+<a href="../03-kv-cache/implementations/lmcache/state-diagrams.html">LMCache：知识地图、架构与时序图</a>
+<a href="../03-kv-cache/implementations/lmcache/internals.html">LMCache：架构与源码主线</a>
+</details>
+<details><summary>04 分布式存储</summary>
+<a href="../04-storage/index.html">04 分布式存储：把可复用状态放进共享资源池</a>
+<a href="../04-storage/kv-cache-storage.html">KV Cache 存储详解：数据模型、协议、容量、性能与故障</a>
+<a href="../04-storage/implementations/mooncake/overview.html">Mooncake：KV 对象怎样共享、怎样安全地高速搬运</a>
+<a href="../04-storage/implementations/mooncake/architecture.html">Mooncake：知识地图与设计图</a>
+<a href="../04-storage/implementations/mooncake/internals.html">Mooncake：Store 内核与源码路线</a>
+<a href="../04-storage/implementations/mooncake/integrations.html">Mooncake：与 LMCache 和推理引擎集成</a>
+<a href="../04-storage/implementations/lmcache/backend-contracts.html">LMCache：存储后端契约与 Mooncake 接入</a>
+<a href="../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake：从一次保存到下一次恢复</a>
+</details>
+<details><summary>05 数据传输</summary>
+<a href="../05-transfer/index.html">05 数据传输：搬得动、搬得快，还要搬得安全</a>
+<a href="../05-transfer/implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine：字节移动的实现案例</a>
+</details>
+<details open><summary>06 Serving 与性能</summary>
+<a href="index.html">06 Serving 与性能：让整条链路满足服务目标</a>
+<a href="component-selection.html">组件选型：在同一技术问题下比较实现</a>
+<a href="framework-comparison.html">框架对比：vLLM 与 SGLang、LMCache 与 Mooncake</a>
+<a href="optimization-playbook.html">推理优化方法：从定位瓶颈到选择手段</a>
+<a href="large-scale-cluster.html" aria-current="page">万卡集群的推理 Infra：挑战与常见做法</a>
+<a href="gpu-kernel-basics.html">GPU 与 kernel 基础：带宽、异步拷贝与性能分析</a>
+<a href="implementations/vllm/performance-and-parallelism.html">vLLM：性能、分布式与服务工程</a>
+<a href="implementations/lmcache/observability.html">LMCache：优化、可观测与生产设计</a>
+</details>
+<details><summary>07 实验与验证</summary>
+<a href="../07-practice/index.html">07 实验与验证：用证据回答系统问题</a>
+<a href="../07-practice/measurement-and-drills.html">实测与故障演练：测什么、怎么测、怎样记录</a>
+<a href="../07-practice/implementations/vllm/walkthrough.html">vLLM：运行步骤、源码作业与参考答案</a>
+<a href="../07-practice/implementations/vllm/experiments.html">vLLM：实验与项目</a>
+<a href="../07-practice/implementations/sglang/labs.html">SGLang：从单机基线到共享缓存与 PD</a>
+<a href="../07-practice/implementations/lmcache/labs.html">LMCache：实验、基准与验收</a>
+<a href="../07-practice/implementations/mooncake/labs.html">Mooncake：实验与性能诊断</a>
+</details>
+<details><summary>08 专家能力与面试</summary>
+<a href="../08-career/index.html">08 岗位、计划与面试：按能力组织成果</a>
+<a href="../08-career/expert-interview-guide.html">P7–P8 专家面试总纲：重点 KV Cache 存储</a>
+<a href="../08-career/expert-qa.html">P7–P8 KV Cache 存储深挖问答</a>
+<a href="../08-career/interview-and-design.html">基础面试与算例：能解释、能算账、能处理失败</a>
+<a href="../08-career/roles.html">岗位方向：什么必须熟练，什么可以后学</a>
+<a href="../08-career/study-plan.html">统一 28 天计划：基础只学一次，后面按岗位分流</a>
+<a href="../08-career/references.html">资料索引与版本基线</a>
+<a href="../08-career/coverage-and-review.html">资料结构与覆盖范围审阅</a>
+</details>
+<details><summary>专项题库与计划（按项目）</summary>
+<a href="../08-career/implementations/lmcache/questions.html">LMCache 专项：60 道面试题与参考回答</a>
+<a href="../08-career/implementations/lmcache/system-design.html">LMCache 专项：系统设计题与源码阅读</a>
+<a href="../08-career/implementations/lmcache/study-plan.html">LMCache 专项：28 天计划</a>
+<a href="../08-career/implementations/lmcache/index.html">LMCache 专项：学习指南目录</a>
+<a href="../08-career/implementations/mooncake/questions.html">Mooncake 专项：面试题与参考回答</a>
+<a href="../08-career/implementations/mooncake/system-design.html">Mooncake 专项：系统设计与毕业项目</a>
+<a href="../08-career/implementations/mooncake/study-plan.html">Mooncake 专项：28 天计划</a>
+<a href="../08-career/implementations/mooncake/index.html">Mooncake 专项：学习手册目录</a>
+<a href="../08-career/implementations/vllm/questions.html">vLLM 专项：60 道面试题与参考回答</a>
+<a href="../08-career/implementations/vllm/study-plan.html">vLLM 专项：28 天计划</a>
+<a href="../08-career/implementations/vllm/references.html">vLLM 专项：官方资料与版本说明</a>
+<a href="../08-career/implementations/sglang/questions.html">SGLang 专项：36 道面试题与系统设计</a>
+<a href="../08-career/implementations/sglang/study-plan.html">SGLang 专项：28 天计划</a>
+<a href="../08-career/implementations/sglang/assessment.html">SGLang 专项：参考资料与最终验收</a>
+</details>
+<a href="../tools/index.html">维护说明：怎样直接修改 HTML</a>
+</nav></aside>
+<main id="content"><div class="breadcrumbs">06 Serving 与性能 · 专注 KV Cache 存储</div>
+<article><h1 id="page-title">万卡集群的推理 Infra：挑战与常见做法</h1>
+<p><a href="index.html">Serving 与性能</a> · <a href="optimization-playbook.html">推理优化方法</a> · <a href="../01-foundations/design-atlas.html#d11--目录主节点切换与恢复">设计图：主节点切换</a> · <a href="../07-practice/measurement-and-drills.html#23-项目公开结果">公开数据</a></p>
+<p>几台机器上好用的方案，放到上万张卡的集群里会遇到全新的问题：<strong>故障从“偶尔”变成“每天都有”，网络从“够用”变成“最贵的瓶颈”，调度从“选一台机器”变成“全局优化”</strong>。这一页按问题整理万卡规模推理集群的主要挑战和常见做法。</p>
+<p><strong>说明</strong>：公开的万卡数据多来自训练集群，推理集群的特点不同（请求独立、实例可以单独重启），引用时要注意区别。</p>
+
+<h2 id="1-全景万卡推理集群长什么样">1. 全景：万卡推理集群长什么样</h2>
+<p><img src="../01-foundations/diagrams/d18-large-cluster.svg" alt="万卡推理集群分层" /></p>
+<p>从上到下大致分五层：全局流量入口和路由、按模型划分的服务池（可能再分 Prefill 池和 Decode 池）、单个推理实例（可能横跨几十到上百张卡）、共享的 KV 缓存和权重存储、底层的网络和硬件。每一层在规模变大时都有自己的问题。</p>
+
+<h2 id="2-故障从偶尔变成每天都有">2. 故障：从偶尔变成每天都有</h2>
+<p>Meta 在 Llama 3 论文（arXiv:2407.21783）中报告：16,384 张 H100 的训练集群，54 天里发生 419 次意外中断，平均每天约 7.8 次，其中一半以上与 GPU 或显存有关。卡越多，“某处坏了”就越是常态。</p>
+<div class="table-scroll"><table>
+<thead><tr><th>挑战</th><th>推理集群里的表现</th><th>常见做法</th></tr></thead>
+<tbody>
+<tr><td>单卡故障影响面</td><td>普通实例只影响自己；但大 MoE 模型用 EP 跨几十上百张卡组成一个实例，<strong>一张卡坏了整个实例都停</strong></td><td>实例规模和故障影响面一起设计；健康检查快速摘除；支持部分专家失效时降级（容错 EP）</td></tr>
+<tr><td>静默错误</td><td>不报错但算错（显存位翻转、硬件缺陷），输出质量下降</td><td>定期用已知输入做校验；监控输出分布异常</td></tr>
+<tr><td>慢节点</td><td>一张卡或一条链路变慢，拖慢整个 TP/EP 组</td><td>按组监控每步耗时，自动识别并替换慢节点</td></tr>
+<tr><td>缓存层故障</td><td>KV 缓存节点退出，大量请求同时回退重算，GPU 被打满</td><td>副本、限制重算速率、缓存全冷时的容量预案；见<a href="../01-foundations/design-atlas.html#d11--目录主节点切换与恢复">设计图 D11</a></td></tr>
+</tbody></table></div>
+
+<h2 id="3-网络最贵的瓶颈">3. 网络：最贵的瓶颈</h2>
+<div class="table-scroll"><table>
+<thead><tr><th>挑战</th><th>原因</th><th>常见做法</th></tr></thead>
+<tbody>
+<tr><td>拓扑与收敛比</td><td>上万张卡不可能两两全带宽互联，跨交换机层级的带宽会打折</td><td>轨道优化（rail-optimized）拓扑：同号 GPU 的网卡连同一组交换机；把通信多的任务放在同一个网络域内</td></tr>
+<tr><td>拥塞与尾延迟</td><td>MoE 的 all-to-all、PD 的 KV 传输、缓存读取同时进行，形成多对一的拥塞（incast）</td><td>拥塞控制（RoCE 下 ECN/PFC 调优）、流量分级、限制同时在途的传输量</td></tr>
+<tr><td>多网卡利用率</td><td>网卡越多越难线性扩展：Mooncake 公开数据中 8×400G 只用到线速的约一半</td><td>按拓扑选路、切分 slice、多路径；见<a href="../05-transfer/implementations/mooncake/transfer-engine.html#深入一次-batch-传输在-te-内部怎么走">Transfer Engine</a></td></tr>
+<tr><td>流量混部</td><td>KV 缓存、PD 交接、专家通信、权重加载抢同一张网</td><td>分网络平面或分优先级；容量规划时画清流量矩阵</td></tr>
+</tbody></table></div>
+
+<h2 id="4-调度与路由从选一台机器到全局优化">4. 调度与路由：从选一台机器到全局优化</h2>
+<ul>
+<li><strong>KV 感知的全局路由</strong>：请求发到已有前缀的实例能省大量计算，但需要全局前缀索引（例如 Mooncake Conductor 消费缓存事件维护索引）。索引规模大、更新频繁，而且一定会过时，路由只能当作“提示”，实际加载时必须再验证。</li>
+<li><strong>热点</strong>：热门系统提示或文档的请求都挤到少数实例，要复制热点前缀或在命中和负载之间折中。</li>
+<li><strong>PD 配比</strong>：Prefill 池和 Decode 池的比例随负载变化，要能动态调整。公开案例：Kimi K2 在 128 张 H200 上用 PD 分离加大规模专家并行部署（见<a href="../07-practice/measurement-and-drills.html#23-项目公开结果">公开数据</a>）。</li>
+<li><strong>多模型、多租户</strong>：几十个模型共享集群，要做配额、隔离和优先级，避免大租户挤占小租户。</li>
+</ul>
+
+<h2 id="5-弹性与发布">5. 弹性与发布</h2>
+<div class="table-scroll"><table>
+<thead><tr><th>挑战</th><th>具体问题</th><th>常见做法</th></tr></thead>
+<tbody>
+<tr><td>冷启动慢</td><td>万亿参数模型 FP8 权重约 1 TB，从远端存储加载到大量 GPU 可能要几分钟甚至更久</td><td>权重预热、本地缓存、GPU 之间用 RDMA 点对点分发（Mooncake README 引用的 SGLang 案例中，Kimi-K2 权重更新从 53 秒降到 7.2 秒）</td></tr>
+<tr><td>扩缩容跟不上流量</td><td>流量有明显的日内波动和突发</td><td>预测扩容、保留一定余量、低优先级任务填谷</td></tr>
+<tr><td>版本发布</td><td>新旧模型或新旧 KV 格式同时存在，缓存不能混用</td><td>按命名空间隔离、灰度发布、可回滚；见<a href="../01-foundations/design-atlas.html#d13--模型格式升级与多租户隔离">设计图 D13</a></td></tr>
+<tr><td>异构硬件</td><td>不同代际、不同厂商的卡混在一起，性能和支持的特性不同</td><td>按硬件分池；Prefill 和 Decode 可以用不同的卡</td></tr>
+</tbody></table></div>
+
+<h2 id="6-可观测性与成本">6. 可观测性与成本</h2>
+<ul>
+<li><strong>指标规模</strong>：上万个实例、每个实例几十个指标，标签设计不当会让监控系统先崩；不要把请求 id、原文放进标签。</li>
+<li><strong>端到端追踪</strong>：一个请求可能经过路由、Prefill 池、KV 传输、Decode 池、缓存服务，需要跨组件的 trace 才能定位慢在哪里。</li>
+<li><strong>成本</strong>：GPU 费用占大头，衡量指标应该是“满足 SLO 的每百万 token 成本”，而不是单纯的吞吐；电力和散热在这个规模也会成为约束。</li>
+</ul>
+
+<h2 id="7-面试怎么答">7. 面试怎么答</h2>
+<p><strong>问</strong>：把一个 KV 缓存方案从 100 张卡扩到 1 万张卡，会遇到什么问题？</p>
+<ol>
+<li><strong>容量和元数据</strong>：对象数增长两个数量级，单个 Master 的内存和 QPS 是否够用？需要分片或分层的元数据吗？</li>
+<li><strong>网络</strong>：缓存读取流量和 PD、EP 流量怎样共存？跨交换机层级的带宽够不够？</li>
+<li><strong>故障</strong>：每天都会有节点退出，副本放置要跨故障域，修复流量不能压垮在线服务，缓存失效时 GPU 能否承受重算。</li>
+<li><strong>路由</strong>：全局前缀索引怎样维护、怎样处理过时；热点怎样复制。</li>
+<li><strong>演进</strong>：模型和格式升级、多租户隔离、灰度和回滚怎样做。</li>
+</ol>
+<p>每一点都要能给出量级估算（对象数、带宽、故障频率）和验证方法，而不只是列名词。更多题目见<a href="../08-career/expert-qa.html">专家深挖问答</a>。</p>
+
+</article>
+<footer><a href="../index.html">返回总目录</a>
+<p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-全景万卡推理集群长什么样">1. 全景：万卡推理集群长什么样</a><a class="level-2" href="#2-故障从偶尔变成每天都有">2. 故障：从偶尔变成每天都有</a><a class="level-2" href="#3-网络最贵的瓶颈">3. 网络：最贵的瓶颈</a><a class="level-2" href="#4-调度与路由从选一台机器到全局优化">4. 调度与路由：从选一台机器到全局优化</a><a class="level-2" href="#5-弹性与发布">5. 弹性与发布</a><a class="level-2" href="#6-可观测性与成本">6. 可观测性与成本</a><a class="level-2" href="#7-面试怎么答">7. 面试怎么答</a></aside>
+<dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
+<button id="search-close" aria-label="关闭搜索">关闭</button></div>
+<input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">
+<p id="search-status" role="status">输入主题、术语或问题</p><ol id="search-results"></ol></dialog>
+</body></html>

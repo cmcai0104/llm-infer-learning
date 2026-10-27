@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>推理过程动态图解：张量变化、连续批处理与 PagedAttention · LLM Infer Infra</title>
+<link rel="stylesheet" href="../assets/site.css">
+<script defer src="../assets/search-index.js"></script>
+<script defer src="../assets/site.js"></script>
+<script defer src="../assets/stepper.js"></script></head>
+<body data-root="..">
+<a class="skip" href="#content">跳到正文</a>
+<header class="topbar"><button id="nav-toggle" aria-controls="sidebar" aria-expanded="false">目录</button>
+<a class="brand" href="../index.html">LLM Infer Infra <span>学习资料库</span></a>
+<button id="search-open">搜索内容 <kbd>/</kbd></button></header>
+<aside id="sidebar"><nav aria-label="学习主题">
+<a href="../index.html">总目录</a>
+<details><summary>01 基础与设计图</summary>
+<a href="../01-foundations/index.html">01 基础与全景：先理解计算、资源和请求</a>
+<a href="../01-foundations/overview.html">全景导读：先把一次请求的整条链路想明白</a>
+<a href="../01-foundations/concepts.html">公共概念：推理、KV Cache、内存和性能指标</a>
+<a href="../01-foundations/attention-and-inference.html">推理基础：从 Transformer 到服务成本</a>
+<a href="../01-foundations/compute-and-memory.html">计算与显存：调度、GPU 优化与分布式基础</a>
+<a href="../01-foundations/design-atlas.html">设计图册：从请求执行到共享 KV 存储</a>
+<a href="../01-foundations/interactive.html">互动演示：容量、盈亏、命中折叠与超时</a>
+</details>
+<details open><summary>02 推理运行时</summary>
+<a href="index.html">02 推理运行时：把请求变成每一轮 GPU 工作</a>
+<a href="inference-animations.html" aria-current="page">推理过程动态图解：张量变化、连续批处理与 PagedAttention</a>
+<a href="implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
+<a href="implementations/vllm/architecture.html">vLLM：知识地图与设计图</a>
+<a href="implementations/vllm/request-walkthrough.html">vLLM：跟踪一条请求的源码与资源</a>
+<a href="implementations/sglang/overview.html">SGLang：请求调度、前缀复用与分层缓存</a>
+<a href="implementations/sglang/knowledge-map.html">SGLang：学习大纲与知识地图</a>
+<a href="implementations/sglang/runtime.html">SGLang：架构、运行图与源码路线</a>
+</details>
+<details><summary>03 KV Cache 管理</summary>
+<a href="../03-kv-cache/index.html">03 KV Cache 管理：让正确的状态在正确的时间可用</a>
+<a href="../03-kv-cache/semantics-and-costs.html">KV Cache 原理：复用条件与容量推导</a>
+<a href="../03-kv-cache/capacity-and-reuse.html">KV Cache 基础：容量与性能模型</a>
+<a href="../03-kv-cache/block-manager.html">块管理器深入：BlockPool、前缀 hash 与淘汰顺序</a>
+<a href="../03-kv-cache/model-variants.html">复杂模型与 KV 存储：MLA、滑窗、混合状态、MoE 与量化</a>
+<a href="../03-kv-cache/implementations/vllm/integration.html">vLLM：外部 KV 接入（LMCache 与 Mooncake）</a>
+<a href="../03-kv-cache/implementations/sglang/prefix-cache.html">SGLang：KV 原理、分页与前缀复用</a>
+<a href="../03-kv-cache/implementations/sglang/tiered-cache.html">SGLang：HiCache 分层缓存与 PD 分离</a>
+<a href="../03-kv-cache/implementations/lmcache/overview.html">LMCache：把 KV 的保存、查找、加载和回收管起来</a>
+<a href="../03-kv-cache/implementations/lmcache/state-diagrams.html">LMCache：知识地图、架构与时序图</a>
+<a href="../03-kv-cache/implementations/lmcache/internals.html">LMCache：架构与源码主线</a>
+</details>
+<details><summary>04 分布式存储</summary>
+<a href="../04-storage/index.html">04 分布式存储：把可复用状态放进共享资源池</a>
+<a href="../04-storage/kv-cache-storage.html">KV Cache 存储详解：数据模型、协议、容量、性能与故障</a>
+<a href="../04-storage/implementations/mooncake/overview.html">Mooncake：KV 对象怎样共享、怎样安全地高速搬运</a>
+<a href="../04-storage/implementations/mooncake/architecture.html">Mooncake：知识地图与设计图</a>
+<a href="../04-storage/implementations/mooncake/internals.html">Mooncake：Store 内核与源码路线</a>
+<a href="../04-storage/implementations/mooncake/integrations.html">Mooncake：与 LMCache 和推理引擎集成</a>
+<a href="../04-storage/implementations/lmcache/backend-contracts.html">LMCache：存储后端契约与 Mooncake 接入</a>
+<a href="../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake：从一次保存到下一次恢复</a>
+</details>
+<details><summary>05 数据传输</summary>
+<a href="../05-transfer/index.html">05 数据传输：搬得动、搬得快，还要搬得安全</a>
+<a href="../05-transfer/implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine：字节移动的实现案例</a>
+</details>
+<details><summary>06 Serving 与性能</summary>
+<a href="../06-serving/index.html">06 Serving 与性能：让整条链路满足服务目标</a>
+<a href="../06-serving/component-selection.html">组件选型：在同一技术问题下比较实现</a>
+<a href="../06-serving/framework-comparison.html">框架对比：vLLM 与 SGLang、LMCache 与 Mooncake</a>
+<a href="../06-serving/optimization-playbook.html">推理优化方法：从定位瓶颈到选择手段</a>
+<a href="../06-serving/large-scale-cluster.html">万卡集群的推理 Infra：挑战与常见做法</a>
+<a href="../06-serving/gpu-kernel-basics.html">GPU 与 kernel 基础：带宽、异步拷贝与性能分析</a>
+<a href="../06-serving/implementations/vllm/performance-and-parallelism.html">vLLM：性能、分布式与服务工程</a>
+<a href="../06-serving/implementations/lmcache/observability.html">LMCache：优化、可观测与生产设计</a>
+</details>
+<details><summary>07 实验与验证</summary>
+<a href="../07-practice/index.html">07 实验与验证：用证据回答系统问题</a>
+<a href="../07-practice/measurement-and-drills.html">实测与故障演练：测什么、怎么测、怎样记录</a>
+<a href="../07-practice/implementations/vllm/walkthrough.html">vLLM：运行步骤、源码作业与参考答案</a>
+<a href="../07-practice/implementations/vllm/experiments.html">vLLM：实验与项目</a>
+<a href="../07-practice/implementations/sglang/labs.html">SGLang：从单机基线到共享缓存与 PD</a>
+<a href="../07-practice/implementations/lmcache/labs.html">LMCache：实验、基准与验收</a>
+<a href="../07-practice/implementations/mooncake/labs.html">Mooncake：实验与性能诊断</a>
+</details>
+<details><summary>08 专家能力与面试</summary>
+<a href="../08-career/index.html">08 岗位、计划与面试：按能力组织成果</a>
+<a href="../08-career/expert-interview-guide.html">P7–P8 专家面试总纲：重点 KV Cache 存储</a>
+<a href="../08-career/expert-qa.html">P7–P8 KV Cache 存储深挖问答</a>
+<a href="../08-career/interview-and-design.html">基础面试与算例：能解释、能算账、能处理失败</a>
+<a href="../08-career/roles.html">岗位方向：什么必须熟练，什么可以后学</a>
+<a href="../08-career/study-plan.html">统一 28 天计划：基础只学一次，后面按岗位分流</a>
+<a href="../08-career/references.html">资料索引与版本基线</a>
+<a href="../08-career/coverage-and-review.html">资料结构与覆盖范围审阅</a>
+</details>
+<details><summary>专项题库与计划（按项目）</summary>
+<a href="../08-career/implementations/lmcache/questions.html">LMCache 专项：60 道面试题与参考回答</a>
+<a href="../08-career/implementations/lmcache/system-design.html">LMCache 专项：系统设计题与源码阅读</a>
+<a href="../08-career/implementations/lmcache/study-plan.html">LMCache 专项：28 天计划</a>
+<a href="../08-career/implementations/lmcache/index.html">LMCache 专项：学习指南目录</a>
+<a href="../08-career/implementations/mooncake/questions.html">Mooncake 专项：面试题与参考回答</a>
+<a href="../08-career/implementations/mooncake/system-design.html">Mooncake 专项：系统设计与毕业项目</a>
+<a href="../08-career/implementations/mooncake/study-plan.html">Mooncake 专项：28 天计划</a>
+<a href="../08-career/implementations/mooncake/index.html">Mooncake 专项：学习手册目录</a>
+<a href="../08-career/implementations/vllm/questions.html">vLLM 专项：60 道面试题与参考回答</a>
+<a href="../08-career/implementations/vllm/study-plan.html">vLLM 专项：28 天计划</a>
+<a href="../08-career/implementations/vllm/references.html">vLLM 专项：官方资料与版本说明</a>
+<a href="../08-career/implementations/sglang/questions.html">SGLang 专项：36 道面试题与系统设计</a>
+<a href="../08-career/implementations/sglang/study-plan.html">SGLang 专项：28 天计划</a>
+<a href="../08-career/implementations/sglang/assessment.html">SGLang 专项：参考资料与最终验收</a>
+</details>
+<a href="../tools/index.html">维护说明：怎样直接修改 HTML</a>
+</nav></aside>
+<main id="content"><div class="breadcrumbs">02 推理运行时 · 专注 KV Cache 存储</div>
+<article><h1 id="page-title">推理过程动态图解：张量变化、连续批处理与 PagedAttention</h1>
+<p><a href="index.html">推理运行时</a> · <a href="implementations/vllm/request-walkthrough.html">vLLM 请求源码</a> · <a href="../03-kv-cache/block-manager.html">块管理器深入</a> · <a href="../06-serving/framework-comparison.html">vLLM 与 SGLang 对比</a></p>
+<p>推理里最难想象的三件事：一次前向中张量的形状怎么变、几十个请求怎样在每一轮动态拼成一个 batch、KV Cache 怎样被分页存放和读取。这一页用三个可以逐步播放的演示把它们画出来。点“下一步”或“自动播放”，也可以直接点说明跳到某一步；黄色框是这一步的重点。</p>
+<p><strong>读完应该能回答</strong>：为什么 Decode 受带宽限制？为什么连续批处理比静态批处理吞吐高？PagedAttention 到底省了什么、代价是什么？</p>
+
+<h2 id="1-一次推理中张量怎样变化">1. 一次推理中张量怎样变化</h2>
+<p>模型参数取 Llama-3-8B 一类的公开配置，只为说明形状，不涉及具体实现细节。</p>
+<figure class="stepper"><div class="stepper-stage">
+<div class="st-row" data-on="1"><span class="st-label">阶段</span><span class="st-box used">Prefill：输入 6 个 token</span></div>
+<div class="st-row" data-on="1"><span class="st-label">张量</span><span class="st-box free">token_ids<small>[6]</small></span></div>
+<div class="st-row" data-on="1"><span class="st-label">KV Cache</span><span class="st-arrow">空</span></div>
+<div class="st-row" data-on="2"><span class="st-label">阶段</span><span class="st-box used">Embedding 查表</span></div>
+<div class="st-row" data-on="2"><span class="st-label">张量</span><span class="st-box free">token_ids<small>[6]</small></span><span class="st-arrow">→</span><span class="st-box used" data-hl="2">X<small>[6, 4096]</small></span></div>
+<div class="st-row" data-on="2"><span class="st-label">KV Cache</span><span class="st-arrow">空</span></div>
+<div class="st-row" data-on="3"><span class="st-label">阶段</span><span class="st-box used">第 1 层：RMSNorm + QKV 投影</span></div>
+<div class="st-row" data-on="3"><span class="st-label">张量</span><span class="st-box used">X<small>[6, 4096]</small></span><span class="st-arrow">→</span><span class="st-box used" data-hl="3">QKV<small>[6, 6144]</small></span><span class="st-arrow">拆成</span><span class="st-box used">Q<small>[6, 32, 128]</small></span><span class="st-box cached">K<small>[6, 8, 128]</small></span><span class="st-box cached">V<small>[6, 8, 128]</small></span></div>
+<div class="st-row" data-on="3"><span class="st-label">KV Cache</span><span class="st-arrow">空</span></div>
+<div class="st-row" data-on="4"><span class="st-label">阶段</span><span class="st-box used">RoPE：给 Q、K 加上位置 0–5</span></div>
+<div class="st-row" data-on="4"><span class="st-label">张量</span><span class="st-box used" data-hl="4">Q<small>[6, 32, 128]</small></span><span class="st-box cached" data-hl="4">K<small>[6, 8, 128]</small></span><span class="st-arrow">形状不变，数值按位置旋转</span></div>
+<div class="st-row" data-on="4"><span class="st-label">KV Cache</span><span class="st-arrow">空</span></div>
+<div class="st-row" data-on="5"><span class="st-label">阶段</span><span class="st-box used">写入 KV Cache</span></div>
+<div class="st-row" data-on="5"><span class="st-label">张量</span><span class="st-box cached">K<small>[6, 8, 128]</small></span><span class="st-box cached">V<small>[6, 8, 128]</small></span><span class="st-arrow">按 slot_mapping 写到对应物理槽位</span></div>
+<div class="st-row" data-on="5"><span class="st-label">KV Cache</span><span class="st-box cached">pos 0</span><span class="st-box cached">pos 1</span><span class="st-box cached">pos 2</span><span class="st-box cached">pos 3</span><span class="st-box cached">pos 4</span><span class="st-box cached">pos 5</span></div>
+<div class="st-row" data-on="6"><span class="st-label">阶段</span><span class="st-box used">注意力（因果掩码）</span></div>
+<div class="st-row" data-on="6"><span class="st-label">张量</span><span class="st-box warn" data-hl="6">scores<small>[32, 6, 6]</small></span><span class="st-arrow">softmax × V →</span><span class="st-box used">O<small>[6, 32, 128]</small></span><span class="st-arrow">→</span><span class="st-box used">o_proj<small>[6, 4096]</small></span></div>
+<div class="st-row" data-on="6"><span class="st-label">KV Cache</span><span class="st-box cached">pos 0</span><span class="st-box cached">pos 1</span><span class="st-box cached">pos 2</span><span class="st-box cached">pos 3</span><span class="st-box cached">pos 4</span><span class="st-box cached">pos 5</span></div>
+<div class="st-row" data-on="7"><span class="st-label">阶段</span><span class="st-box used">残差 + MLP</span></div>
+<div class="st-row" data-on="7"><span class="st-label">张量</span><span class="st-box used" data-hl="7">gate / up<small>[6, 14336] ×2</small></span><span class="st-arrow">激活相乘 →</span><span class="st-box used">down<small>[6, 4096]</small></span><span class="st-arrow">+ 残差</span></div>
+<div class="st-row" data-on="7"><span class="st-label">KV Cache</span><span class="st-box cached">pos 0</span><span class="st-box cached">pos 1</span><span class="st-box cached">pos 2</span><span class="st-box cached">pos 3</span><span class="st-box cached">pos 4</span><span class="st-box cached">pos 5</span></div>
+<div class="st-row" data-on="8"><span class="st-label">阶段</span><span class="st-box used">重复 32 层 → 采样第 1 个输出 token</span></div>
+<div class="st-row" data-on="8"><span class="st-label">张量</span><span class="st-box used">最后一个位置<small>[1, 4096]</small></span><span class="st-arrow">lm_head →</span><span class="st-box warn" data-hl="8">logits<small>[1, 128256]</small></span><span class="st-arrow">采样 → token 7</span></div>
+<div class="st-row" data-on="8"><span class="st-label">KV Cache</span><span class="st-box cached">每层都存了 pos 0–5</span></div>
+<div class="st-row" data-on="9"><span class="st-label">阶段</span><span class="st-box used">Decode：只输入 1 个新 token</span></div>
+<div class="st-row" data-on="9"><span class="st-label">张量</span><span class="st-box used">X<small>[1, 4096]</small></span><span class="st-box used">Q<small>[1, 32, 128]</small></span><span class="st-box cached" data-hl="9">新 K / V<small>[1, 8, 128]</small></span><span class="st-arrow">→ scores</span><span class="st-box warn" data-hl="9">scores<small>[32, 1, 7]</small></span></div>
+<div class="st-row" data-on="9"><span class="st-label">KV Cache</span><span class="st-box cached">pos 0</span><span class="st-box cached">pos 1</span><span class="st-box cached">pos 2</span><span class="st-box cached">pos 3</span><span class="st-box cached">pos 4</span><span class="st-box cached">pos 5</span><span class="st-box cached" data-hl="9">pos 6</span></div>
+</div><ol class="stepper-captions"><li>以 Llama-3-8B 类模型为例（hidden 4096、32 层、32 个 query head、8 个 KV head、head_dim 128、MLP 14336、词表 128256）。Prefill 阶段一次输入 6 个 token。vLLM 会把 batch 里所有请求的 token 拼成一维，所以张量的第一维是“本轮 token 总数”，而不是 [batch, seq]。</li><li>Embedding 把每个 token id 查表成 4096 维向量，得到 X：[6, 4096]。</li><li>RMSNorm 后做一次合并的 QKV 投影：4096 → 6144（Q 4096 + K 1024 + V 1024）。拆开后 Q 有 32 个头，K、V 只有 8 个头——这就是 GQA，每 4 个 query head 共用 1 组 K、V，KV Cache 因此只有 MHA 的 1/4。</li><li>RoPE 按每个 token 的位置旋转 Q 和 K。形状不变，但位置信息写进了数值里——所以同样的 token 放在不同位置，K 就不同，不能直接复用。</li><li>把这一层的 K、V 写进 KV Cache。每个 token 写到哪个物理槽位由 slot_mapping 决定（PagedAttention，见第 3 个演示）。V 不经过 RoPE。</li><li>注意力：每个 query 和它之前的所有 key 做点积。scores 形状是 [头数, 查询数, 键数] = [32, 6, 6]，因果掩码把“看未来”的位置置为负无穷。softmax 后乘以 V，再经 o_proj 投影回 [6, 4096]。实际 kernel（FlashAttention 等）分块计算，不会把完整的 scores 写回显存。</li><li>残差相加后进入 MLP：gate 和 up 两个投影各得到 [6, 14336]，激活后相乘，再 down 投影回 [6, 4096]，加上残差。MLP 是参数量和计算量的大头。</li><li>32 层都做完后，只取最后一个位置的隐藏状态，经 lm_head 得到 128256 维的 logits，采样出第一个输出 token。注意：Prefill 也要算所有位置的 K、V 并存进缓存，但只有最后一个位置需要算 logits。</li><li>Decode 阶段每步只输入 1 个新 token：X 是 [1, 4096]，新算出的 K、V 追加到缓存（pos 6），注意力要读全部 7 个位置的 K、V，scores 变成 [32, 1, 7]。计算量很小，但每步都要读一遍全部权重和这个请求的全部 KV——所以 Decode 受显存带宽限制，必须靠批处理提高效率。</li></ol></figure>
+<div class="table-scroll"><table>
+<thead><tr><th>对比</th><th>Prefill（6 个 token）</th><th>Decode（1 个 token）</th></tr></thead>
+<tbody>
+<tr><td>输入张量</td><td>[6, 4096]</td><td>[1, 4096]</td></tr>
+<tr><td>注意力 scores</td><td>[32, 6, 6]，因果掩码</td><td>[32, 1, 7]，读全部历史 KV</td></tr>
+<tr><td>每个权重被复用</td><td>6 次（每个 token 一次）</td><td>1 次</td></tr>
+<tr><td>主要瓶颈</td><td>算力</td><td>显存带宽（读权重 + 读 KV）</td></tr>
+<tr><td>KV Cache</td><td>一次写入 6 个位置</td><td>每步追加 1 个位置</td></tr>
+</tbody></table></div>
+<p>所以提高 Decode 效率的核心是让更多请求一起算，把“读一遍权重”的成本分摊掉——这就引出了第 2 个演示。原理推导见 <a href="../06-serving/gpu-kernel-basics.html#2-roofline判断是算得慢还是读得慢">GPU 与 kernel 基础</a>。</p>
+
+<h2 id="2-连续批处理每一轮怎样组-batch">2. 连续批处理：每一轮怎样组 batch</h2>
+<p>演示的是 vLLM V1 一类“统一 token 预算”的调度思路：每轮先满足正在运行的请求，剩余预算再给新的 Prefill，长 Prefill 按预算切块。SGLang 的思路类似，但它还会参考前缀缓存决定谁先进（见<a href="../06-serving/framework-comparison.html#1-vllm-与-sglang调度与执行">对比页</a>）。</p>
+<figure class="stepper"><div class="stepper-stage">
+<div class="st-row" data-on="1"><span class="st-label">本轮 batch</span><span class="st-box used" data-hl="1">A<small>prefill 8 / 10</small></span></div>
+<div class="st-row" data-on="1"><span class="st-label">token 预算 8</span><span class="st-box warn">已用 8</span></div>
+<div class="st-row" data-on="1"><span class="st-label">等待队列</span><span class="st-box free">B<small>prompt 3</small></span></div>
+<div class="st-row" data-on="1"><span class="st-label">完成</span><span class="st-arrow">—</span></div>
+<div class="st-row" data-on="2"><span class="st-label">本轮 batch</span><span class="st-box used" data-hl="2">A<small>prefill 2（剩余）</small></span><span class="st-box used" data-hl="2">B<small>prefill 3</small></span></div>
+<div class="st-row" data-on="2"><span class="st-label">token 预算 8</span><span class="st-box free">已用 5</span></div>
+<div class="st-row" data-on="2"><span class="st-label">等待队列</span><span class="st-arrow">空</span></div>
+<div class="st-row" data-on="2"><span class="st-label">完成</span><span class="st-arrow">A、B 各采样出第 1 个 token</span></div>
+<div class="st-row" data-on="3"><span class="st-label">本轮 batch</span><span class="st-box cached">A<small>decode 1</small></span><span class="st-box cached">B<small>decode 1</small></span><span class="st-box used" data-hl="3">C<small>prefill 4</small></span></div>
+<div class="st-row" data-on="3"><span class="st-label">token 预算 8</span><span class="st-box free">已用 6</span></div>
+<div class="st-row" data-on="3"><span class="st-label">等待队列</span><span class="st-arrow">空（C 刚到达就被加入）</span></div>
+<div class="st-row" data-on="3"><span class="st-label">完成</span><span class="st-arrow">—</span></div>
+<div class="st-row" data-on="4"><span class="st-label">本轮 batch</span><span class="st-box cached">A<small>decode 1</small></span><span class="st-box cached" data-hl="4">B<small>decode 1</small></span><span class="st-box cached">C<small>decode 1</small></span></div>
+<div class="st-row" data-on="4"><span class="st-label">token 预算 8</span><span class="st-box free">已用 3</span></div>
+<div class="st-row" data-on="4"><span class="st-label">等待队列</span><span class="st-arrow">空</span></div>
+<div class="st-row" data-on="4"><span class="st-label">完成</span><span class="st-box cached" data-hl="4">B 生成结束，释放 KV 块</span></div>
+<div class="st-row" data-on="5"><span class="st-label">本轮 batch</span><span class="st-box cached">A<small>decode 1</small></span><span class="st-box cached">C<small>decode 1</small></span><span class="st-box used" data-hl="5">D<small>prefill 6 / 12</small></span></div>
+<div class="st-row" data-on="5"><span class="st-label">token 预算 8</span><span class="st-box warn">已用 8</span></div>
+<div class="st-row" data-on="5"><span class="st-label">等待队列</span><span class="st-arrow">空</span></div>
+<div class="st-row" data-on="5"><span class="st-label">完成</span><span class="st-arrow">B 已离开</span></div>
+<div class="st-row" data-on="6"><span class="st-label">本轮 batch</span><span class="st-box cached">A<small>decode 1</small></span><span class="st-box cached">C<small>decode 1</small></span><span class="st-box used" data-hl="6">D<small>prefill 6（剩余）</small></span></div>
+<div class="st-row" data-on="6"><span class="st-label">token 预算 8</span><span class="st-box warn">已用 8</span></div>
+<div class="st-row" data-on="6"><span class="st-label">等待队列</span><span class="st-box free" data-hl="6">E<small>prompt 5</small></span></div>
+<div class="st-row" data-on="6"><span class="st-label">完成</span><span class="st-arrow">E 要等下一轮有预算才能进来</span></div>
+</div><ol class="stepper-captions"><li>每一轮（一次前向）都有一个 token 预算，这里设为 8（vLLM 对应 max_num_batched_tokens）。A 的 prompt 有 10 个 token，一轮放不下，就切出 8 个先算——这就是 chunked prefill。B 暂时等待。</li><li>下一轮先把 A 剩下的 2 个算完，B 的 3 个也放进来。两个请求的 token 拼成一个 5 个 token 的一维 batch，不需要补齐到同样长度。Prefill 算完时，各自采样出第一个输出 token。</li><li>A、B 进入 Decode，每轮各贡献 1 个 token。新请求 C 到达，不用等别人结束，这一轮就被加入。调度器先保证正在运行的请求（Decode 优先），剩余预算再给新的 Prefill。</li><li>B 生成到结束条件，立刻离开 batch 并释放它的 KV 块。下一轮就可以把空出来的显存给新请求——这是“连续批处理”和传统静态批处理的根本区别：按轮（iteration）而不是按请求组调度。</li><li>新请求 D 的 prompt 有 12 个 token，这一轮只剩 6 个预算，就先算 6 个。Decode 的请求每轮都在推进，不会因为 D 的长 Prefill 被卡住，ITL 更平稳。</li><li>D 继续算完剩下的 6 个，预算再次用满，新到的 E 要等下一轮。预算设得太大，Decode 的每轮时间变长（ITL 变差）；设得太小，Prefill 要拆很多轮（TTFT 变差）。这就是调参时要权衡的地方。</li></ol></figure>
+<div class="table-scroll"><table>
+<thead><tr><th>方式</th><th>怎么组 batch</th><th>问题</th></tr></thead>
+<tbody>
+<tr><td>静态批处理</td><td>凑齐一组请求一起跑，等最长的那个结束才换下一组；序列要补齐到同样长度</td><td>短请求早早结束后，GPU 空等；补齐浪费算力</td></tr>
+<tr><td>连续批处理</td><td>每轮重新选择参与的请求；结束的立刻离开，新的立刻加入；所有 token 拼成一维，不补齐</td><td>需要分页的 KV 管理和能处理不等长序列的注意力 kernel</td></tr>
+<tr><td>+ chunked prefill</td><td>长 Prefill 按预算切块，和 Decode 混在一轮里</td><td>Prefill 被拆成多轮，单个请求的 TTFT 可能变长；预算需要调</td></tr>
+</tbody></table></div>
+
+<h2 id="3-pagedattention块表与物理块">3. PagedAttention：块表与物理块</h2>
+<figure class="stepper"><div class="stepper-stage">
+<div class="st-row" data-on="1"><span class="st-label">逻辑 token</span><span class="st-arrow">请求 A：10 个 token（pos 0–9），每块 4 个 token</span></div>
+<div class="st-row" data-on="1"><span class="st-label">块表 A</span><span class="st-box used">逻辑块 0 → 7</span><span class="st-box used">逻辑块 1 → 2</span><span class="st-box used">逻辑块 2 → 5</span></div>
+<div class="st-row" data-on="1"><span class="st-label">GPU 物理块</span><span class="st-box used">物理块 2</span><span class="st-box used">物理块 5</span><span class="st-box used">物理块 7</span><span class="st-box free">物理块 9</span></div>
+<div class="st-row" data-on="1"><span class="st-label">说明</span><span class="st-arrow">三个物理块不连续也没关系</span></div>
+<div class="st-row" data-on="2"><span class="st-label">逻辑 token</span><span class="st-arrow">pos 9 → 逻辑块 9 // 4 = 2，块内偏移 9 % 4 = 1</span></div>
+<div class="st-row" data-on="2"><span class="st-label">块表 A</span><span class="st-box used">逻辑块 0 → 7</span><span class="st-box used">逻辑块 1 → 2</span><span class="st-box used" data-hl="2">逻辑块 2 → 5</span></div>
+<div class="st-row" data-on="2"><span class="st-label">GPU 物理块</span><span class="st-box used">物理块 2</span><span class="st-box used" data-hl="2">物理块 5</span><span class="st-box used">物理块 7</span><span class="st-box free">物理块 9</span></div>
+<div class="st-row" data-on="2"><span class="st-label">说明</span><span class="st-arrow">slot = 5 × 4 + 1 = 21</span></div>
+<div class="st-row" data-on="3"><span class="st-label">逻辑 token</span><span class="st-arrow">Decode 生成 pos 10、11：写入物理块 5 的偏移 2、3</span></div>
+<div class="st-row" data-on="3"><span class="st-label">块表 A</span><span class="st-box used">逻辑块 0 → 7</span><span class="st-box used">逻辑块 1 → 2</span><span class="st-box cached" data-hl="3">逻辑块 2 → 5（满）</span></div>
+<div class="st-row" data-on="3"><span class="st-label">GPU 物理块</span><span class="st-box used">物理块 2</span><span class="st-box cached" data-hl="3">物理块 5</span><span class="st-box used">物理块 7</span><span class="st-box free">物理块 9</span></div>
+<div class="st-row" data-on="3"><span class="st-label">说明</span><span class="st-arrow">块写满之前不用分配新块</span></div>
+<div class="st-row" data-on="4"><span class="st-label">逻辑 token</span><span class="st-arrow">生成 pos 12：需要逻辑块 3</span></div>
+<div class="st-row" data-on="4"><span class="st-label">块表 A</span><span class="st-box used">逻辑块 0 → 7</span><span class="st-box used">逻辑块 1 → 2</span><span class="st-box cached">逻辑块 2 → 5</span><span class="st-box used" data-hl="4">逻辑块 3 → 9</span></div>
+<div class="st-row" data-on="4"><span class="st-label">GPU 物理块</span><span class="st-box used">物理块 2</span><span class="st-box cached">物理块 5</span><span class="st-box used">物理块 7</span><span class="st-box used" data-hl="4">物理块 9</span></div>
+<div class="st-row" data-on="4"><span class="st-label">说明</span><span class="st-arrow">按需从空闲队列取一个块，最多浪费不到一个块</span></div>
+<div class="st-row" data-on="5"><span class="st-label">逻辑 token</span><span class="st-arrow">注意力计算：pos 12 的 query 要读 pos 0–12 的 K、V</span></div>
+<div class="st-row" data-on="5"><span class="st-label">块表 A</span><span class="st-box used">7<small>4</small></span><span class="st-arrow">→</span><span class="st-box used">2<small>4</small></span><span class="st-arrow">→</span><span class="st-box cached">5<small>4</small></span><span class="st-arrow">→</span><span class="st-box used">9<small>4</small></span></div>
+<div class="st-row" data-on="5"><span class="st-label">GPU 物理块</span><span class="st-box used" data-hl="5">物理块 7</span><span class="st-box used" data-hl="5">物理块 2</span><span class="st-box cached" data-hl="5">物理块 5</span><span class="st-box used" data-hl="5">物理块 9</span></div>
+<div class="st-row" data-on="5"><span class="st-label">说明</span><span class="st-arrow">kernel 按块表顺序逐块读取，再拼成完整的注意力</span></div>
+<div class="st-row" data-on="6"><span class="st-label">逻辑 token</span><span class="st-arrow">请求 B 与 A 的前 8 个 token 相同</span></div>
+<div class="st-row" data-on="6"><span class="st-label">块表 B</span><span class="st-box cached" data-hl="6">逻辑块 0 → 7</span><span class="st-box cached" data-hl="6">逻辑块 1 → 2</span><span class="st-box used">逻辑块 2 → 4</span></div>
+<div class="st-row" data-on="6"><span class="st-label">GPU 物理块</span><span class="st-box cached" data-hl="6">物理块 7</span><span class="st-box cached" data-hl="6">物理块 2</span><span class="st-arrow">ref = 2，两个请求共享，不拷贝</span></div>
+<div class="st-row" data-on="6"><span class="st-label">说明</span><span class="st-arrow">B 只为不同的部分分配新块 4</span></div>
+</div><ol class="stepper-captions"><li>PagedAttention 借鉴了操作系统的虚拟内存：每个请求的 KV 按固定大小切成“逻辑块”（这里每块 4 个 token；vLLM 默认 16），通过块表映射到 GPU 上任意位置的“物理块”。不用为每个请求预留一整段连续的最大长度显存。</li><li>找一个 token 的 K、V 在哪：逻辑块号 = 位置 ÷ 块大小，块内偏移 = 位置 % 块大小，再查块表得到物理块。vLLM 在每轮调度后算好 slot_mapping，模型写 KV 时直接用。</li><li>Decode 每生成一个 token 就写进当前最后一个块的下一个空位，块写满之前不需要分配。</li><li>写满后需要新块时，才从空闲队列取一个。所以每个请求最多浪费不到一个块的空间，而传统做法要按最大长度预留，浪费可能达到一大半。</li><li>注意力 kernel 拿到块表，按顺序把各物理块里的 K、V 读进片上存储计算。因为块不连续，kernel 要做“按块收集”，这也是 PagedAttention 需要专门 kernel 的原因。</li><li>前缀共享：B 和 A 的前 8 个 token 相同，B 的块表直接指向 A 的物理块 7、2，引用计数变成 2，不需要拷贝；只有不同的部分才分配新块。块怎么被命中、释放和淘汰，见<a href="../03-kv-cache/block-manager.html">块管理器深入</a>。</li></ol></figure>
+<p><strong>代价也要知道</strong>：注意力 kernel 要按块表收集不连续的数据，比读连续内存复杂；块太小会让块表变长、kernel 效率下降，块太大又会增加尾部浪费并降低前缀命中精度。vLLM 默认块大小是 16 个 token。</p>
+
+<h2 id="4-继续深入">4. 继续深入</h2>
+<ul>
+<li>块被命中、释放、淘汰的完整规则：<a href="../03-kv-cache/block-manager.html">块管理器深入</a>。</li>
+<li>SGLang 用基数树管理前缀，和 vLLM 的块 hash 怎样不同：<a href="../06-serving/framework-comparison.html">vLLM 与 SGLang、LMCache 与 Mooncake 对比</a>。</li>
+<li>真实源码里一条请求怎样走过调度器和模型：<a href="implementations/vllm/request-walkthrough.html">vLLM 请求源码</a>、<a href="implementations/sglang/runtime.html">SGLang 运行图</a>。</li>
+</ul>
+
+</article>
+<footer><a href="../index.html">返回总目录</a>
+<p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-一次推理中张量怎样变化">1. 一次推理中张量怎样变化</a><a class="level-2" href="#2-连续批处理每一轮怎样组-batch">2. 连续批处理：每一轮怎样组 batch</a><a class="level-2" href="#3-pagedattention块表与物理块">3. PagedAttention：块表与物理块</a><a class="level-2" href="#4-继续深入">4. 继续深入</a></aside>
+<dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
+<button id="search-close" aria-label="关闭搜索">关闭</button></div>
+<input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">
+<p id="search-status" role="status">输入主题、术语或问题</p><ol id="search-results"></ol></dialog>
+</body></html>

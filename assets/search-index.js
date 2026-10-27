@@ -1,5 +1,9 @@
 // Static topic catalog. Keep the matching entry current when editing or adding a page.
 window.INFRA_SEARCH = [
+  {title:"推理过程动态图解：张量变化、连续批处理与 PagedAttention",url:"02-runtime/inference-animations.html",text:"动态演示：Prefill Decode 张量形状 Embedding QKV GQA RoPE 注意力 scores MLP logits；连续批处理 token 预算 chunked prefill；PagedAttention 块表 slot_mapping 物理块 前缀共享。"},
+  {title:"框架对比：vLLM 与 SGLang、LMCache 与 Mooncake",url:"06-serving/framework-comparison.html",text:"vLLM V1 统一 token 预算 异步调度 APC 块 hash；SGLang RadixCache 基数树 lpm 调度 重叠调度 HiCache；LMCache 与 Mooncake 定位 元数据 写入可见性 租约 淘汰 传输 容错 选型组合。"},
+  {title:"推理优化方法：从定位瓶颈到选择手段",url:"06-serving/optimization-playbook.html",text:"TTFT ITL goodput 成本 定位流程；前缀缓存 分层缓存 路由 chunked prefill 重叠调度 KV 量化 权重量化 FlashAttention CUDA Graph 投机解码接受率 PD 分离 并行 硬件选型 验证方法。"},
+  {title:"万卡集群的推理 Infra：挑战与常见做法",url:"06-serving/large-scale-cluster.html",text:"万卡 故障频率 Llama 3 419 次中断 EP 故障影响面 静默错误 慢节点 轨道优化拓扑 拥塞 incast 多网卡 KV 感知全局路由 热点 PD 配比 冷启动 权重分发 灰度发布 异构硬件 可观测性 成本。"},
   {title:"块管理器深入：BlockPool、前缀 hash 与淘汰顺序",url:"03-kv-cache/block-manager.html",text:"vLLM BlockPool、KVCacheBlock ref_cnt、free_block_queue 空闲队列、cached_block_hash_to_block、前缀 hash 链 NONE_HASH、额外 key LoRA 多模态 cache_salt、get_new_blocks、touch、cache_full_blocks、free_blocks 倒序释放、LRU 淘汰、动态演示。"},
   {title:"复杂模型与 KV 存储：MLA、滑窗、混合状态、MoE 与量化",url:"03-kv-cache/model-variants.html",text:"MLA latent、DeepSeek-V3 每 token 68.6 KiB、TP 复制、滑窗注意力窗口复用、混合状态 Mamba SSM 检查点快照、MoE 专家不改变 KV、FP8 KV 量化缩放、多模态 hash、LoRA、投机解码。"},
   {title:"GPU 与 kernel 基础：带宽、异步拷贝与性能分析",url:"06-serving/gpu-kernel-basics.html",text:"SM、warp、HBM、L2、共享内存、Roofline 算术强度、Decode 带宽受限、KV 读取、kernel 融合、CUDA Graph、stream event 异步完成、锁页内存 pinned、PCIe 带宽、GPUDirect RDMA、Nsight Systems、Nsight Compute。"},

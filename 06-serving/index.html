@@ -23,6 +23,7 @@
 </details>
 <details><summary>02 推理运行时</summary>
 <a href="../02-runtime/index.html">02 推理运行时：把请求变成每一轮 GPU 工作</a>
+<a href="../02-runtime/inference-animations.html">推理过程动态图解：张量变化、连续批处理与 PagedAttention</a>
 <a href="../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
 <a href="../02-runtime/implementations/vllm/architecture.html">vLLM：知识地图与设计图</a>
 <a href="../02-runtime/implementations/vllm/request-walkthrough.html">vLLM：跟踪一条请求的源码与资源</a>
@@ -60,6 +61,9 @@
 <details open><summary>06 Serving 与性能</summary>
 <a href="index.html" aria-current="page">06 Serving 与性能：让整条链路满足服务目标</a>
 <a href="component-selection.html">组件选型：在同一技术问题下比较实现</a>
+<a href="framework-comparison.html">框架对比：vLLM 与 SGLang、LMCache 与 Mooncake</a>
+<a href="optimization-playbook.html">推理优化方法：从定位瓶颈到选择手段</a>
+<a href="large-scale-cluster.html">万卡集群的推理 Infra：挑战与常见做法</a>
 <a href="gpu-kernel-basics.html">GPU 与 kernel 基础：带宽、异步拷贝与性能分析</a>
 <a href="implementations/vllm/performance-and-parallelism.html">vLLM：性能、分布式与服务工程</a>
 <a href="implementations/lmcache/observability.html">LMCache：优化、可观测与生产设计</a>
@@ -113,7 +117,7 @@
 <pre><code class="language-text">进入服务 → 排队 → 查询/加载可复用状态 → Prefill → 首 token
                                         → 多轮 Decode → 完成
 </code></pre>
-<p>在每个阶段标出 CPU、GPU、网络和等待。实际阶段可以交错，分析时看关键路径与资源争用。先找到占比和限制，再决定改调度、kernel、缓存还是通信。GPU 侧的带宽、异步拷贝和分析工具见<a href="gpu-kernel-basics.html">GPU 与 kernel 基础</a>。</p>
+<p>在每个阶段标出 CPU、GPU、网络和等待。实际阶段可以交错，分析时看关键路径与资源争用。先找到占比和限制，再决定改调度、kernel、缓存还是通信。GPU 侧的带宽、异步拷贝和分析工具见<a href="gpu-kernel-basics.html">GPU 与 kernel 基础</a>；按现象选优化手段见<a href="optimization-playbook.html">推理优化方法</a>；框架怎样选见<a href="framework-comparison.html">框架对比</a>；上万张卡时的额外问题见<a href="large-scale-cluster.html">万卡集群的挑战</a>。</p>
 <h2 id="3-常见优化的适用条件">3. 常见优化的适用条件</h2>
 <div class="table-scroll"><table>
 <thead>

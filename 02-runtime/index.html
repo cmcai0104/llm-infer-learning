@@ -23,6 +23,7 @@
 </details>
 <details open><summary>02 推理运行时</summary>
 <a href="index.html" aria-current="page">02 推理运行时：把请求变成每一轮 GPU 工作</a>
+<a href="inference-animations.html">推理过程动态图解：张量变化、连续批处理与 PagedAttention</a>
 <a href="implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
 <a href="implementations/vllm/architecture.html">vLLM：知识地图与设计图</a>
 <a href="implementations/vllm/request-walkthrough.html">vLLM：跟踪一条请求的源码与资源</a>
@@ -60,6 +61,9 @@
 <details><summary>06 Serving 与性能</summary>
 <a href="../06-serving/index.html">06 Serving 与性能：让整条链路满足服务目标</a>
 <a href="../06-serving/component-selection.html">组件选型：在同一技术问题下比较实现</a>
+<a href="../06-serving/framework-comparison.html">框架对比：vLLM 与 SGLang、LMCache 与 Mooncake</a>
+<a href="../06-serving/optimization-playbook.html">推理优化方法：从定位瓶颈到选择手段</a>
+<a href="../06-serving/large-scale-cluster.html">万卡集群的推理 Infra：挑战与常见做法</a>
 <a href="../06-serving/gpu-kernel-basics.html">GPU 与 kernel 基础：带宽、异步拷贝与性能分析</a>
 <a href="../06-serving/implementations/vllm/performance-and-parallelism.html">vLLM：性能、分布式与服务工程</a>
 <a href="../06-serving/implementations/lmcache/observability.html">LMCache：优化、可观测与生产设计</a>
@@ -106,6 +110,7 @@
 <p><a href="../index.html">总目录</a> · <a href="../01-foundations/index.html">前置：基础</a> · <a href="../03-kv-cache/index.html">下一主题：KV 管理</a></p>
 <p>运行时负责在有限资源上推进多个请求。模型知道怎样做一次前向计算，运行时还要决定谁先算、这一轮算多少、状态放哪里，以及取消或抢占时怎样收尾。</p>
 <p>配套设计文档：<a href="../01-foundations/design-atlas.html">图册 D3 请求运行与 D4 状态收尾</a>。先看冷/热路径，再对照具体实现。</p>
+<div class="note"><p><strong>先看动态演示</strong>：<a href="inference-animations.html">推理过程动态图解</a>用三个可逐步播放的演示讲清张量怎样变化、每轮怎样组 batch、PagedAttention 怎样存取 KV。</p></div>
 <h2 id="1-先追通一次请求">1. 先追通一次请求</h2>
 <pre><code class="language-text">输入校验、分词
 → 创建请求状态，进入等待队列

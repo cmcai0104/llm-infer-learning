@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>推理优化方法：从定位瓶颈到选择手段 · LLM Infer Infra</title>
+<link rel="stylesheet" href="../assets/site.css">
+<script defer src="../assets/search-index.js"></script>
+<script defer src="../assets/site.js"></script></head>
+<body data-root="..">
+<a class="skip" href="#content">跳到正文</a>
+<header class="topbar"><button id="nav-toggle" aria-controls="sidebar" aria-expanded="false">目录</button>
+<a class="brand" href="../index.html">LLM Infer Infra <span>学习资料库</span></a>
+<button id="search-open">搜索内容 <kbd>/</kbd></button></header>
+<aside id="sidebar"><nav aria-label="学习主题">
+<a href="../index.html">总目录</a>
+<details><summary>01 基础与设计图</summary>
+<a href="../01-foundations/index.html">01 基础与全景：先理解计算、资源和请求</a>
+<a href="../01-foundations/overview.html">全景导读：先把一次请求的整条链路想明白</a>
+<a href="../01-foundations/concepts.html">公共概念：推理、KV Cache、内存和性能指标</a>
+<a href="../01-foundations/attention-and-inference.html">推理基础：从 Transformer 到服务成本</a>
+<a href="../01-foundations/compute-and-memory.html">计算与显存：调度、GPU 优化与分布式基础</a>
+<a href="../01-foundations/design-atlas.html">设计图册：从请求执行到共享 KV 存储</a>
+<a href="../01-foundations/interactive.html">互动演示：容量、盈亏、命中折叠与超时</a>
+</details>
+<details><summary>02 推理运行时</summary>
+<a href="../02-runtime/index.html">02 推理运行时：把请求变成每一轮 GPU 工作</a>
+<a href="../02-runtime/inference-animations.html">推理过程动态图解：张量变化、连续批处理与 PagedAttention</a>
+<a href="../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
+<a href="../02-runtime/implementations/vllm/architecture.html">vLLM：知识地图与设计图</a>
+<a href="../02-runtime/implementations/vllm/request-walkthrough.html">vLLM：跟踪一条请求的源码与资源</a>
+<a href="../02-runtime/implementations/sglang/overview.html">SGLang：请求调度、前缀复用与分层缓存</a>
+<a href="../02-runtime/implementations/sglang/knowledge-map.html">SGLang：学习大纲与知识地图</a>
+<a href="../02-runtime/implementations/sglang/runtime.html">SGLang：架构、运行图与源码路线</a>
+</details>
+<details><summary>03 KV Cache 管理</summary>
+<a href="../03-kv-cache/index.html">03 KV Cache 管理：让正确的状态在正确的时间可用</a>
+<a href="../03-kv-cache/semantics-and-costs.html">KV Cache 原理：复用条件与容量推导</a>
+<a href="../03-kv-cache/capacity-and-reuse.html">KV Cache 基础：容量与性能模型</a>
+<a href="../03-kv-cache/block-manager.html">块管理器深入：BlockPool、前缀 hash 与淘汰顺序</a>
+<a href="../03-kv-cache/model-variants.html">复杂模型与 KV 存储：MLA、滑窗、混合状态、MoE 与量化</a>
+<a href="../03-kv-cache/implementations/vllm/integration.html">vLLM：外部 KV 接入（LMCache 与 Mooncake）</a>
+<a href="../03-kv-cache/implementations/sglang/prefix-cache.html">SGLang：KV 原理、分页与前缀复用</a>
+<a href="../03-kv-cache/implementations/sglang/tiered-cache.html">SGLang：HiCache 分层缓存与 PD 分离</a>
+<a href="../03-kv-cache/implementations/lmcache/overview.html">LMCache：把 KV 的保存、查找、加载和回收管起来</a>
+<a href="../03-kv-cache/implementations/lmcache/state-diagrams.html">LMCache：知识地图、架构与时序图</a>
+<a href="../03-kv-cache/implementations/lmcache/internals.html">LMCache：架构与源码主线</a>
+</details>
+<details><summary>04 分布式存储</summary>
+<a href="../04-storage/index.html">04 分布式存储：把可复用状态放进共享资源池</a>
+<a href="../04-storage/kv-cache-storage.html">KV Cache 存储详解：数据模型、协议、容量、性能与故障</a>
+<a href="../04-storage/implementations/mooncake/overview.html">Mooncake：KV 对象怎样共享、怎样安全地高速搬运</a>
+<a href="../04-storage/implementations/mooncake/architecture.html">Mooncake：知识地图与设计图</a>
+<a href="../04-storage/implementations/mooncake/internals.html">Mooncake：Store 内核与源码路线</a>
+<a href="../04-storage/implementations/mooncake/integrations.html">Mooncake：与 LMCache 和推理引擎集成</a>
+<a href="../04-storage/implementations/lmcache/backend-contracts.html">LMCache：存储后端契约与 Mooncake 接入</a>
+<a href="../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake：从一次保存到下一次恢复</a>
+</details>
+<details><summary>05 数据传输</summary>
+<a href="../05-transfer/index.html">05 数据传输：搬得动、搬得快，还要搬得安全</a>
+<a href="../05-transfer/implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine：字节移动的实现案例</a>
+</details>
+<details open><summary>06 Serving 与性能</summary>
+<a href="index.html">06 Serving 与性能：让整条链路满足服务目标</a>
+<a href="component-selection.html">组件选型：在同一技术问题下比较实现</a>
+<a href="framework-comparison.html">框架对比：vLLM 与 SGLang、LMCache 与 Mooncake</a>
+<a href="optimization-playbook.html" aria-current="page">推理优化方法：从定位瓶颈到选择手段</a>
+<a href="large-scale-cluster.html">万卡集群的推理 Infra：挑战与常见做法</a>
+<a href="gpu-kernel-basics.html">GPU 与 kernel 基础：带宽、异步拷贝与性能分析</a>
+<a href="implementations/vllm/performance-and-parallelism.html">vLLM：性能、分布式与服务工程</a>
+<a href="implementations/lmcache/observability.html">LMCache：优化、可观测与生产设计</a>
+</details>
+<details><summary>07 实验与验证</summary>
+<a href="../07-practice/index.html">07 实验与验证：用证据回答系统问题</a>
+<a href="../07-practice/measurement-and-drills.html">实测与故障演练：测什么、怎么测、怎样记录</a>
+<a href="../07-practice/implementations/vllm/walkthrough.html">vLLM：运行步骤、源码作业与参考答案</a>
+<a href="../07-practice/implementations/vllm/experiments.html">vLLM：实验与项目</a>
+<a href="../07-practice/implementations/sglang/labs.html">SGLang：从单机基线到共享缓存与 PD</a>
+<a href="../07-practice/implementations/lmcache/labs.html">LMCache：实验、基准与验收</a>
+<a href="../07-practice/implementations/mooncake/labs.html">Mooncake：实验与性能诊断</a>
+</details>
+<details><summary>08 专家能力与面试</summary>
+<a href="../08-career/index.html">08 岗位、计划与面试：按能力组织成果</a>
+<a href="../08-career/expert-interview-guide.html">P7–P8 专家面试总纲：重点 KV Cache 存储</a>
+<a href="../08-career/expert-qa.html">P7–P8 KV Cache 存储深挖问答</a>
+<a href="../08-career/interview-and-design.html">基础面试与算例：能解释、能算账、能处理失败</a>
+<a href="../08-career/roles.html">岗位方向：什么必须熟练，什么可以后学</a>
+<a href="../08-career/study-plan.html">统一 28 天计划：基础只学一次，后面按岗位分流</a>
+<a href="../08-career/references.html">资料索引与版本基线</a>
+<a href="../08-career/coverage-and-review.html">资料结构与覆盖范围审阅</a>
+</details>
+<details><summary>专项题库与计划（按项目）</summary>
+<a href="../08-career/implementations/lmcache/questions.html">LMCache 专项：60 道面试题与参考回答</a>
+<a href="../08-career/implementations/lmcache/system-design.html">LMCache 专项：系统设计题与源码阅读</a>
+<a href="../08-career/implementations/lmcache/study-plan.html">LMCache 专项：28 天计划</a>
+<a href="../08-career/implementations/lmcache/index.html">LMCache 专项：学习指南目录</a>
+<a href="../08-career/implementations/mooncake/questions.html">Mooncake 专项：面试题与参考回答</a>
+<a href="../08-career/implementations/mooncake/system-design.html">Mooncake 专项：系统设计与毕业项目</a>
+<a href="../08-career/implementations/mooncake/study-plan.html">Mooncake 专项：28 天计划</a>
+<a href="../08-career/implementations/mooncake/index.html">Mooncake 专项：学习手册目录</a>
+<a href="../08-career/implementations/vllm/questions.html">vLLM 专项：60 道面试题与参考回答</a>
+<a href="../08-career/implementations/vllm/study-plan.html">vLLM 专项：28 天计划</a>
+<a href="../08-career/implementations/vllm/references.html">vLLM 专项：官方资料与版本说明</a>
+<a href="../08-career/implementations/sglang/questions.html">SGLang 专项：36 道面试题与系统设计</a>
+<a href="../08-career/implementations/sglang/study-plan.html">SGLang 专项：28 天计划</a>
+<a href="../08-career/implementations/sglang/assessment.html">SGLang 专项：参考资料与最终验收</a>
+</details>
+<a href="../tools/index.html">维护说明：怎样直接修改 HTML</a>
+</nav></aside>
+<main id="content"><div class="breadcrumbs">06 Serving 与性能 · 专注 KV Cache 存储</div>
+<article><h1 id="page-title">推理优化方法：从定位瓶颈到选择手段</h1>
+<p><a href="index.html">Serving 与性能</a> · <a href="gpu-kernel-basics.html">GPU 与 kernel 基础</a> · <a href="implementations/vllm/performance-and-parallelism.html">vLLM 性能与分布式</a> · <a href="large-scale-cluster.html">万卡集群的挑战</a></p>
+<p>优化推理不是把所有开关都打开，而是<strong>先找到瓶颈，再选能解决这个瓶颈、代价可以接受的手段，最后用同样的负载验证</strong>。这一页按“目标 → 定位 → 手段 → 代价 → 验证”整理常见的优化方法。</p>
+
+<h2 id="1-先确定优化什么">1. 先确定优化什么</h2>
+<div class="table-scroll"><table>
+<thead><tr><th>目标</th><th>看什么指标</th><th>通常的主要矛盾</th></tr></thead>
+<tbody>
+<tr><td>首字更快</td><td>TTFT（P50/P99）</td><td>排队、Prefill 计算、远端加载</td></tr>
+<tr><td>输出更流畅</td><td>ITL / TPOT（P99）</td><td>Decode 的带宽、batch 中混入的长 Prefill、抢占</td></tr>
+<tr><td>同样机器服务更多请求</td><td>满足 SLO 的 goodput</td><td>KV 显存容量、batch 大小、调度</td></tr>
+<tr><td>更省钱</td><td>每百万 token 成本</td><td>GPU 利用率、硬件选型、量化</td></tr>
+</tbody></table></div>
+<p>这几个目标经常互相冲突：batch 越大吞吐越高，但 ITL 越差；chunk 越大 TTFT 越好，但混在一起的 Decode 会变慢。优化前先和业务确定 SLO。</p>
+
+<h2 id="2-定位瓶颈">2. 定位瓶颈</h2>
+<p><img src="../01-foundations/diagrams/d17-optimization-flow.svg" alt="推理优化定位流程" /></p>
+<ol>
+<li><strong>按阶段拆时间</strong>：排队、查找/加载缓存、Prefill、每步 Decode。先找占比最大的阶段。</li>
+<li><strong>看 GPU 时间线</strong>（Nsight Systems / torch.profiler）：GPU 有大段空白 → CPU 调度或数据准备是瓶颈；kernel 连续但慢 → 看是带宽还是算力受限。</li>
+<li><strong>看显存</strong>：KV 块使用率长期接近 100%、频繁抢占 → 容量是瓶颈。</li>
+<li><strong>看负载</strong>：输入输出长度分布、前缀共享率、到达是否突发。同一个优化在不同负载下结论可能相反。</li>
+</ol>
+
+<h2 id="3-优化手段全景">3. 优化手段全景</h2>
+<div class="table-scroll"><table>
+<thead><tr><th>层次</th><th>手段</th><th>解决什么</th><th>代价与前提</th></tr></thead>
+<tbody>
+<tr><td rowspan="3">请求与缓存</td><td>前缀缓存（APC / RadixCache）</td><td>重复前缀不再算，TTFT 和算力都下降</td><td>需要真实的前缀重复；模板要稳定</td></tr>
+<tr><td>分层 / 共享 KV 缓存（LMCache、HiCache、Mooncake）</td><td>GPU 放不下的前缀也能复用，跨实例共享</td><td>加载要比重算快；带来网络和内存成本，见<a href="../01-foundations/interactive.html#加载还是重算">盈亏计算器</a></td></tr>
+<tr><td>缓存感知路由</td><td>把请求发到已有前缀的实例</td><td>可能造成热点，要和负载均衡折中</td></tr>
+<tr><td rowspan="3">调度</td><td>连续批处理 + chunked prefill</td><td>提高 GPU 利用率，Decode 不被长 Prefill 卡住</td><td>token 预算要调；见<a href="../02-runtime/inference-animations.html#2-连续批处理每一轮怎样组-batch">动态演示</a></td></tr>
+<tr><td>重叠调度 / 异步调度</td><td>CPU 准备下一轮和 GPU 计算并行</td><td>实现复杂；输出要延后一轮处理</td></tr>
+<tr><td>优先级与准入控制</td><td>保护高优先级请求的 SLO，避免过载雪崩</td><td>低优先级请求等待变长或被拒绝</td></tr>
+<tr><td rowspan="3">显存</td><td>KV 量化（FP8 等）</td><td>KV 容量翻倍，Decode 读的字节减半</td><td>需要评估精度；格式要进缓存身份</td></tr>
+<tr><td>选用 GQA / MLA 等结构的模型</td><td>每 token KV 小很多</td><td>属于模型选择，不是部署开关；见<a href="../03-kv-cache/model-variants.html">复杂模型</a></td></tr>
+<tr><td>调高显存利用率、合理设置最大长度</td><td>更多空间给 KV</td><td>过高容易 OOM；最大长度设太大浪费预分配</td></tr>
+<tr><td rowspan="4">计算</td><td>权重量化（FP8、INT4/AWQ/GPTQ）</td><td>权重更小，Decode 更快，可用更少的卡</td><td>精度损失；不同硬件支持不同；需要评测</td></tr>
+<tr><td>高效 attention kernel（FlashAttention、FlashInfer 等）</td><td>减少显存读写</td><td>需要匹配的硬件和 KV 布局</td></tr>
+<tr><td>CUDA Graph、torch.compile、算子融合</td><td>减少小 kernel 启动开销</td><td>形状要固定或分桶；编译时间和显存</td></tr>
+<tr><td>投机解码（draft 模型、EAGLE、MTP 等）</td><td>一次前向确认多个 token，降低 ITL</td><td>接受率低时反而更慢；高并发时收益下降</td></tr>
+<tr><td rowspan="3">并行与部署</td><td>TP / PP / DP / EP 组合</td><td>放下大模型，按瓶颈扩展</td><td>TP 跨机通信很贵；EP 有 all-to-all 和负载不均</td></tr>
+<tr><td>PD 分离</td><td>Prefill 和 Decode 分开扩缩容、互不干扰</td><td>需要 KV 传输；小规模时不一定划算</td></tr>
+<tr><td>硬件选型</td><td>Decode 重的负载选带宽高的卡，Prefill 重的选算力高的卡</td><td>要按实际负载算每 token 成本</td></tr>
+</tbody></table></div>
+
+<h2 id="4-三个需要算账的优化">4. 三个需要算账的优化</h2>
+<h3 id="41-投机解码什么时候划算">4.1 投机解码什么时候划算</h3>
+<p>草稿模型一次猜 k 个 token，目标模型一次前向验证。若每个猜测被接受的概率是 α（假设相互独立），一次验证平均能产出的 token 数为：</p>
+<pre><code class="language-text">期望产出 = (1 − α^(k+1)) / (1 − α)
+
+α = 0.8，k = 4：(1 − 0.8^5) / 0.2 ≈ 3.36 个 token
+α = 0.5，k = 4：(1 − 0.5^5) / 0.5 ≈ 1.94 个 token</code></pre>
+<p>还要扣掉草稿模型的开销和验证多个位置的额外计算。低并发、Decode 受带宽限制时收益明显；高并发时 GPU 已经忙起来，额外计算会挤占其他请求，收益缩小甚至变负。</p>
+<h3 id="42-kv-量化能多放多少请求">4.2 KV 量化能多放多少请求</h3>
+<pre><code class="language-text">示例模型 BF16：每 token 128 KiB；可用 KV 显存 40 GiB
+BF16：40 GiB ÷ 128 KiB = 327,680 个 token ≈ 40 个 8K 请求
+FP8： 40 GiB ÷ 64 KiB  = 655,360 个 token ≈ 80 个 8K 请求</code></pre>
+<p>能同时运行的请求翻倍，Decode 的 batch 更大、吞吐更高；但前提是精度评测通过，并且 kernel 对 FP8 KV 有高效支持。</p>
+<h3 id="43-pd-分离什么时候值得">4.3 PD 分离什么时候值得</h3>
+<p>当长 Prefill 频繁打断 Decode、导致 ITL 的 P99 不达标，或者 Prefill 和 Decode 需要的机器数比例差别很大时，PD 分离才值得。代价是每个请求的 KV 要传一次：8K 上下文 1 GiB，走 400G 网卡约 22 ms（理想值）。小规模部署、短输入时，用 chunked prefill 往往就够了。</p>
+
+<h2 id="5-优化的验证方法">5. 优化的验证方法</h2>
+<ul>
+<li>固定模型、版本、硬件和请求 trace，一次只改一个变量。</li>
+<li>同时报告延迟分布（P50/P99）、吞吐、goodput 和输出质量。</li>
+<li>在不同负载下各测一次（低并发、高并发、长输入、短输入），写清楚优化在哪些条件下有效。</li>
+<li>做退化测试：缓存全冷、突发流量、节点故障时，优化会不会让情况更糟。</li>
+</ul>
+<p>测量步骤和公开参考数据见<a href="../07-practice/measurement-and-drills.html">实测与故障演练</a>。</p>
+
+</article>
+<footer><a href="../index.html">返回总目录</a>
+<p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-先确定优化什么">1. 先确定优化什么</a><a class="level-2" href="#2-定位瓶颈">2. 定位瓶颈</a><a class="level-2" href="#3-优化手段全景">3. 优化手段全景</a><a class="level-2" href="#4-三个需要算账的优化">4. 三个需要算账的优化</a><a class="level-3" href="#41-投机解码什么时候划算">4.1 投机解码什么时候划算</a><a class="level-3" href="#42-kv-量化能多放多少请求">4.2 KV 量化能多放多少请求</a><a class="level-3" href="#43-pd-分离什么时候值得">4.3 PD 分离什么时候值得</a><a class="level-2" href="#5-优化的验证方法">5. 优化的验证方法</a></aside>
+<dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
+<button id="search-close" aria-label="关闭搜索">关闭</button></div>
+<input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">
+<p id="search-status" role="status">输入主题、术语或问题</p><ol id="search-results"></ol></dialog>
+</body></html>

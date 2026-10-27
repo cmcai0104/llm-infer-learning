@@ -23,6 +23,7 @@
 </details>
 <details><summary>02 推理运行时</summary>
 <a href="02-runtime/index.html">02 推理运行时：把请求变成每一轮 GPU 工作</a>
+<a href="02-runtime/inference-animations.html">推理过程动态图解：张量变化、连续批处理与 PagedAttention</a>
 <a href="02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
 <a href="02-runtime/implementations/vllm/architecture.html">vLLM：知识地图与设计图</a>
 <a href="02-runtime/implementations/vllm/request-walkthrough.html">vLLM：跟踪一条请求的源码与资源</a>
@@ -60,6 +61,9 @@
 <details><summary>06 Serving 与性能</summary>
 <a href="06-serving/index.html">06 Serving 与性能：让整条链路满足服务目标</a>
 <a href="06-serving/component-selection.html">组件选型：在同一技术问题下比较实现</a>
+<a href="06-serving/framework-comparison.html">框架对比：vLLM 与 SGLang、LMCache 与 Mooncake</a>
+<a href="06-serving/optimization-playbook.html">推理优化方法：从定位瓶颈到选择手段</a>
+<a href="06-serving/large-scale-cluster.html">万卡集群的推理 Infra：挑战与常见做法</a>
 <a href="06-serving/gpu-kernel-basics.html">GPU 与 kernel 基础：带宽、异步拷贝与性能分析</a>
 <a href="06-serving/implementations/vllm/performance-and-parallelism.html">vLLM：性能、分布式与服务工程</a>
 <a href="06-serving/implementations/lmcache/observability.html">LMCache：优化、可观测与生产设计</a>
@@ -133,6 +137,14 @@
 <tr>
 <td><strong>LMCache 与 Mooncake 怎样一起工作</strong></td>
 <td><a href="04-storage/implementations/lmcache/mooncake-walkthrough.html">保存/恢复链路、锁与租约、源码和失败路径</a></td>
+</tr>
+<tr>
+<td><strong>推理过程动态演示、框架对比</strong></td>
+<td><a href="02-runtime/inference-animations.html">张量变化 / 连续批处理 / PagedAttention</a> · <a href="06-serving/framework-comparison.html">vLLM vs SGLang、LMCache vs Mooncake</a></td>
+</tr>
+<tr>
+<td><strong>推理优化与大规模集群</strong></td>
+<td><a href="06-serving/optimization-playbook.html">推理优化方法</a> · <a href="06-serving/large-scale-cluster.html">万卡集群的挑战</a></td>
 </tr>
 <tr>
 <td><strong>复杂模型、GPU 基础、真实环境测量</strong></td>

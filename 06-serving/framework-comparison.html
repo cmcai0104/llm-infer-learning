@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>框架对比：vLLM 与 SGLang、LMCache 与 Mooncake · LLM Infer Infra</title>
+<link rel="stylesheet" href="../assets/site.css">
+<script defer src="../assets/search-index.js"></script>
+<script defer src="../assets/site.js"></script>
+<script defer src="../assets/stepper.js"></script></head>
+<body data-root="..">
+<a class="skip" href="#content">跳到正文</a>
+<header class="topbar"><button id="nav-toggle" aria-controls="sidebar" aria-expanded="false">目录</button>
+<a class="brand" href="../index.html">LLM Infer Infra <span>学习资料库</span></a>
+<button id="search-open">搜索内容 <kbd>/</kbd></button></header>
+<aside id="sidebar"><nav aria-label="学习主题">
+<a href="../index.html">总目录</a>
+<details><summary>01 基础与设计图</summary>
+<a href="../01-foundations/index.html">01 基础与全景：先理解计算、资源和请求</a>
+<a href="../01-foundations/overview.html">全景导读：先把一次请求的整条链路想明白</a>
+<a href="../01-foundations/concepts.html">公共概念：推理、KV Cache、内存和性能指标</a>
+<a href="../01-foundations/attention-and-inference.html">推理基础：从 Transformer 到服务成本</a>
+<a href="../01-foundations/compute-and-memory.html">计算与显存：调度、GPU 优化与分布式基础</a>
+<a href="../01-foundations/design-atlas.html">设计图册：从请求执行到共享 KV 存储</a>
+<a href="../01-foundations/interactive.html">互动演示：容量、盈亏、命中折叠与超时</a>
+</details>
+<details><summary>02 推理运行时</summary>
+<a href="../02-runtime/index.html">02 推理运行时：把请求变成每一轮 GPU 工作</a>
+<a href="../02-runtime/inference-animations.html">推理过程动态图解：张量变化、连续批处理与 PagedAttention</a>
+<a href="../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
+<a href="../02-runtime/implementations/vllm/architecture.html">vLLM：知识地图与设计图</a>
+<a href="../02-runtime/implementations/vllm/request-walkthrough.html">vLLM：跟踪一条请求的源码与资源</a>
+<a href="../02-runtime/implementations/sglang/overview.html">SGLang：请求调度、前缀复用与分层缓存</a>
+<a href="../02-runtime/implementations/sglang/knowledge-map.html">SGLang：学习大纲与知识地图</a>
+<a href="../02-runtime/implementations/sglang/runtime.html">SGLang：架构、运行图与源码路线</a>
+</details>
+<details><summary>03 KV Cache 管理</summary>
+<a href="../03-kv-cache/index.html">03 KV Cache 管理：让正确的状态在正确的时间可用</a>
+<a href="../03-kv-cache/semantics-and-costs.html">KV Cache 原理：复用条件与容量推导</a>
+<a href="../03-kv-cache/capacity-and-reuse.html">KV Cache 基础：容量与性能模型</a>
+<a href="../03-kv-cache/block-manager.html">块管理器深入：BlockPool、前缀 hash 与淘汰顺序</a>
+<a href="../03-kv-cache/model-variants.html">复杂模型与 KV 存储：MLA、滑窗、混合状态、MoE 与量化</a>
+<a href="../03-kv-cache/implementations/vllm/integration.html">vLLM：外部 KV 接入（LMCache 与 Mooncake）</a>
+<a href="../03-kv-cache/implementations/sglang/prefix-cache.html">SGLang：KV 原理、分页与前缀复用</a>
+<a href="../03-kv-cache/implementations/sglang/tiered-cache.html">SGLang：HiCache 分层缓存与 PD 分离</a>
+<a href="../03-kv-cache/implementations/lmcache/overview.html">LMCache：把 KV 的保存、查找、加载和回收管起来</a>
+<a href="../03-kv-cache/implementations/lmcache/state-diagrams.html">LMCache：知识地图、架构与时序图</a>
+<a href="../03-kv-cache/implementations/lmcache/internals.html">LMCache：架构与源码主线</a>
+</details>
+<details><summary>04 分布式存储</summary>
+<a href="../04-storage/index.html">04 分布式存储：把可复用状态放进共享资源池</a>
+<a href="../04-storage/kv-cache-storage.html">KV Cache 存储详解：数据模型、协议、容量、性能与故障</a>
+<a href="../04-storage/implementations/mooncake/overview.html">Mooncake：KV 对象怎样共享、怎样安全地高速搬运</a>
+<a href="../04-storage/implementations/mooncake/architecture.html">Mooncake：知识地图与设计图</a>
+<a href="../04-storage/implementations/mooncake/internals.html">Mooncake：Store 内核与源码路线</a>
+<a href="../04-storage/implementations/mooncake/integrations.html">Mooncake：与 LMCache 和推理引擎集成</a>
+<a href="../04-storage/implementations/lmcache/backend-contracts.html">LMCache：存储后端契约与 Mooncake 接入</a>
+<a href="../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake：从一次保存到下一次恢复</a>
+</details>
+<details><summary>05 数据传输</summary>
+<a href="../05-transfer/index.html">05 数据传输：搬得动、搬得快，还要搬得安全</a>
+<a href="../05-transfer/implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine：字节移动的实现案例</a>
+</details>
+<details open><summary>06 Serving 与性能</summary>
+<a href="index.html">06 Serving 与性能：让整条链路满足服务目标</a>
+<a href="component-selection.html">组件选型：在同一技术问题下比较实现</a>
+<a href="framework-comparison.html" aria-current="page">框架对比：vLLM 与 SGLang、LMCache 与 Mooncake</a>
+<a href="optimization-playbook.html">推理优化方法：从定位瓶颈到选择手段</a>
+<a href="large-scale-cluster.html">万卡集群的推理 Infra：挑战与常见做法</a>
+<a href="gpu-kernel-basics.html">GPU 与 kernel 基础：带宽、异步拷贝与性能分析</a>
+<a href="implementations/vllm/performance-and-parallelism.html">vLLM：性能、分布式与服务工程</a>
+<a href="implementations/lmcache/observability.html">LMCache：优化、可观测与生产设计</a>
+</details>
+<details><summary>07 实验与验证</summary>
+<a href="../07-practice/index.html">07 实验与验证：用证据回答系统问题</a>
+<a href="../07-practice/measurement-and-drills.html">实测与故障演练：测什么、怎么测、怎样记录</a>
+<a href="../07-practice/implementations/vllm/walkthrough.html">vLLM：运行步骤、源码作业与参考答案</a>
+<a href="../07-practice/implementations/vllm/experiments.html">vLLM：实验与项目</a>
+<a href="../07-practice/implementations/sglang/labs.html">SGLang：从单机基线到共享缓存与 PD</a>
+<a href="../07-practice/implementations/lmcache/labs.html">LMCache：实验、基准与验收</a>
+<a href="../07-practice/implementations/mooncake/labs.html">Mooncake：实验与性能诊断</a>
+</details>
+<details><summary>08 专家能力与面试</summary>
+<a href="../08-career/index.html">08 岗位、计划与面试：按能力组织成果</a>
+<a href="../08-career/expert-interview-guide.html">P7–P8 专家面试总纲：重点 KV Cache 存储</a>
+<a href="../08-career/expert-qa.html">P7–P8 KV Cache 存储深挖问答</a>
+<a href="../08-career/interview-and-design.html">基础面试与算例：能解释、能算账、能处理失败</a>
+<a href="../08-career/roles.html">岗位方向：什么必须熟练，什么可以后学</a>
+<a href="../08-career/study-plan.html">统一 28 天计划：基础只学一次，后面按岗位分流</a>
+<a href="../08-career/references.html">资料索引与版本基线</a>
+<a href="../08-career/coverage-and-review.html">资料结构与覆盖范围审阅</a>
+</details>
+<details><summary>专项题库与计划（按项目）</summary>
+<a href="../08-career/implementations/lmcache/questions.html">LMCache 专项：60 道面试题与参考回答</a>
+<a href="../08-career/implementations/lmcache/system-design.html">LMCache 专项：系统设计题与源码阅读</a>
+<a href="../08-career/implementations/lmcache/study-plan.html">LMCache 专项：28 天计划</a>
+<a href="../08-career/implementations/lmcache/index.html">LMCache 专项：学习指南目录</a>
+<a href="../08-career/implementations/mooncake/questions.html">Mooncake 专项：面试题与参考回答</a>
+<a href="../08-career/implementations/mooncake/system-design.html">Mooncake 专项：系统设计与毕业项目</a>
+<a href="../08-career/implementations/mooncake/study-plan.html">Mooncake 专项：28 天计划</a>
+<a href="../08-career/implementations/mooncake/index.html">Mooncake 专项：学习手册目录</a>
+<a href="../08-career/implementations/vllm/questions.html">vLLM 专项：60 道面试题与参考回答</a>
+<a href="../08-career/implementations/vllm/study-plan.html">vLLM 专项：28 天计划</a>
+<a href="../08-career/implementations/vllm/references.html">vLLM 专项：官方资料与版本说明</a>
+<a href="../08-career/implementations/sglang/questions.html">SGLang 专项：36 道面试题与系统设计</a>
+<a href="../08-career/implementations/sglang/study-plan.html">SGLang 专项：28 天计划</a>
+<a href="../08-career/implementations/sglang/assessment.html">SGLang 专项：参考资料与最终验收</a>
+</details>
+<a href="../tools/index.html">维护说明：怎样直接修改 HTML</a>
+</nav></aside>
+<main id="content"><div class="breadcrumbs">06 Serving 与性能 · 专注 KV Cache 存储</div>
+<article><h1 id="page-title">框架对比：vLLM 与 SGLang、LMCache 与 Mooncake</h1>
+<p><a href="index.html">Serving 与性能</a> · <a href="component-selection.html">组件选型</a> · <a href="../02-runtime/inference-animations.html">推理过程动态图解</a> · <a href="../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake 联合链路</a></p>
+<p>这一页做两组对比：<strong>vLLM 和 SGLang</strong> 是同一层的推理引擎，比较它们怎样调度、怎样管理 GPU 上的 KV、怎样执行；<strong>LMCache 和 Mooncake</strong> 不在同一层，比较它们在 KV 的管理、存储和传输上各负责什么、怎样组合。对比基于资料使用的源码版本（vLLM <code>f3871c3</code>、SGLang <code>30dc2f9</code>、LMCache <code>ff9185d</code>、Mooncake <code>dd1217b</code>），两边都在快速演进，新版本要重新核对。</p>
+<p><strong>先说结论</strong>：vLLM 和 SGLang 的核心思路越来越接近（连续批处理、分页 KV、前缀缓存、重叠调度都有），差别主要在前缀索引的数据结构、调度时是否考虑缓存、以及生态和扩展方式。LMCache 和 Mooncake 不是二选一：LMCache 懂“KV 是什么”，Mooncake 擅长“把字节可靠高速地存到集群里”，常见做法是把 Mooncake Store 作为 LMCache 的后端。</p>
+
+<h2 id="1-vllm-与-sglang调度与执行">1. vLLM 与 SGLang：调度与执行</h2>
+<div class="table-scroll"><table>
+<thead><tr><th>维度</th><th>vLLM（V1 引擎）</th><th>SGLang</th><th>怎样理解差别</th></tr></thead>
+<tbody>
+<tr><td>进程结构</td><td>API 服务进程 + EngineCore 进程（调度和执行），多卡时再有 worker 进程</td><td>TokenizerManager → Scheduler → 模型 worker → DetokenizerManager，多个进程通过 IPC 串起来</td><td>都把 CPU 上的分词、调度和 GPU 执行拆开，减少互相阻塞</td></tr>
+<tr><td>每轮选谁</td><td>统一 token 预算：先满足正在运行的请求，剩余预算给等待队列；长 Prefill 自动切块</td><td>可选调度策略：考虑缓存的（如最长前缀匹配 lpm）和不考虑缓存的（如 fcfs）；同样支持 chunked prefill</td><td>SGLang 可以优先调度能命中更长前缀的请求，提高复用；代价是可能牺牲先来先服务的公平性</td></tr>
+<tr><td>显存不够时</td><td>抢占：释放被抢占请求的 KV 块，之后重算</td><td>同样有撤回（retract）请求和按缓存情况决定的准入</td><td>都靠“重算”换回显存，抢占越多浪费越多</td></tr>
+<tr><td>CPU 与 GPU 重叠</td><td>可开启异步调度，让下一轮的调度和本轮 GPU 计算重叠</td><td>重叠调度器：CPU 准备下一轮时 GPU 在算本轮（有关闭开关）</td><td>Decode 每轮很短时，CPU 调度开销可能占到不小比例，重叠能明显提高 GPU 利用率</td></tr>
+<tr><td>图优化</td><td>torch.compile + CUDA Graph（分段和完整两种）</td><td>CUDA Graph，也支持 torch.compile</td><td>都是为减少小 kernel 的启动开销，主要帮 Decode</td></tr>
+<tr><td>结构化输出 / 前端</td><td>支持结构化输出后端</td><td>起源于“结构化生成语言”，前端 DSL 和受约束解码是传统强项</td><td>多轮、分支、受约束生成多的场景，SGLang 的前缀复用更容易发挥</td></tr>
+<tr><td>分布式与 PD</td><td>TP/PP/DP/EP；PD 分离通过 KV Connector（NIXL、LMCache、Mooncake 等）</td><td>TP/PP/DP/EP、DP attention；PD 分离内置，传输后端可选 Mooncake、NIXL 等</td><td>vLLM 走统一的 Connector 接口扩展；SGLang 把更多能力做成内置选项</td></tr>
+</tbody></table></div>
+
+<h2 id="2-vllm-与-sglanggpu-上的-kv-管理">2. vLLM 与 SGLang：GPU 上的 KV 管理</h2>
+<p>两者都用分页显存，区别在于“怎样找到可复用的前缀”：vLLM 给每个装满的块算一条 hash 链，用 hash 表查找；SGLang 用一棵基数树（radix tree），从根往下按 token 匹配。</p>
+<div class="table-scroll"><table>
+<thead><tr><th>维度</th><th>vLLM：块 hash（APC）</th><th>SGLang：RadixCache</th></tr></thead>
+<tbody>
+<tr><td>索引结构</td><td>hash 表：块 hash → 物理块；hash 包含父块 hash</td><td>基数树：每个节点存一段 token 及其 KV 位置，根到节点的路径就是前缀</td></tr>
+<tr><td>匹配粒度</td><td>按块（默认 16 个 token），只匹配装满的块</td><td>按 token 或按页（页大小可配置），可以匹配到更细的位置</td></tr>
+<tr><td>部分重叠的前缀</td><td>天然支持：前几个块 hash 相同就共享</td><td>在分界处把节点拆成两段（split）</td></tr>
+<tr><td>保护正在用的数据</td><td>块的引用计数 <code>ref_cnt</code></td><td>节点的 <code>lock_ref</code>，从被引用的节点一直锁到根</td></tr>
+<tr><td>淘汰</td><td>引用为 0 的块按空闲队列顺序（近似 LRU）被重新分配时淘汰</td><td>从 <code>lock_ref = 0</code> 的叶子节点里按最久未访问淘汰</td></tr>
+<tr><td>分层缓存</td><td>通过 KV Connector 接外部缓存（LMCache、Mooncake 等）</td><td>HiCache：GPU、主机内存、外部存储三层，可接 Mooncake 等后端</td></tr>
+</tbody></table></div>
+<p>基数树的工作过程（vLLM 的块 hash 过程见<a href="../03-kv-cache/block-manager.html#4-一步步看全过程">块管理器深入</a>）：</p>
+<figure class="stepper"><div class="stepper-stage">
+<div class="st-row" data-on="1"><span class="st-label">基数树</span><span class="st-box free">root<small>lock=1</small></span></div>
+<div class="st-row" data-on="1"><span class="st-label">请求</span><span class="st-arrow">—</span></div>
+<div class="st-row" data-on="1"><span class="st-label">淘汰候选</span><span class="st-arrow">可淘汰：无</span></div>
+<div class="st-row" data-on="2"><span class="st-label">基数树</span><span class="st-box free">root</span><span class="st-box used">「系统提示 S + 问题 Q1」<small>lock=1</small></span></div>
+<div class="st-row" data-on="2"><span class="st-label">请求</span><span class="st-arrow">请求 1 = S + Q1，没有命中，算完后插入树</span></div>
+<div class="st-row" data-on="2"><span class="st-label">淘汰候选</span><span class="st-arrow">可淘汰：无（请求 1 还在运行）</span></div>
+<div class="st-row" data-on="3"><span class="st-label">基数树</span><span class="st-box free">root</span><span class="st-box cached">「S + Q1」<small>lock=0</small></span></div>
+<div class="st-row" data-on="3"><span class="st-label">请求</span><span class="st-arrow">请求 1 结束，节点保留在树里</span></div>
+<div class="st-row" data-on="3"><span class="st-label">淘汰候选</span><span class="st-arrow">可淘汰：「S + Q1」</span></div>
+<div class="st-row" data-on="4"><span class="st-label">基数树</span><span class="st-box free">root</span><span class="st-box used">「S」<small>lock=1</small></span><span class="st-box cached">└「Q1」<small>lock=0</small></span><span class="st-box used">└「Q2」<small>lock=1</small></span></div>
+<div class="st-row" data-on="4"><span class="st-label">请求</span><span class="st-arrow">请求 2 = S + Q2：匹配到 S，节点在 S 处拆分，只算 Q2</span></div>
+<div class="st-row" data-on="4"><span class="st-label">淘汰候选</span><span class="st-arrow">可淘汰：「Q1」</span></div>
+<div class="st-row" data-on="5"><span class="st-label">基数树</span><span class="st-box free">root</span><span class="st-box used">「S」<small>lock=1</small></span><span class="st-box cached">└「Q1」<small>lock=0</small></span><span class="st-box used">└「Q2」<small>lock=1</small></span><span class="st-box used">「T + Q3」<small>lock=1</small></span></div>
+<div class="st-row" data-on="5"><span class="st-label">请求</span><span class="st-arrow">请求 3 = 另一个系统提示 T + Q3：没有命中，新开一个分支</span></div>
+<div class="st-row" data-on="5"><span class="st-label">淘汰候选</span><span class="st-arrow">可淘汰：「Q1」</span></div>
+<div class="st-row" data-on="6"><span class="st-label">基数树</span><span class="st-box free">root</span><span class="st-box used">「S」<small>lock=1</small></span><span class="st-box used">└「Q2」<small>lock=1</small></span><span class="st-box used">「T + Q3」<small>lock=1</small></span></div>
+<div class="st-row" data-on="6"><span class="st-label">请求</span><span class="st-arrow">显存紧张：从 lock=0 的叶子里按最久未访问淘汰</span></div>
+<div class="st-row" data-on="6"><span class="st-label">淘汰候选</span><span class="st-arrow">「Q1」被淘汰，它的 KV 槽位被释放</span></div>
+</div><ol class="stepper-captions"><li>SGLang 用一棵基数树（radix tree）管理所有缓存的 KV。每个节点保存一段 token 和对应的 KV 位置；从根到某个节点的路径就是一段完整前缀。根节点永远锁定。</li><li>请求 1 没有命中任何前缀，算完后把“S + Q1”整段作为一个节点插入。运行期间节点的 lock_ref = 1，不能被淘汰。</li><li>请求 1 结束，lock_ref 归零，但节点和 KV 仍留在树里，等待以后复用。</li><li>请求 2 的前缀 S 和已有节点部分相同：在 S 和 Q1 的分界处把节点拆成两段（_split_node），S 被两个请求共享，只需要为 Q2 计算新的 KV。正在使用的路径都会被加锁。</li><li>请求 3 的前缀完全不同，从根节点开出新分支。树可以同时保存很多不同的前缀。</li><li>需要空间时，从“lock_ref = 0 的叶子节点”里按最后访问时间淘汰（用堆找最旧的）。叶子被删后，如果父节点也变成没被锁的叶子，下一轮也可能被淘汰。正在使用的路径永远不会被删。</li></ol></figure>
+<p><strong>面试怎么答“哪个好”</strong>：没有绝对的好坏。基数树对大量共享前缀、多轮分支对话的匹配更细、更直观；块 hash 实现简单、天然适合按块管理和跨进程传输（hash 可以直接作为外部缓存的 key）。真正的性能差异要在同样模型、同样负载、同样硬件下测，而且要分开看前缀命中、调度和 kernel 的贡献。</p>
+
+<h2 id="3-lmcache-与-mooncake各管哪一层">3. LMCache 与 Mooncake：各管哪一层</h2>
+<p><img src="../01-foundations/diagrams/d08-lmcache-mooncake.svg" alt="LMCache 与 Mooncake 的分层关系" /></p>
+<div class="table-scroll"><table>
+<thead><tr><th>维度</th><th>LMCache</th><th>Mooncake</th></tr></thead>
+<tbody>
+<tr><td>定位</td><td>推理引擎和存储之间的 KV 管理层</td><td>以 KV 为中心的分布式存储与传输系统（Store + Transfer Engine）</td></tr>
+<tr><td>懂不懂 KV 语义</td><td>懂：按 chunk（常用 256 token）切分、算前缀 hash、区分 rank 和组、处理布局</td><td>基本不懂：Store 看到的是 key 和字节，TE 看到的是地址和长度</td></tr>
+<tr><td>和引擎的接口</td><td>vLLM KV Connector、SGLang 集成；负责 lookup、retrieve、store 与设备拷贝</td><td>被上层调用：LMCache 后端、SGLang HiCache 后端、vLLM Connector、PD 交接通道</td></tr>
+<tr><td>元数据</td><td>每个 LMCache 服务管理自己的 L1；多实例可选 Coordinator</td><td>中心化 Master 管对象位置、副本、租约；可部署高可用</td></tr>
+<tr><td>存储介质</td><td>L1 主机内存（自己管）；L2 交给适配器：本地磁盘、Redis、Mooncake、NIXL、对象存储等</td><td>各节点贡献的内存段为主，也可下沉到本地盘、DFS 等</td></tr>
+<tr><td>写入可见性</td><td>L1 先 staging，填完再发布</td><td>PutStart 分配 → 写数据 → PutEnd 发布</td></tr>
+<tr><td>读保护</td><td>L1 读写保留；L2 适配器层的锁约定</td><td>读租约（默认 10 秒）、soft/hard pin</td></tr>
+<tr><td>淘汰</td><td>L1 按策略（如 LRU）淘汰；不淘汰正在读写的对象</td><td>用量超过高水位（默认 90%）后淘汰约 5%，跳过有租约、有 pin 的对象</td></tr>
+<tr><td>传输</td><td>GPU ↔ L1 的设备拷贝；L2 传输交给后端</td><td>Transfer Engine：RDMA 多网卡、按拓扑选路、slice 切分、失败重试</td></tr>
+<tr><td>容错</td><td>主要依赖后端；失败时回退重算</td><td>多副本、Master 高可用；副本全丢时上层回退重算</td></tr>
+<tr><td>额外能力</td><td>CacheBlend（非前缀复用）、CacheGen（压缩）、逐层加载、可观测性</td><td>PD 交接、Conductor（全局前缀索引）、EP 通信、权重传输等</td></tr>
+</tbody></table></div>
+<h3 id="31-怎样选怎样组合">3.1 怎样选、怎样组合</h3>
+<div class="table-scroll"><table>
+<thead><tr><th>场景</th><th>推荐</th><th>原因</th></tr></thead>
+<tbody>
+<tr><td>单机多轮对话，主机内存够用</td><td>LMCache（L1 主机内存）或引擎自带的分层缓存</td><td>不需要分布式存储，少一层复杂度</td></tr>
+<tr><td>多台机器共享长文档、长系统提示</td><td>LMCache + Mooncake Store 作为 L2</td><td>LMCache 处理语义和设备拷贝，Mooncake 提供跨节点内存池和 RDMA</td></tr>
+<tr><td>SGLang 部署</td><td>HiCache + Mooncake 后端</td><td>SGLang 自己管理分层，直接用 Mooncake 做外部层</td></tr>
+<tr><td>PD 分离，只需要把本次请求的 KV 交给 Decode</td><td>Mooncake Transfer Engine 或 NIXL</td><td>这是一次性的点对点传输，不需要对象存储</td></tr>
+<tr><td>非前缀片段复用（RAG 文档顺序变化）</td><td>LMCache CacheBlend</td><td>需要选择性重算，属于 KV 语义层的能力，要评估质量</td></tr>
+</tbody></table></div>
+<p>完整的保存与恢复链路、三层保护的区别，见 <a href="../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake 联合链路</a>。</p>
+
+</article>
+<footer><a href="../index.html">返回总目录</a>
+<p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-vllm-与-sglang调度与执行">1. vLLM 与 SGLang：调度与执行</a><a class="level-2" href="#2-vllm-与-sglanggpu-上的-kv-管理">2. vLLM 与 SGLang：GPU 上的 KV 管理</a><a class="level-2" href="#3-lmcache-与-mooncake各管哪一层">3. LMCache 与 Mooncake：各管哪一层</a><a class="level-3" href="#31-怎样选怎样组合">3.1 怎样选、怎样组合</a></aside>
+<dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
+<button id="search-close" aria-label="关闭搜索">关闭</button></div>
+<input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">
+<p id="search-status" role="status">输入主题、术语或问题</p><ol id="search-results"></ol></dialog>
+</body></html>

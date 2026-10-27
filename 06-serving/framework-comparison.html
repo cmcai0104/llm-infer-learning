@@ -25,6 +25,7 @@
 <details><summary>02 推理运行时</summary>
 <a href="../02-runtime/index.html">02 推理运行时：把请求变成每一轮 GPU 工作</a>
 <a href="../02-runtime/inference-animations.html">推理过程动态图解：张量变化、连续批处理与 PagedAttention</a>
+<a href="../02-runtime/advanced-animations.html">推理机制动态图解（进阶）：并行、投机解码、PD、FlashAttention、调度</a>
 <a href="../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
 <a href="../02-runtime/implementations/vllm/architecture.html">vLLM：知识地图与设计图</a>
 <a href="../02-runtime/implementations/vllm/request-walkthrough.html">vLLM：跟踪一条请求的源码与资源</a>
@@ -188,11 +189,53 @@
 <tr><td>非前缀片段复用（RAG 文档顺序变化）</td><td>LMCache CacheBlend</td><td>需要选择性重算，属于 KV 语义层的能力，要评估质量</td></tr>
 </tbody></table></div>
 <p>完整的保存与恢复链路、三层保护的区别，见 <a href="../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake 联合链路</a>。</p>
+<h2 id="4-更多常见对比">4. 更多常见对比</h2>
+<p>面试和选型中还经常遇到下面几组“同类方案怎么选”的问题。</p>
+<h3 id="41-四种并行方式">4.1 四种并行方式（动态演示见<a href="../02-runtime/advanced-animations.html">进阶动态图解</a>）</h3>
+<div class="table-scroll"><table>
+<thead><tr><th>方式</th><th>切什么</th><th>通信</th><th>适合</th><th>主要问题</th></tr></thead>
+<tbody>
+<tr><td>TP 张量并行</td><td>每层的权重矩阵</td><td>每层 all-reduce，频繁且在关键路径上</td><td>单卡放不下、需要降低单请求延迟；机内 NVLink</td><td>跨机做 TP 通信代价很高</td></tr>
+<tr><td>PP 流水线并行</td><td>按层分段</td><td>段与段之间传激活，量小</td><td>模型特别大、跨机部署</td><td>流水线气泡；单请求延迟不降</td></tr>
+<tr><td>DP 数据并行</td><td>不切模型，复制多份</td><td>推理时几乎没有</td><td>提高总吞吐</td><td>每份都要完整权重；前缀缓存分散在各副本</td></tr>
+<tr><td>EP 专家并行</td><td>MoE 的专家</td><td>每个 MoE 层两次 all-to-all</td><td>大 MoE 模型</td><td>负载不均、网络敏感、故障影响面大</td></tr>
+</tbody></table></div>
+<h3 id="42-pd-分离与混合部署">4.2 PD 分离与混合部署</h3>
+<div class="table-scroll"><table>
+<thead><tr><th>维度</th><th>混合部署 + chunked prefill</th><th>PD 分离</th></tr></thead>
+<tbody>
+<tr><td>Decode 受 Prefill 干扰</td><td>有，但被切块后变小</td><td>几乎没有</td></tr>
+<tr><td>额外开销</td><td>无</td><td>每个请求传一次 KV，需要高速网络</td></tr>
+<tr><td>扩缩容</td><td>整体扩缩</td><td>Prefill 池、Decode 池分别扩缩，可用不同硬件</td></tr>
+<tr><td>复杂度</td><td>低</td><td>高：路由、传输、故障处理都更复杂</td></tr>
+<tr><td>适合</td><td>中小规模、输入不太长</td><td>大规模、长输入、对 ITL 的 P99 要求严格</td></tr>
+</tbody></table></div>
+<h3 id="43-sglang-hicache-与-lmcache">4.3 SGLang HiCache 与 LMCache</h3>
+<div class="table-scroll"><table>
+<thead><tr><th>维度</th><th>HiCache</th><th>LMCache</th></tr></thead>
+<tbody>
+<tr><td>位置</td><td>SGLang 内置，和 RadixCache 一体</td><td>独立的缓存层，可服务 vLLM、SGLang</td></tr>
+<tr><td>层级命名</td><td>GPU 为 L1、主机内存为 L2、外部存储为 L3</td><td>主机内存为 L1、外部后端为 L2</td></tr>
+<tr><td>和调度的结合</td><td>直接参与 SGLang 的前缀匹配和调度</td><td>通过 Connector 接口告诉引擎能复用多少</td></tr>
+<tr><td>部署</td><td>随 SGLang 进程</td><td>可作为独立进程（MP 模式），引擎重启后缓存仍在</td></tr>
+<tr><td>外部存储</td><td>Mooncake 等后端</td><td>多种 L2 适配器，含 Mooncake</td></tr>
+</tbody></table></div>
+<h3 id="44-引擎内前缀缓存与外部-kv-缓存">4.4 引擎内前缀缓存与外部 KV 缓存</h3>
+<div class="table-scroll"><table>
+<thead><tr><th>维度</th><th>引擎内（APC、RadixCache）</th><th>外部（LMCache、Mooncake 等）</th></tr></thead>
+<tbody>
+<tr><td>容量</td><td>受 GPU 显存限制</td><td>主机内存、远端内存、磁盘，可大很多</td></tr>
+<tr><td>命中后的成本</td><td>几乎为零，直接用</td><td>要加载：查询 + 网络 + H2D</td></tr>
+<tr><td>跨实例共享</td><td>不能</td><td>可以</td></tr>
+<tr><td>进程重启</td><td>缓存丢失</td><td>可以保留</td></tr>
+<tr><td>结论</td><td colspan="2">两者互补：引擎内缓存负责最热的部分，外部缓存负责“放不下、跨实例、要保留”的部分；实验时要分开统计两者的命中</td></tr>
+</tbody></table></div>
+
 
 </article>
 <footer><a href="../index.html">返回总目录</a>
 <p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
-<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-vllm-与-sglang调度与执行">1. vLLM 与 SGLang：调度与执行</a><a class="level-2" href="#2-vllm-与-sglanggpu-上的-kv-管理">2. vLLM 与 SGLang：GPU 上的 KV 管理</a><a class="level-2" href="#3-lmcache-与-mooncake各管哪一层">3. LMCache 与 Mooncake：各管哪一层</a><a class="level-3" href="#31-怎样选怎样组合">3.1 怎样选、怎样组合</a></aside>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-vllm-与-sglang调度与执行">1. vLLM 与 SGLang：调度与执行</a><a class="level-2" href="#2-vllm-与-sglanggpu-上的-kv-管理">2. vLLM 与 SGLang：GPU 上的 KV 管理</a><a class="level-2" href="#3-lmcache-与-mooncake各管哪一层">3. LMCache 与 Mooncake：各管哪一层</a><a class="level-3" href="#31-怎样选怎样组合">3.1 怎样选、怎样组合</a><a class="level-2" href="#4-更多常见对比">4. 更多常见对比</a><a class="level-3" href="#41-四种并行方式">4.1 四种并行方式（动态演示见进阶动态图解）</a><a class="level-3" href="#42-pd-分离与混合部署">4.2 PD 分离与混合部署</a><a class="level-3" href="#43-sglang-hicache-与-lmcache">4.3 SGLang HiCache 与 LMCache</a><a class="level-3" href="#44-引擎内前缀缓存与外部-kv-缓存">4.4 引擎内前缀缓存与外部 KV 缓存</a></aside>
 <dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
 <button id="search-close" aria-label="关闭搜索">关闭</button></div>
 <input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">

@@ -24,6 +24,7 @@
 <details><summary>02 推理运行时</summary>
 <a href="../02-runtime/index.html">02 推理运行时：把请求变成每一轮 GPU 工作</a>
 <a href="../02-runtime/inference-animations.html">推理过程动态图解：张量变化、连续批处理与 PagedAttention</a>
+<a href="../02-runtime/advanced-animations.html">推理机制动态图解（进阶）：并行、投机解码、PD、FlashAttention、调度</a>
 <a href="../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
 <a href="../02-runtime/implementations/vllm/architecture.html">vLLM：知识地图与设计图</a>
 <a href="../02-runtime/implementations/vllm/request-walkthrough.html">vLLM：跟踪一条请求的源码与资源</a>
@@ -169,7 +170,7 @@
 <tr><td><a href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/docs/source/design/transfer-engine/index.md">Transfer Engine 文档</a></td><td>transfer_engine_bench 示例运行，持续 10 秒</td><td>约 19.87 GiB/s</td><td>文档注明超过了该主机单卡的最大吞吐（使用了多卡）</td></tr>
 <tr><td><a href="https://github.com/kvcache-ai/Mooncake/blob/dd1217b6c461491e7c73ff29b4ffad215e0a9ac0/README.md">Mooncake README</a> 引用的 Kimi K2 部署</td><td>128 张 H200，PD 分离 + 大规模专家并行</td><td>Prefill 约 22.4 万 token/s，Decode 约 28.8 万 token/s（集群合计）</td><td>是整套部署的结果，不能直接归因于某一个组件</td></tr>
 </tbody></table></div>
-<p>核对一下第一行：LLaMA3-70B 是 80 层、8 个 KV head、head 维度 128，BF16 下每 token 2 × 80 × 8 × 128 × 2 = 320 KiB，128K token 正好 40 GiB，和 README 的描述一致。按 87 GB/s 传完约需 0.49 秒，按 190 GB/s 约 0.23 秒。</p>
+<p>核对一下第一行：LLaMA3-70B 是 80 层、8 个 KV head、head 维度 128，BF16 下每 token 2 × 80 × 8 × 128 × 2 = 320 KiB，128K token 正好 40 GiB（约 43 GB），和 README 写的“40 GB”是同一量级，README 用的是十进制口径。按 87 GB/s 传完约需 0.49 秒，按 190 GB/s 约 0.23 秒。</p>
 
 <h3 id="24-用公开数据做一次完整估算">2.4 用公开数据做一次完整估算</h3>
 <p><strong>场景</strong>：LLaMA3-70B 级别模型，8 张 H100，一个 32K token 的共享前缀被远端命中。</p>

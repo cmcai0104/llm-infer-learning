@@ -24,6 +24,7 @@
 <details><summary>02 推理运行时</summary>
 <a href="../../../02-runtime/index.html">02 推理运行时：把请求变成每一轮 GPU 工作</a>
 <a href="../../../02-runtime/inference-animations.html">推理过程动态图解：张量变化、连续批处理与 PagedAttention</a>
+<a href="../../../02-runtime/advanced-animations.html">推理机制动态图解（进阶）：并行、投机解码、PD、FlashAttention、调度</a>
 <a href="../../../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
 <a href="../../../02-runtime/implementations/vllm/architecture.html">vLLM：知识地图与设计图</a>
 <a href="../../../02-runtime/implementations/vllm/request-walkthrough.html">vLLM：跟踪一条请求的源码与资源</a>
@@ -110,7 +111,7 @@
 <div class="note"><p><strong>白话导读</strong>：LMCache 专项资料的目录页，保留原教材的阅读顺序。</p><ul><li>跨项目学习以<a href="../../study-plan.html">统一计划</a>为主，这里是单项目备选。</li><li>KV 存储方向最该读的是 LMCache 内核、后端契约和联合链路。</li></ul><p>直接从下方专题目录进入需要的章节。</p></div>
 <p>这是 LMCache 专项资料的入口。如果你同时学几个项目，先按<a href="../../study-plan.html">统一学习计划</a>走，这里的内容作为深入 LMCache 时的补充。第一次接触 LMCache，先读<a href="../../../03-kv-cache/implementations/lmcache/overview.html">LMCache 白话介绍</a>。</p>
 <p><strong>适合谁</strong>：想做 LLM 推理基础设施、KV Cache 存储或数据传输的工程师。需要会 Python、基本 C++，懂操作系统和网络基础；不要求先读完 Transformer 论文。</p>
-<p><strong>目标</strong>：用 <strong>28 天、约 70 小时</strong>，从容量计算和缓存正确性入手，读懂 LMCache 的主路径，讲清它怎样和 Mooncake 配合，最后交出一份有实验依据的系统设计。</p>
+<p><strong>目标</strong>：用 <strong>28 天、约 68 小时</strong>，从容量计算和缓存正确性入手，读懂 LMCache 的主路径，讲清它怎样和 Mooncake 配合，最后交出一份有实验依据的系统设计。</p>
 
 <h2 id="1-对应的源码版本">1. 对应的源码版本</h2>
 <p>资料在 2026-10-26 核对，对应的源码版本是：</p>

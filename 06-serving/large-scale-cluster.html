@@ -24,6 +24,7 @@
 <details><summary>02 推理运行时</summary>
 <a href="../02-runtime/index.html">02 推理运行时：把请求变成每一轮 GPU 工作</a>
 <a href="../02-runtime/inference-animations.html">推理过程动态图解：张量变化、连续批处理与 PagedAttention</a>
+<a href="../02-runtime/advanced-animations.html">推理机制动态图解（进阶）：并行、投机解码、PD、FlashAttention、调度</a>
 <a href="../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
 <a href="../02-runtime/implementations/vllm/architecture.html">vLLM：知识地图与设计图</a>
 <a href="../02-runtime/implementations/vllm/request-walkthrough.html">vLLM：跟踪一条请求的源码与资源</a>
@@ -116,7 +117,7 @@
 <p>从上到下大致分五层：全局流量入口和路由、按模型划分的服务池（可能再分 Prefill 池和 Decode 池）、单个推理实例（可能横跨几十到上百张卡）、共享的 KV 缓存和权重存储、底层的网络和硬件。每一层在规模变大时都有自己的问题。</p>
 
 <h2 id="2-故障从偶尔变成每天都有">2. 故障：从偶尔变成每天都有</h2>
-<p>Meta 在 Llama 3 论文（arXiv:2407.21783）中报告：16,384 张 H100 的训练集群，54 天里发生 419 次意外中断，平均每天约 7.8 次，其中一半以上与 GPU 或显存有关。卡越多，“某处坏了”就越是常态。</p>
+<p>Meta 在 Llama 3 论文（arXiv:2407.21783）中报告：16,384 张 H100 的训练集群，54 天里发生 419 次意外中断，平均每天约 7.8 次；按论文的组件分解，GPU、显存及相关硬件是最大的故障来源之一。卡越多，“某处坏了”就越是常态。</p>
 <div class="table-scroll"><table>
 <thead><tr><th>挑战</th><th>推理集群里的表现</th><th>常见做法</th></tr></thead>
 <tbody>

@@ -24,6 +24,7 @@
 <details><summary>02 推理运行时</summary>
 <a href="../../../02-runtime/index.html">02 推理运行时：把请求变成每一轮 GPU 工作</a>
 <a href="../../../02-runtime/inference-animations.html">推理过程动态图解：张量变化、连续批处理与 PagedAttention</a>
+<a href="../../../02-runtime/advanced-animations.html">推理机制动态图解（进阶）：并行、投机解码、PD、FlashAttention、调度</a>
 <a href="../../../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
 <a href="../../../02-runtime/implementations/vllm/architecture.html">vLLM：知识地图与设计图</a>
 <a href="../../../02-runtime/implementations/vllm/request-walkthrough.html">vLLM：跟踪一条请求的源码与资源</a>
@@ -146,12 +147,12 @@
   <mn>15</mn>
   <mspace width="0.25em">
   </mspace>
-  <mtext>/s</mtext>
+  <mtext>GiB/s</mtext>
   <mo>≈</mo>
   <mn>128.85</mn>
   <mspace width="0.25em">
   </mspace>
-  <mtext>/s</mtext>
+  <mtext>Gbit/s</mtext>
 </math>
 </div>
 <p>这只是数据本身的总读取量，不含协议开销、本机 H2D、控制面和流量波动。一张 200G 网卡的线速是 25 GB/s，约 23.28 GiB/s；按 70% 有效利用率算，约 16.30 GiB/s，已经非常接近 15 GiB/s 的持续读负载。这点余量撑不住突发、故障和复制。</p>

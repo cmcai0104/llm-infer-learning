@@ -25,6 +25,7 @@
 <details open><summary>02 推理运行时</summary>
 <a href="index.html">02 推理运行时：把请求变成每一轮 GPU 工作</a>
 <a href="inference-animations.html" aria-current="page">推理过程动态图解：张量变化、连续批处理与 PagedAttention</a>
+<a href="advanced-animations.html">推理机制动态图解（进阶）：并行、投机解码、PD、FlashAttention、调度</a>
 <a href="implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
 <a href="implementations/vllm/architecture.html">vLLM：知识地图与设计图</a>
 <a href="implementations/vllm/request-walkthrough.html">vLLM：跟踪一条请求的源码与资源</a>
@@ -221,6 +222,7 @@
 
 <h2 id="4-继续深入">4. 继续深入</h2>
 <ul>
+<li>张量并行、专家并行、投机解码、PD 分离、FlashAttention、重叠调度、抢占的动态演示：<a href="advanced-animations.html">进阶动态图解</a>。</li>
 <li>块被命中、释放、淘汰的完整规则：<a href="../03-kv-cache/block-manager.html">块管理器深入</a>。</li>
 <li>SGLang 用基数树管理前缀，和 vLLM 的块 hash 怎样不同：<a href="../06-serving/framework-comparison.html">vLLM 与 SGLang、LMCache 与 Mooncake 对比</a>。</li>
 <li>真实源码里一条请求怎样走过调度器和模型：<a href="implementations/vllm/request-walkthrough.html">vLLM 请求源码</a>、<a href="implementations/sglang/runtime.html">SGLang 运行图</a>。</li>

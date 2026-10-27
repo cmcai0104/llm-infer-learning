@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>推理机制动态图解（进阶）：并行、投机解码、PD、FlashAttention、调度 · LLM Infer Infra</title>
+<link rel="stylesheet" href="../assets/site.css">
+<script defer src="../assets/search-index.js"></script>
+<script defer src="../assets/site.js"></script>
+<script defer src="../assets/stepper.js"></script></head>
+<body data-root="..">
+<a class="skip" href="#content">跳到正文</a>
+<header class="topbar"><button id="nav-toggle" aria-controls="sidebar" aria-expanded="false">目录</button>
+<a class="brand" href="../index.html">LLM Infer Infra <span>学习资料库</span></a>
+<button id="search-open">搜索内容 <kbd>/</kbd></button></header>
+<aside id="sidebar"><nav aria-label="学习主题">
+<a href="../index.html">总目录</a>
+<details><summary>01 基础与设计图</summary>
+<a href="../01-foundations/index.html">01 基础与全景：先理解计算、资源和请求</a>
+<a href="../01-foundations/overview.html">全景导读：先把一次请求的整条链路想明白</a>
+<a href="../01-foundations/concepts.html">公共概念：推理、KV Cache、内存和性能指标</a>
+<a href="../01-foundations/attention-and-inference.html">推理基础：从 Transformer 到服务成本</a>
+<a href="../01-foundations/compute-and-memory.html">计算与显存：调度、GPU 优化与分布式基础</a>
+<a href="../01-foundations/design-atlas.html">设计图册：从请求执行到共享 KV 存储</a>
+<a href="../01-foundations/interactive.html">互动演示：容量、盈亏、命中折叠与超时</a>
+</details>
+<details open><summary>02 推理运行时</summary>
+<a href="index.html">02 推理运行时：把请求变成每一轮 GPU 工作</a>
+<a href="inference-animations.html">推理过程动态图解：张量变化、连续批处理与 PagedAttention</a>
+<a href="advanced-animations.html" aria-current="page">推理机制动态图解（进阶）：并行、投机解码、PD、FlashAttention、调度</a>
+<a href="implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
+<a href="implementations/vllm/architecture.html">vLLM：知识地图与设计图</a>
+<a href="implementations/vllm/request-walkthrough.html">vLLM：跟踪一条请求的源码与资源</a>
+<a href="implementations/sglang/overview.html">SGLang：请求调度、前缀复用与分层缓存</a>
+<a href="implementations/sglang/knowledge-map.html">SGLang：学习大纲与知识地图</a>
+<a href="implementations/sglang/runtime.html">SGLang：架构、运行图与源码路线</a>
+</details>
+<details><summary>03 KV Cache 管理</summary>
+<a href="../03-kv-cache/index.html">03 KV Cache 管理：让正确的状态在正确的时间可用</a>
+<a href="../03-kv-cache/semantics-and-costs.html">KV Cache 原理：复用条件与容量推导</a>
+<a href="../03-kv-cache/capacity-and-reuse.html">KV Cache 基础：容量与性能模型</a>
+<a href="../03-kv-cache/block-manager.html">块管理器深入：BlockPool、前缀 hash 与淘汰顺序</a>
+<a href="../03-kv-cache/model-variants.html">复杂模型与 KV 存储：MLA、滑窗、混合状态、MoE 与量化</a>
+<a href="../03-kv-cache/implementations/vllm/integration.html">vLLM：外部 KV 接入（LMCache 与 Mooncake）</a>
+<a href="../03-kv-cache/implementations/sglang/prefix-cache.html">SGLang：KV 原理、分页与前缀复用</a>
+<a href="../03-kv-cache/implementations/sglang/tiered-cache.html">SGLang：HiCache 分层缓存与 PD 分离</a>
+<a href="../03-kv-cache/implementations/lmcache/overview.html">LMCache：把 KV 的保存、查找、加载和回收管起来</a>
+<a href="../03-kv-cache/implementations/lmcache/state-diagrams.html">LMCache：知识地图、架构与时序图</a>
+<a href="../03-kv-cache/implementations/lmcache/internals.html">LMCache：架构与源码主线</a>
+</details>
+<details><summary>04 分布式存储</summary>
+<a href="../04-storage/index.html">04 分布式存储：把可复用状态放进共享资源池</a>
+<a href="../04-storage/kv-cache-storage.html">KV Cache 存储详解：数据模型、协议、容量、性能与故障</a>
+<a href="../04-storage/implementations/mooncake/overview.html">Mooncake：KV 对象怎样共享、怎样安全地高速搬运</a>
+<a href="../04-storage/implementations/mooncake/architecture.html">Mooncake：知识地图与设计图</a>
+<a href="../04-storage/implementations/mooncake/internals.html">Mooncake：Store 内核与源码路线</a>
+<a href="../04-storage/implementations/mooncake/integrations.html">Mooncake：与 LMCache 和推理引擎集成</a>
+<a href="../04-storage/implementations/lmcache/backend-contracts.html">LMCache：存储后端契约与 Mooncake 接入</a>
+<a href="../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake：从一次保存到下一次恢复</a>
+</details>
+<details><summary>05 数据传输</summary>
+<a href="../05-transfer/index.html">05 数据传输：搬得动、搬得快，还要搬得安全</a>
+<a href="../05-transfer/implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine：字节移动的实现案例</a>
+</details>
+<details><summary>06 Serving 与性能</summary>
+<a href="../06-serving/index.html">06 Serving 与性能：让整条链路满足服务目标</a>
+<a href="../06-serving/component-selection.html">组件选型：在同一技术问题下比较实现</a>
+<a href="../06-serving/framework-comparison.html">框架对比：vLLM 与 SGLang、LMCache 与 Mooncake</a>
+<a href="../06-serving/optimization-playbook.html">推理优化方法：从定位瓶颈到选择手段</a>
+<a href="../06-serving/large-scale-cluster.html">万卡集群的推理 Infra：挑战与常见做法</a>
+<a href="../06-serving/gpu-kernel-basics.html">GPU 与 kernel 基础：带宽、异步拷贝与性能分析</a>
+<a href="../06-serving/implementations/vllm/performance-and-parallelism.html">vLLM：性能、分布式与服务工程</a>
+<a href="../06-serving/implementations/lmcache/observability.html">LMCache：优化、可观测与生产设计</a>
+</details>
+<details><summary>07 实验与验证</summary>
+<a href="../07-practice/index.html">07 实验与验证：用证据回答系统问题</a>
+<a href="../07-practice/measurement-and-drills.html">实测与故障演练：测什么、怎么测、怎样记录</a>
+<a href="../07-practice/implementations/vllm/walkthrough.html">vLLM：运行步骤、源码作业与参考答案</a>
+<a href="../07-practice/implementations/vllm/experiments.html">vLLM：实验与项目</a>
+<a href="../07-practice/implementations/sglang/labs.html">SGLang：从单机基线到共享缓存与 PD</a>
+<a href="../07-practice/implementations/lmcache/labs.html">LMCache：实验、基准与验收</a>
+<a href="../07-practice/implementations/mooncake/labs.html">Mooncake：实验与性能诊断</a>
+</details>
+<details><summary>08 专家能力与面试</summary>
+<a href="../08-career/index.html">08 岗位、计划与面试：按能力组织成果</a>
+<a href="../08-career/expert-interview-guide.html">P7–P8 专家面试总纲：重点 KV Cache 存储</a>
+<a href="../08-career/expert-qa.html">P7–P8 KV Cache 存储深挖问答</a>
+<a href="../08-career/interview-and-design.html">基础面试与算例：能解释、能算账、能处理失败</a>
+<a href="../08-career/roles.html">岗位方向：什么必须熟练，什么可以后学</a>
+<a href="../08-career/study-plan.html">统一 28 天计划：基础只学一次，后面按岗位分流</a>
+<a href="../08-career/references.html">资料索引与版本基线</a>
+<a href="../08-career/coverage-and-review.html">资料结构与覆盖范围审阅</a>
+</details>
+<details><summary>专项题库与计划（按项目）</summary>
+<a href="../08-career/implementations/lmcache/questions.html">LMCache 专项：60 道面试题与参考回答</a>
+<a href="../08-career/implementations/lmcache/system-design.html">LMCache 专项：系统设计题与源码阅读</a>
+<a href="../08-career/implementations/lmcache/study-plan.html">LMCache 专项：28 天计划</a>
+<a href="../08-career/implementations/lmcache/index.html">LMCache 专项：学习指南目录</a>
+<a href="../08-career/implementations/mooncake/questions.html">Mooncake 专项：面试题与参考回答</a>
+<a href="../08-career/implementations/mooncake/system-design.html">Mooncake 专项：系统设计与毕业项目</a>
+<a href="../08-career/implementations/mooncake/study-plan.html">Mooncake 专项：28 天计划</a>
+<a href="../08-career/implementations/mooncake/index.html">Mooncake 专项：学习手册目录</a>
+<a href="../08-career/implementations/vllm/questions.html">vLLM 专项：60 道面试题与参考回答</a>
+<a href="../08-career/implementations/vllm/study-plan.html">vLLM 专项：28 天计划</a>
+<a href="../08-career/implementations/vllm/references.html">vLLM 专项：官方资料与版本说明</a>
+<a href="../08-career/implementations/sglang/questions.html">SGLang 专项：36 道面试题与系统设计</a>
+<a href="../08-career/implementations/sglang/study-plan.html">SGLang 专项：28 天计划</a>
+<a href="../08-career/implementations/sglang/assessment.html">SGLang 专项：参考资料与最终验收</a>
+</details>
+<a href="../tools/index.html">维护说明：怎样直接修改 HTML</a>
+</nav></aside>
+<main id="content"><div class="breadcrumbs">02 推理运行时 · 专注 KV Cache 存储</div>
+<article><h1 id="page-title">推理机制动态图解（进阶）：并行、投机解码、PD、FlashAttention、调度</h1>
+<p><a href="inference-animations.html">推理过程动态图解（基础）</a> · <a href="../06-serving/framework-comparison.html">框架对比</a> · <a href="../06-serving/optimization-playbook.html">推理优化方法</a></p>
+<p>基础篇讲了张量变化、连续批处理和 PagedAttention。推理里还有很多“文字很难讲清、画出来就懂”的机制，这一页再补 7 个逐步演示，覆盖并行、加速、部署和调度中最常被问到的部分。</p>
+<div class="table-scroll"><table>
+<thead><tr><th>演示</th><th>要回答的问题</th></tr></thead>
+<tbody>
+<tr><td><a href="#1-张量并行权重怎样切开">1. 张量并行</a></td><td>权重怎样切到多张卡？为什么每层要 all-reduce？</td></tr>
+<tr><td><a href="#2-专家并行token-怎样找到专家">2. 专家并行（MoE）</a></td><td>token 怎样被发到专家所在的卡？为什么负载不均是核心问题？</td></tr>
+<tr><td><a href="#3-投机解码先猜再验证">3. 投机解码</a></td><td>为什么一次前向能产出多个 token？结果为什么不变？</td></tr>
+<tr><td><a href="#4-pd-分离kv-怎样交接">4. PD 分离</a></td><td>Prefill 算完的 KV 怎样交给 Decode？什么时候才能释放？</td></tr>
+<tr><td><a href="#5-flashattention分块与在线-softmax">5. FlashAttention</a></td><td>不写出完整注意力矩阵，怎样得到同样的结果？</td></tr>
+<tr><td><a href="#6-重叠调度让-gpu-不再等-cpu">6. 重叠调度</a></td><td>CPU 调度开销怎样被藏起来？代价是什么？</td></tr>
+<tr><td><a href="#7-抢占显存不够时怎么办">7. 抢占</a></td><td>KV 块不够时调度器怎样腾空间？为什么抢占多了很浪费？</td></tr>
+</tbody></table></div>
+<h2 id="1-张量并行权重怎样切开">1. 张量并行：权重怎样切开</h2>
+<figure class="stepper"><div class="stepper-stage">
+<div class="st-row" data-on="1"><span class="st-label">GPU 0</span><span class="st-box used">X<small>[T, 4096]</small></span></div>
+<div class="st-row" data-on="1"><span class="st-label">GPU 1</span><span class="st-box used">X<small>[T, 4096]</small></span></div>
+<div class="st-row" data-on="1"><span class="st-label">通信</span><span class="st-arrow">—</span></div>
+<div class="st-row" data-on="2"><span class="st-label">GPU 0</span><span class="st-box used">X</span><span class="st-arrow">× W_up 左半</span><span class="st-box used" data-hl="2">Y₀<small>[T, 7168]</small></span></div>
+<div class="st-row" data-on="2"><span class="st-label">GPU 1</span><span class="st-box used">X</span><span class="st-arrow">× W_up 右半</span><span class="st-box used" data-hl="2">Y₁<small>[T, 7168]</small></span></div>
+<div class="st-row" data-on="2"><span class="st-label">通信</span><span class="st-arrow">不需要：每张卡独立算一半输出列</span></div>
+<div class="st-row" data-on="3"><span class="st-label">GPU 0</span><span class="st-box used">Y₀</span><span class="st-arrow">激活（逐元素）</span></div>
+<div class="st-row" data-on="3"><span class="st-label">GPU 1</span><span class="st-box used">Y₁</span><span class="st-arrow">激活（逐元素）</span></div>
+<div class="st-row" data-on="3"><span class="st-label">通信</span><span class="st-arrow">不需要：激活只看自己这一列</span></div>
+<div class="st-row" data-on="4"><span class="st-label">GPU 0</span><span class="st-box used">Y₀</span><span class="st-arrow">× W_down 上半</span><span class="st-box warn" data-hl="4">Z₀<small>[T, 4096] 部分和</small></span></div>
+<div class="st-row" data-on="4"><span class="st-label">GPU 1</span><span class="st-box used">Y₁</span><span class="st-arrow">× W_down 下半</span><span class="st-box warn" data-hl="4">Z₁<small>[T, 4096] 部分和</small></span></div>
+<div class="st-row" data-on="4"><span class="st-label">通信</span><span class="st-arrow">两张卡的结果都只是一部分</span></div>
+<div class="st-row" data-on="5"><span class="st-label">GPU 0</span><span class="st-box cached" data-hl="5">Z = Z₀ + Z₁<small>[T, 4096]</small></span></div>
+<div class="st-row" data-on="5"><span class="st-label">GPU 1</span><span class="st-box cached" data-hl="5">Z = Z₀ + Z₁<small>[T, 4096]</small></span></div>
+<div class="st-row" data-on="5"><span class="st-label">通信</span><span class="st-box warn" data-hl="5">all-reduce</span></div>
+<div class="st-row" data-on="6"><span class="st-label">GPU 0</span><span class="st-box used">注意力头 0–15</span><span class="st-box cached">KV head 0–3</span></div>
+<div class="st-row" data-on="6"><span class="st-label">GPU 1</span><span class="st-box used">注意力头 16–31</span><span class="st-box cached">KV head 4–7</span></div>
+<div class="st-row" data-on="6"><span class="st-label">通信</span><span class="st-arrow">注意力同样按头切开，o_proj 后再一次 all-reduce</span></div>
+</div><ol class="stepper-captions"><li>张量并行（TP=2）：每张卡都有完整的输入 X，权重切开放在两张卡上。以 MLP 为例（为简化只画 up 投影）。</li><li>第一个矩阵按“列”切（Column Parallel）：每张卡算出一半的输出列，彼此不需要通信。</li><li>激活函数逐元素计算，各卡只处理自己的那一半，仍然不需要通信。</li><li>第二个矩阵按“行”切（Row Parallel）：每张卡用自己那一半输入乘对应的一半权重，得到的是完整形状但只是部分和。</li><li>一次 all-reduce 把两张卡的部分和相加，两张卡都得到完整结果。每层 MLP 和注意力各需要一次 all-reduce，所以 TP 通常只在 NVLink 连接的同一台机器内使用。</li><li>注意力按头切：32 个 query 头、8 个 KV 头平均分到两张卡，每张卡的 KV Cache 只有一半。如果 KV 头数少于 TP 数，就要复制 KV 头，每卡容量不再减半。</li></ol></figure>
+<h2 id="2-专家并行token-怎样找到专家">2. 专家并行：token 怎样找到专家</h2>
+<figure class="stepper"><div class="stepper-stage">
+<div class="st-row" data-on="1"><span class="st-label">token</span><span class="st-box used">t1</span><span class="st-box used">t2</span><span class="st-box used">t3</span><span class="st-box used">t4</span></div>
+<div class="st-row" data-on="1"><span class="st-label">路由</span><span class="st-arrow">router 给每个 token 选 top-2 专家</span></div>
+<div class="st-row" data-on="1"><span class="st-label">GPU 0（专家 0、1）</span><span class="st-arrow">—</span></div>
+<div class="st-row" data-on="1"><span class="st-label">GPU 1（专家 2、3）</span><span class="st-arrow">—</span></div>
+<div class="st-row" data-on="2"><span class="st-label">token</span><span class="st-box used" data-hl="2">t1 → E0, E2</span><span class="st-box used">t2 → E1, E2</span><span class="st-box used">t3 → E2, E3</span><span class="st-box used">t4 → E2, E0</span></div>
+<div class="st-row" data-on="2"><span class="st-label">路由</span><span class="st-arrow">选出的专家和权重</span></div>
+<div class="st-row" data-on="2"><span class="st-label">GPU 0（专家 0、1）</span><span class="st-arrow">—</span></div>
+<div class="st-row" data-on="2"><span class="st-label">GPU 1（专家 2、3）</span><span class="st-arrow">—</span></div>
+<div class="st-row" data-on="3"><span class="st-label">token</span><span class="st-arrow">dispatch：按专家所在的卡发送 token</span></div>
+<div class="st-row" data-on="3"><span class="st-label">路由</span><span class="st-box warn" data-hl="3">all-to-all</span></div>
+<div class="st-row" data-on="3"><span class="st-label">GPU 0（专家 0、1）</span><span class="st-box used">E0: t1, t4</span><span class="st-box used">E1: t2</span></div>
+<div class="st-row" data-on="3"><span class="st-label">GPU 1（专家 2、3）</span><span class="st-box warn" data-hl="3">E2: t1, t2, t3, t4</span><span class="st-box used">E3: t3</span></div>
+<div class="st-row" data-on="4"><span class="st-label">token</span><span class="st-arrow">各专家独立计算</span></div>
+<div class="st-row" data-on="4"><span class="st-label">路由</span><span class="st-arrow">—</span></div>
+<div class="st-row" data-on="4"><span class="st-label">GPU 0（专家 0、1）</span><span class="st-box used">算 3 个 token</span></div>
+<div class="st-row" data-on="4"><span class="st-label">GPU 1（专家 2、3）</span><span class="st-box warn" data-hl="4">算 5 个 token（E2 是热点）</span></div>
+<div class="st-row" data-on="5"><span class="st-label">token</span><span class="st-arrow">combine：结果发回 token 原来的卡，按权重加权求和</span></div>
+<div class="st-row" data-on="5"><span class="st-label">路由</span><span class="st-box warn" data-hl="5">all-to-all</span></div>
+<div class="st-row" data-on="5"><span class="st-label">GPU 0（专家 0、1）</span><span class="st-arrow">—</span></div>
+<div class="st-row" data-on="5"><span class="st-label">GPU 1（专家 2、3）</span><span class="st-arrow">—</span></div>
+</div><ol class="stepper-captions"><li>MoE 层里每个 token 只用少数几个专家。专家并行（EP）把不同专家放在不同 GPU 上。这里 4 个专家放在 2 张卡上，每个 token 选 2 个专家。</li><li>router（一个小的线性层）为每个 token 打分，选出 top-2 专家和对应权重。</li><li>dispatch：用一次 all-to-all 通信，把每个 token 发到它所选专家所在的卡。这一步的通信量随 token 数和选中的专家数增长。</li><li>各卡上的专家独立计算。专家 E2 被 4 个 token 选中，是热点，GPU 1 要算得更久，其他卡只能等它——负载不均是 EP 的核心问题，常见对策有负载均衡损失、冗余热点专家、动态调整专家位置。</li><li>combine：再一次 all-to-all 把结果发回 token 原来的卡，按 router 权重加权求和。每个 MoE 层两次 all-to-all，所以大规模 EP 对网络延迟和拓扑非常敏感；一张卡故障会影响整个 EP 组。</li></ol></figure>
+<h2 id="3-投机解码先猜再验证">3. 投机解码：先猜，再验证</h2>
+<figure class="stepper"><div class="stepper-stage">
+<div class="st-row" data-on="1"><span class="st-label">已确认</span><span class="st-box cached">今天</span><span class="st-box cached">天气</span></div>
+<div class="st-row" data-on="1"><span class="st-label">草稿模型</span><span class="st-arrow">—</span></div>
+<div class="st-row" data-on="1"><span class="st-label">目标模型</span><span class="st-arrow">—</span></div>
+<div class="st-row" data-on="2"><span class="st-label">已确认</span><span class="st-box cached">今天</span><span class="st-box cached">天气</span></div>
+<div class="st-row" data-on="2"><span class="st-label">草稿模型</span><span class="st-box used" data-hl="2">很</span><span class="st-box used" data-hl="2">好</span><span class="st-box used" data-hl="2">吗</span></div>
+<div class="st-row" data-on="2"><span class="st-label">目标模型</span><span class="st-arrow">草稿模型很小，连续猜 3 个 token，速度快</span></div>
+<div class="st-row" data-on="3"><span class="st-label">已确认</span><span class="st-box cached">今天</span><span class="st-box cached">天气</span></div>
+<div class="st-row" data-on="3"><span class="st-label">草稿模型</span><span class="st-box used">很</span><span class="st-box used">好</span><span class="st-box used">吗</span></div>
+<div class="st-row" data-on="3"><span class="st-label">目标模型</span><span class="st-box warn" data-hl="3">一次前向验证 4 个位置</span></div>
+<div class="st-row" data-on="4"><span class="st-label">已确认</span><span class="st-box cached">今天</span><span class="st-box cached">天气</span></div>
+<div class="st-row" data-on="4"><span class="st-label">草稿模型</span><span class="st-box cached" data-hl="4">很 ✓</span><span class="st-box cached" data-hl="4">好 ✓</span><span class="st-box warn" data-hl="4">吗 ✗</span></div>
+<div class="st-row" data-on="4"><span class="st-label">目标模型</span><span class="st-arrow">第 3 个位置目标模型想要的是“，”</span></div>
+<div class="st-row" data-on="5"><span class="st-label">已确认</span><span class="st-box cached">今天</span><span class="st-box cached">天气</span><span class="st-box cached" data-hl="5">很</span><span class="st-box cached" data-hl="5">好</span><span class="st-box cached" data-hl="5">，</span></div>
+<div class="st-row" data-on="5"><span class="st-label">草稿模型</span><span class="st-arrow">“吗”及其 KV 被丢弃（回滚）</span></div>
+<div class="st-row" data-on="5"><span class="st-label">目标模型</span><span class="st-arrow">一次前向得到 3 个 token</span></div>
+</div><ol class="stepper-captions"><li>投机解码：用一个便宜的方法先猜几个 token，再让大模型一次性检查。目标是减少大模型的前向次数。</li><li>草稿模型（或 EAGLE、MTP 头等）连续猜出 3 个 token。</li><li>目标模型把这 3 个猜测连同前文一起做一次前向，同时得到 4 个位置的预测。因为 Decode 受带宽限制，多算几个位置几乎不增加时间。</li><li>从左到右比较：前两个猜对了，第三个和目标模型的预测不同，从这里开始的猜测全部作废。</li><li>接受“很、好”，再加上目标模型在出错位置给出的“，”，这一次前向产出 3 个 token。被拒绝位置的 KV 要回滚。只要用合适的接受规则，输出分布和不用投机解码完全一样；接受率越低、并发越高，收益越小（算账见<a href="../06-serving/optimization-playbook.html#41-投机解码什么时候划算">推理优化</a>）。</li></ol></figure>
+<h2 id="4-pd-分离kv-怎样交接">4. PD 分离：KV 怎样交接</h2>
+<figure class="stepper"><div class="stepper-stage">
+<div class="st-row" data-on="1"><span class="st-label">路由</span><span class="st-box used" data-hl="1">请求到达</span></div>
+<div class="st-row" data-on="1"><span class="st-label">Prefill 实例</span><span class="st-arrow">空闲</span></div>
+<div class="st-row" data-on="1"><span class="st-label">KV 传输</span><span class="st-arrow">—</span></div>
+<div class="st-row" data-on="1"><span class="st-label">Decode 实例</span><span class="st-arrow">运行其他请求的 Decode</span></div>
+<div class="st-row" data-on="2"><span class="st-label">路由</span><span class="st-arrow">选择 Prefill 和 Decode 实例</span></div>
+<div class="st-row" data-on="2"><span class="st-label">Prefill 实例</span><span class="st-box used" data-hl="2">计算整个 prompt 的 KV</span><span class="st-box used">采样第 1 个 token</span></div>
+<div class="st-row" data-on="2"><span class="st-label">KV 传输</span><span class="st-arrow">—</span></div>
+<div class="st-row" data-on="2"><span class="st-label">Decode 实例</span><span class="st-box free" data-hl="2">预留 KV 块</span></div>
+<div class="st-row" data-on="3"><span class="st-label">路由</span><span class="st-arrow">—</span></div>
+<div class="st-row" data-on="3"><span class="st-label">Prefill 实例</span><span class="st-box used">KV 留在显存，等待传输</span></div>
+<div class="st-row" data-on="3"><span class="st-label">KV 传输</span><span class="st-box warn" data-hl="3">RDMA 写到 Decode 的块</span></div>
+<div class="st-row" data-on="3"><span class="st-label">Decode 实例</span><span class="st-box free">接收中，不能使用</span></div>
+<div class="st-row" data-on="4"><span class="st-label">路由</span><span class="st-arrow">—</span></div>
+<div class="st-row" data-on="4"><span class="st-label">Prefill 实例</span><span class="st-box cached" data-hl="4">确认传输完成后释放 KV</span></div>
+<div class="st-row" data-on="4"><span class="st-label">KV 传输</span><span class="st-box cached">完成</span></div>
+<div class="st-row" data-on="4"><span class="st-label">Decode 实例</span><span class="st-box cached" data-hl="4">KV 就绪</span></div>
+<div class="st-row" data-on="5"><span class="st-label">路由</span><span class="st-box used">流式返回输出</span></div>
+<div class="st-row" data-on="5"><span class="st-label">Prefill 实例</span><span class="st-arrow">处理下一个请求的 Prefill</span></div>
+<div class="st-row" data-on="5"><span class="st-label">KV 传输</span><span class="st-arrow">—</span></div>
+<div class="st-row" data-on="5"><span class="st-label">Decode 实例</span><span class="st-box used" data-hl="5">加入 Decode batch，逐个生成</span></div>
+</div><ol class="stepper-captions"><li>PD 分离：Prefill 和 Decode 跑在不同的实例（机器池）上。请求先到路由。</li><li>路由同时选好 Prefill 实例和 Decode 实例。Prefill 实例算出整个 prompt 的 KV（这里画成 Prefill 侧同时采样出第一个 token；首 token 由哪一侧产生取决于实现，例如 SGLang 的 PD 模式由 Decode 侧在 KV 就位后算出）；Decode 实例提前预留好接收用的 KV 块。</li><li>KV 通过 RDMA（例如 Mooncake Transfer Engine、NIXL）从 Prefill 的显存传到 Decode 预留的块。传输完成之前，Decode 不能使用这些块。8K 上下文的示例模型约 1 GiB。</li><li>传输完成后 Prefill 才能释放自己的 KV；Decode 的块变为就绪。如果传输失败或超时，要有明确的处理：重传、重新 Prefill，或者报错。</li><li>Decode 实例把这个请求加入自己的批处理，继续生成。Prefill 不再被长 Decode 拖慢，Decode 也不会被长 Prefill 打断，两个池可以按负载分别扩缩容。</li></ol></figure>
+<h2 id="5-flashattention分块与在线-softmax">5. FlashAttention：分块与在线 softmax</h2>
+<figure class="stepper"><div class="stepper-stage">
+<div class="st-row" data-on="1"><span class="st-label">Q 块</span><span class="st-box used">Q 的一块<small>[Bq, d]</small></span></div>
+<div class="st-row" data-on="1"><span class="st-label">K/V 块</span><span class="st-box free">K/V 块 1</span><span class="st-box free">K/V 块 2</span><span class="st-box free">K/V 块 3</span></div>
+<div class="st-row" data-on="1"><span class="st-label">片上状态</span><span class="st-arrow">m = −∞（当前最大值）　l = 0（指数和）　O = 0</span></div>
+<div class="st-row" data-on="2"><span class="st-label">Q 块</span><span class="st-box used">Q 的一块</span></div>
+<div class="st-row" data-on="2"><span class="st-label">K/V 块</span><span class="st-box used" data-hl="2">K/V 块 1</span><span class="st-box free">K/V 块 2</span><span class="st-box free">K/V 块 3</span></div>
+<div class="st-row" data-on="2"><span class="st-label">片上状态</span><span class="st-arrow">算 S₁ = Q·K₁ᵀ，得到 m₁、l₁，O = exp(S₁ − m₁)·V₁</span></div>
+<div class="st-row" data-on="3"><span class="st-label">Q 块</span><span class="st-box used">Q 的一块</span></div>
+<div class="st-row" data-on="3"><span class="st-label">K/V 块</span><span class="st-box cached">K/V 块 1</span><span class="st-box used" data-hl="3">K/V 块 2</span><span class="st-box free">K/V 块 3</span></div>
+<div class="st-row" data-on="3"><span class="st-label">片上状态</span><span class="st-arrow">新最大值 m₂ 更大 → 旧的 l 和 O 乘以 exp(m₁ − m₂) 重新缩放，再加上块 2 的贡献</span></div>
+<div class="st-row" data-on="4"><span class="st-label">Q 块</span><span class="st-box used">Q 的一块</span></div>
+<div class="st-row" data-on="4"><span class="st-label">K/V 块</span><span class="st-box cached">K/V 块 1</span><span class="st-box cached">K/V 块 2</span><span class="st-box used" data-hl="4">K/V 块 3</span></div>
+<div class="st-row" data-on="4"><span class="st-label">片上状态</span><span class="st-arrow">同样方式合并块 3</span></div>
+<div class="st-row" data-on="5"><span class="st-label">Q 块</span><span class="st-box cached" data-hl="5">输出 = O / l</span></div>
+<div class="st-row" data-on="5"><span class="st-label">K/V 块</span><span class="st-arrow">全部处理完</span></div>
+<div class="st-row" data-on="5"><span class="st-label">片上状态</span><span class="st-arrow">只把最终结果写回显存；完整的注意力矩阵从未写出</span></div>
+</div><ol class="stepper-captions"><li>FlashAttention 把 Q 和 K/V 切成小块，放进 GPU 片上的高速存储里计算。每个 Q 块维护三个量：当前见过的最大分数 m、指数和 l、未归一化的输出 O。</li><li>处理第一个 K/V 块：算出这一块的注意力分数，用块内最大值做数值稳定的 exp，累加到 O 和 l。</li><li>处理第二块时，如果出现了更大的分数，之前算的 exp 都要按新的最大值缩小——乘以 exp(旧最大值 − 新最大值)。这就是“在线 softmax”：不用先看完所有分数，也能得到和标准 softmax 完全相同的结果。</li><li>依次处理所有 K/V 块。中间结果一直在片上，不写回显存。</li><li>最后 O / l 就是标准注意力的输出。计算量没有减少，省掉的是把 [序列长度 × 序列长度] 的大矩阵写回显存再读出来的开销。PagedAttention 的 kernel 在此基础上再按块表去收集不连续的 K/V 块。</li></ol></figure>
+<h2 id="6-重叠调度让-gpu-不再等-cpu">6. 重叠调度：让 GPU 不再等 CPU</h2>
+<figure class="stepper"><div class="stepper-stage">
+<div class="st-row" data-on="1"><span class="st-label">不重叠</span><span class="st-box used">CPU 调度 N</span><span class="st-box cached">GPU 计算 N</span><span class="st-box used">CPU 处理结果 N</span><span class="st-box used">CPU 调度 N+1</span><span class="st-box cached">GPU 计算 N+1</span></div>
+<div class="st-row" data-on="1"><span class="st-label">GPU 利用</span><span class="st-arrow">CPU 工作时 GPU 空闲，Decode 每轮越短，空闲占比越大</span></div>
+<div class="st-row" data-on="2"><span class="st-label">重叠</span><span class="st-box used">CPU 调度 N</span><span class="st-box cached" data-hl="2">GPU 计算 N</span><span class="st-arrow">同时</span><span class="st-box used" data-hl="2">CPU 调度 N+1</span></div>
+<div class="st-row" data-on="2"><span class="st-label">GPU 利用</span><span class="st-arrow">GPU 算第 N 轮时，CPU 已在准备第 N+1 轮</span></div>
+<div class="st-row" data-on="3"><span class="st-label">重叠</span><span class="st-box cached" data-hl="3">GPU 计算 N+1</span><span class="st-arrow">同时</span><span class="st-box used" data-hl="3">CPU 处理结果 N、调度 N+2</span></div>
+<div class="st-row" data-on="3"><span class="st-label">GPU 利用</span><span class="st-arrow">GPU 几乎不停</span></div>
+<div class="st-row" data-on="4"><span class="st-label">代价</span><span class="st-box warn" data-hl="4">第 N+1 轮调度时还不知道第 N 轮的结果</span></div>
+<div class="st-row" data-on="4"><span class="st-label">GPU 利用</span><span class="st-arrow">例如某请求在第 N 轮已生成结束符，第 N+1 轮可能多算一步，再丢弃</span></div>
+</div><ol class="stepper-captions"><li>不重叠时，每一轮都是“CPU 调度 → GPU 计算 → CPU 处理结果”串行进行。Decode 一轮可能只有几毫秒，CPU 的几百微秒到几毫秒就会占掉很大比例。</li><li>重叠调度（SGLang 的 overlap scheduler、vLLM 的异步调度）让 CPU 在 GPU 计算第 N 轮的同时，准备第 N+1 轮的输入。</li><li>稳定后，GPU 一直有活干，CPU 的调度和结果处理被隐藏在 GPU 计算时间里。</li><li>代价是调度第 N+1 轮时还拿不到第 N 轮的输出，实现上要处理“结果晚一轮到达”：已结束的请求可能多算一步再丢弃，采样结果要在 GPU 上直接传给下一轮（vLLM 源码中对应 stale / in-flight token 的回退处理）。</li></ol></figure>
+<h2 id="7-抢占显存不够时怎么办">7. 抢占：显存不够时怎么办</h2>
+<figure class="stepper"><div class="stepper-stage">
+<div class="st-row" data-on="1"><span class="st-label">运行中</span><span class="st-box used">A<small>8 块</small></span><span class="st-box used">B<small>6 块</small></span><span class="st-box used">C<small>5 块</small></span></div>
+<div class="st-row" data-on="1"><span class="st-label">空闲块</span><span class="st-box warn">1 块</span></div>
+<div class="st-row" data-on="1"><span class="st-label">等待队列</span><span class="st-arrow">空</span></div>
+<div class="st-row" data-on="2"><span class="st-label">运行中</span><span class="st-box used" data-hl="2">A<small>需要新块</small></span><span class="st-box used">B</span><span class="st-box used" data-hl="2">C<small>需要新块</small></span></div>
+<div class="st-row" data-on="2"><span class="st-label">空闲块</span><span class="st-box warn" data-hl="2">不够分</span></div>
+<div class="st-row" data-on="2"><span class="st-label">等待队列</span><span class="st-arrow">空</span></div>
+<div class="st-row" data-on="3"><span class="st-label">运行中</span><span class="st-box used">A</span><span class="st-box used">B</span></div>
+<div class="st-row" data-on="3"><span class="st-label">空闲块</span><span class="st-box cached" data-hl="3">C 释放 5 块</span></div>
+<div class="st-row" data-on="3"><span class="st-label">等待队列</span><span class="st-box free" data-hl="3">C（已生成的部分记下来）</span></div>
+<div class="st-row" data-on="4"><span class="st-label">运行中</span><span class="st-box used">A</span><span class="st-box cached" data-hl="4">B 结束</span></div>
+<div class="st-row" data-on="4"><span class="st-label">空闲块</span><span class="st-box cached">空出更多块</span></div>
+<div class="st-row" data-on="4"><span class="st-label">等待队列</span><span class="st-box free">C</span></div>
+<div class="st-row" data-on="5"><span class="st-label">运行中</span><span class="st-box used">A</span><span class="st-box warn" data-hl="5">C 重新 Prefill（prompt + 已生成部分）</span></div>
+<div class="st-row" data-on="5"><span class="st-label">空闲块</span><span class="st-arrow">—</span></div>
+<div class="st-row" data-on="5"><span class="st-label">等待队列</span><span class="st-arrow">空</span></div>
+</div><ol class="stepper-captions"><li>显存里的 KV 块快用完了：A、B、C 都在 Decode，只剩 1 个空闲块。</li><li>下一轮 A 和 C 都需要新块，空闲块不够。</li><li>调度器抢占一个请求（vLLM V1 中通常是优先级最低或最晚到达的）：释放它的全部 KV 块，把它放回等待队列，已经生成的 token 保留下来。</li><li>等其他请求结束、显存空出来。</li><li>被抢占的请求重新被调度时，要把 prompt 和已生成的部分重新 Prefill 一遍（重算）。抢占越频繁，浪费的计算越多——这是显存容量不足的典型信号，可以用 KV 量化、减小 batch、分层缓存等方式缓解。另一种做法是把 KV 换出到主机内存再换回，代价是 PCIe 带宽。</li></ol></figure>
+<p>还有一些机制已经在其他页面用动态演示讲过：前缀缓存的命中与淘汰（<a href="../03-kv-cache/block-manager.html">块管理器深入</a>）、SGLang 基数树（<a href="../06-serving/framework-comparison.html">框架对比</a>）、Transfer Engine 的切分与重试（<a href="../05-transfer/implementations/mooncake/transfer-engine.html">Transfer Engine</a>）、Mooncake Store 的租约与淘汰（<a href="../04-storage/implementations/mooncake/internals.html">Store 内核</a>），以及<a href="../01-foundations/interactive.html">互动计算器</a>里的前缀命中折叠和超时租约。</p>
+
+</article>
+<footer><a href="../index.html">返回总目录</a>
+<p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-张量并行权重怎样切开">1. 张量并行：权重怎样切开</a><a class="level-2" href="#2-专家并行token-怎样找到专家">2. 专家并行：token 怎样找到专家</a><a class="level-2" href="#3-投机解码先猜再验证">3. 投机解码：先猜，再验证</a><a class="level-2" href="#4-pd-分离kv-怎样交接">4. PD 分离：KV 怎样交接</a><a class="level-2" href="#5-flashattention分块与在线-softmax">5. FlashAttention：分块与在线 softmax</a><a class="level-2" href="#6-重叠调度让-gpu-不再等-cpu">6. 重叠调度：让 GPU 不再等 CPU</a><a class="level-2" href="#7-抢占显存不够时怎么办">7. 抢占：显存不够时怎么办</a></aside>
+<dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
+<button id="search-close" aria-label="关闭搜索">关闭</button></div>
+<input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">
+<p id="search-status" role="status">输入主题、术语或问题</p><ol id="search-results"></ol></dialog>
+</body></html>

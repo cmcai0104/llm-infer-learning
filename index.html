@@ -24,6 +24,7 @@
 <details><summary>02 推理运行时</summary>
 <a href="02-runtime/index.html">02 推理运行时：把请求变成每一轮 GPU 工作</a>
 <a href="02-runtime/inference-animations.html">推理过程动态图解：张量变化、连续批处理与 PagedAttention</a>
+<a href="02-runtime/advanced-animations.html">推理机制动态图解（进阶）：并行、投机解码、PD、FlashAttention、调度</a>
 <a href="02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
 <a href="02-runtime/implementations/vllm/architecture.html">vLLM：知识地图与设计图</a>
 <a href="02-runtime/implementations/vllm/request-walkthrough.html">vLLM：跟踪一条请求的源码与资源</a>
@@ -140,7 +141,7 @@
 </tr>
 <tr>
 <td><strong>推理过程动态演示、框架对比</strong></td>
-<td><a href="02-runtime/inference-animations.html">张量变化 / 连续批处理 / PagedAttention</a> · <a href="06-serving/framework-comparison.html">vLLM vs SGLang、LMCache vs Mooncake</a></td>
+<td><a href="02-runtime/inference-animations.html">基础：张量变化 / 连续批处理 / PagedAttention</a> · <a href="02-runtime/advanced-animations.html">进阶：并行 / 投机解码 / PD / FlashAttention / 调度 / 抢占</a> · <a href="06-serving/framework-comparison.html">vLLM vs SGLang、LMCache vs Mooncake</a></td>
 </tr>
 <tr>
 <td><strong>推理优化与大规模集群</strong></td>

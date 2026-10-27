@@ -25,6 +25,7 @@
 <details><summary>02 推理运行时</summary>
 <a href="../../../02-runtime/index.html">02 推理运行时：把请求变成每一轮 GPU 工作</a>
 <a href="../../../02-runtime/inference-animations.html">推理过程动态图解：张量变化、连续批处理与 PagedAttention</a>
+<a href="../../../02-runtime/advanced-animations.html">推理机制动态图解（进阶）：并行、投机解码、PD、FlashAttention、调度</a>
 <a href="../../../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
 <a href="../../../02-runtime/implementations/vllm/architecture.html">vLLM：知识地图与设计图</a>
 <a href="../../../02-runtime/implementations/vllm/request-walkthrough.html">vLLM：跟踪一条请求的源码与资源</a>
@@ -205,7 +206,7 @@
 <div class="st-row" data-on="4"><span class="st-label">任务状态</span><span class="st-box free">0/4 完成</span></div>
 <div class="st-row" data-on="5"><span class="st-label">应用调用</span><span class="st-box used" data-hl="5">轮询完成队列（CQ）：S0、S2 成功，S3 成功，S1 报错</span></div>
 <div class="st-row" data-on="5"><span class="st-label">slice</span><span class="st-box cached">S0 ✓</span><span class="st-box warn">S1 ✗</span><span class="st-box cached">S2 ✓</span><span class="st-box cached">S3 ✓</span></div>
-<div class="st-row" data-on="5"><span class="st-label">网卡与连接</span><span class="st-arrow">mlx5_1 这条路径出现链路错误</span></div>
+<div class="st-row" data-on="5"><span class="st-label">网卡与连接</span><span class="st-arrow">S1 所用的 endpoint（本地网卡—远端网卡的 QP）出错，S3 用的是另一个 QP</span></div>
 <div class="st-row" data-on="5"><span class="st-label">任务状态</span><span class="st-box warn">3/4 完成</span></div>
 <div class="st-row" data-on="6"><span class="st-label">应用调用</span><span class="st-box used" data-hl="6">S1 换一条可达路径重试（重试次数有上限）</span></div>
 <div class="st-row" data-on="6"><span class="st-label">slice</span><span class="st-box cached">S0 ✓</span><span class="st-box used">S1→mlx5_0</span><span class="st-box cached">S2 ✓</span><span class="st-box cached">S3 ✓</span></div>
@@ -219,7 +220,7 @@
 <div class="st-row" data-on="8"><span class="st-label">slice</span><span class="st-arrow">（还没有）</span></div>
 <div class="st-row" data-on="8"><span class="st-label">网卡与连接</span><span class="st-arrow">—</span></div>
 <div class="st-row" data-on="8"><span class="st-label">任务状态</span><span class="st-box free">batch 已释放</span></div>
-</div><ol class="stepper-captions"><li>应用先申请一个 batch ID，后面的请求都挂在这个 batch 下。</li><li>提交一个传输请求：操作类型（READ/WRITE）、本地地址、远端 segment、远端偏移、长度。函数返回只代表“已提交”，不代表已完成。</li><li>超过 64 KiB 的请求被切成多个 slice（默认 64 KiB，可用 MC_SLICE_SIZE 调整）。根据集群广播的拓扑矩阵，为本地 buffer 所在的 CPU/GPU 选出优先的网卡，远端也按目标内存位置选网卡。</li><li>不同 slice 可以走不同的网卡，多张网卡一起工作。本地网卡和远端网卡之间的连接（endpoint，内含若干 QP）在第一次用到时才建立，连接数有上限，超出时按 SIEVE 算法淘汰。</li><li>worker 线程轮询完成队列，逐个确认 slice 的结果。这里 S1 所走的路径出错了。</li><li>TE 会为失败的 slice 换一条可达路径重新提交，并暂时避开有问题的网卡或连接；超过重试上限仍失败，整个任务就标记为失败。</li><li>所有 slice 都成功，任务才算完成。应用通过 getTransferStatus / getBatchTransferStatus 查到这个状态。</li><li>释放 batch。只有确认任务完成（或确认失败且不再有在途 slice）之后，应用才能复用或释放本地 buffer、注销内存。</li></ol></figure>
+</div><ol class="stepper-captions"><li>应用先申请一个 batch ID，后面的请求都挂在这个 batch 下。</li><li>提交一个传输请求：操作类型（READ/WRITE）、本地地址、远端 segment、远端偏移、长度。函数返回只代表“已提交”，不代表已完成。</li><li>超过 64 KiB 的请求被切成多个 slice（默认 64 KiB，可用 MC_SLICE_SIZE 调整）。根据集群广播的拓扑矩阵，为本地 buffer 所在的 CPU/GPU 选出优先的网卡，远端也按目标内存位置选网卡。</li><li>不同 slice 可以走不同的网卡，多张网卡一起工作。本地网卡和远端网卡之间的连接（endpoint，内含若干 QP）在第一次用到时才建立，连接数有上限，超出时按 SIEVE 算法淘汰。</li><li>worker 线程轮询完成队列，逐个确认 slice 的结果。这里 S1 所用的连接（QP）出错了；失败的粒度是 endpoint / slice，同一张网卡上的其他 slice 可能不受影响。</li><li>TE 会为失败的 slice 换一条可达路径重新提交，并暂时避开有问题的网卡或连接；超过重试上限仍失败，整个任务就标记为失败。</li><li>所有 slice 都成功，任务才算完成。应用通过 getTransferStatus / getBatchTransferStatus 查到这个状态。</li><li>释放 batch。只有确认任务完成（或确认失败且不再有在途 slice）之后，应用才能复用或释放本地 buffer、注销内存。</li></ol></figure>
 <p><strong>面试要点</strong>：①“提交成功”“slice 完成”“任务完成”“上层对象可读”是四个不同的时刻；② 多网卡不一定线性加速——Mooncake README 公布的 8×400G 结果约 190 GB/s，只用到线速的一半左右（见<a href="../../../07-practice/measurement-and-drills.html#23-项目公开结果">公开数据</a>）；③ 超时或失败后，必须等在途 slice 都结束才能释放本地 buffer，这和存储层的租约、上层的设备事件是不同层次的保护。</p>
 
 <h2 id="带着问题读源码和文档">带着问题读源码和文档</h2>

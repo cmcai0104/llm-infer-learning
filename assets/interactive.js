@@ -159,7 +159,7 @@
     html += row("租约到期时刻", fmtMs(v.lease));
     html += row("调用方超时时刻", fmtMs(v.timeout));
     if (v.timeout < done) {
-      html += verdict("bad", `调用方先超时：本次请求改走重算。但底层任务还会继续约 ${fmtMs(done - v.timeout)}，目标 buffer 必须隔离到完成或取消确认之后才能复用，迟到回调按 generation 丢弃。`);
+      html += verdict("bad", `调用方先超时：本次请求改走重算。但底层任务还会继续约 ${fmtMs(done - v.timeout)}，目标 buffer 必须隔离到完成或取消确认之后才能复用，迟到回调按 generation 丢弃。${done > v.lease ? "而且底层任务完成时租约也已过期，即使收到结果也必须丢弃。" : ""}`);
     } else if (done > v.lease) {
       html += verdict("bad", `数据搬完了，但租约已在 ${fmtMs(done - v.lease)} 前过期：空间可能已被回收或复用，必须拒绝这次数据，换副本、有界重试或重算。`);
     } else {

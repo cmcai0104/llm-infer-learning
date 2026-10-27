@@ -25,6 +25,7 @@
 <details><summary>02 推理运行时</summary>
 <a href="../02-runtime/index.html">02 推理运行时：把请求变成每一轮 GPU 工作</a>
 <a href="../02-runtime/inference-animations.html">推理过程动态图解：张量变化、连续批处理与 PagedAttention</a>
+<a href="../02-runtime/advanced-animations.html">推理机制动态图解（进阶）：并行、投机解码、PD、FlashAttention、调度</a>
 <a href="../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
 <a href="../02-runtime/implementations/vllm/architecture.html">vLLM：知识地图与设计图</a>
 <a href="../02-runtime/implementations/vllm/request-walkthrough.html">vLLM：跟踪一条请求的源码与资源</a>
@@ -129,10 +130,10 @@
 h2 = hash(h1,     块 2 的 token, 额外 key)
 h3 = hash(h2,     块 3 的 token, 额外 key)</code></pre>
 <ul>
-<li><strong>初始值</strong>（<code>NONE_HASH</code>）由一个种子派生；多个进程要共享缓存时，必须用同一个种子。</li>
+<li><strong>初始值</strong>（<code>NONE_HASH</code>）由一个种子派生。默认用 sha256 时种子是固定常量，不同进程天然一致；改用非加密 hash 函数时，要设置相同的 <code>PYTHONHASHSEED</code> 才能跨进程一致。</li>
 <li><strong>额外 key</strong> 把会改变 KV 的因素也算进去：LoRA 名称、多模态内容的 hash、<code>cache_salt</code>（只加在第一个块上，用来隔离租户）等。</li>
 <li>因为有链，两个请求只要前面任何一个 token 不同，后面所有块的 hash 都不同——这正是“只能复用连续前缀”的来源。</li>
-<li>只有<strong>装满</strong>的块才有 hash；最后那个没装满的块不登记，也就不能被别人命中。</li>
+<li>标准全注意力路径下，只有<strong>装满</strong>的块才有 hash；最后那个没装满的块不登记，也就不能被别人命中。学习版本在部分混合模型、块大小对齐的场景下还支持登记块内边界（partial hash hits），这里不展开。</li>
 </ul>
 <p>还有一个细节：即使整个 prompt 都命中，vLLM 也最多复用到“长度减 1”。因为生成第一个输出 token 需要最后一个位置的 logits，至少要算最后一个 token。</p>
 

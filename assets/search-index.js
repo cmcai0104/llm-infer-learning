@@ -12,7 +12,7 @@ window.INFRA_SEARCH = [
   {title:"互动演示：容量、盈亏、命中折叠与超时",url:"01-foundations/interactive.html",text:"互动计算器：KV 容量、TP 切分、chunk 对象数、加载与重算盈亏点、前缀命中折叠、超时与租约时间线、共享 KV 池容量规划。"},
   {title:"P7–P8 KV Cache 存储深挖问答",url:"08-career/expert-qa.html",text:"P7 P8 深挖问答 16 题：KV 身份、rank 缺失、发布、租约 引用计数 设备事件、超时释放、命中率与 TTFT、盈亏点、chunk 大小、容量、副本与故障域、主节点切换、重算风暴、升级、LMCache Mooncake 链路、在途合并、项目讲述。"},
   {title:"LLM Infer Infra 学习资料库",url:"index.html",text:"总目录：推理运行时、KV Cache、分布式存储、传输、Serving、实验、P7 P8 专家面试。直接打开 HTML 阅读。"},
-  {title:"HTML 资料：直接阅读与修改",url:"tools/index.html",text:"无需构建或安装依赖，直接编辑 HTML、CSS、JavaScript、SVG 和 Mermaid。AI 修改正文、导航、搜索摘要与关键词。"},
+  {title:"HTML 资料：直接阅读与修改",url:"tools/index.html",text:"无需构建或安装依赖，直接编辑 HTML、CSS、JavaScript、SVG 和 Mermaid。AI 修改正文、导航、搜索摘要与关键词。建设方案与独立提案入口：Gemini、GPT、Claude；三模型互审矩阵、GPT 两向审稿、多智能体合并候选方案及转交要求。"},
   {title:"01 基础与全景：先理解计算、资源和请求",url:"01-foundations/index.html",text:"学习入口：模型推理、算力、显存、Attention、KV Cache 和系统全景。"},
   {title:"推理基础：从 Transformer 到服务成本",url:"01-foundations/attention-and-inference.html",text:"Transformer、Q K V、causal mask、softmax、Prefill、Decode、GQA、MLA、模型推理与状态。"},
   {title:"计算与显存：调度、GPU 优化与分布式基础",url:"01-foundations/compute-and-memory.html",text:"FLOPs、HBM、带宽、算术强度、Roofline、GPU、权重与 KV 容量、TP、PP、DP。"},

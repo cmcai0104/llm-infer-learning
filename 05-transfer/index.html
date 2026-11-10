@@ -57,6 +57,7 @@
 </details>
 <details open><summary>05 数据传输</summary>
 <a href="index.html" aria-current="page">05 数据传输：搬得动、搬得快，还要搬得安全</a>
+<a href="transport-and-lifetime.html">远端 KV 的搬运与就绪：什么时候值得搬，什么时候才能用</a>
 <a href="implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine：字节移动的实现案例</a>
 </details>
 <details><summary>06 Serving 与性能</summary>
@@ -188,6 +189,7 @@
 <p><code>理想传输时间 = 字节数 / 链路字节速率</code>。例如 1 GiB 在 400 Gbit/s 链路上的理想下界约 21.47 ms，还没有算协议、排队、源/目标内存、拷贝和同步。</p>
 <p>端到端吞吐受最窄环节限制。串行阶段耗时相加；能重叠的阶段要按实际时间线估计关键路径，不能先假设全部重叠，也不能用峰值网络带宽代替实际 KV 加载速度。</p>
 <h2 id="5-实现与实验">5. 实现与实验</h2>
+<p>本页定位：<a href="transport-and-lifetime.html">远端 KV 的搬运与就绪</a>是通用机制页，沿远端对象 S → 主机内存 H → GPU 块 B 的五个时刻（定位、提交、字节移动、主机发布、设备就绪并被调度使用）走完一次恢复，并给出“搬还是重算”的可复算成本模型；<a href="implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine</a> 是这条数据流的具体实现案例。</p>
 <p>先读 <a href="implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine 实现专题</a>，再看<a href="../07-practice/implementations/mooncake/labs.html">传输与 Store 实验</a>。TE 用作具体案例；一般的内存寿命、完成边界和成本模型适用于其他传输方案。</p>
 <p>实验分别记录注册/连接成本、稳态 payload 带宽、小对象延迟、CPU 开销、部分失败和目标设备可用时间。把传输 microbenchmark、Store 对象读写和最终推理指标分开报告。</p>
 <h2 id="6-验收">6. 验收</h2>

@@ -44,6 +44,7 @@ window.INFRA_SEARCH = [
   {title:"Mooncake：Store 内核与源码路线",url:"04-storage/implementations/mooncake/internals.html",text:"副本状态 PROCESSING COMPLETE、读租约 10 秒、淘汰高水位 90%、淘汰 5%、PutStart PutEnd PutRevoke、GetReplicaList、lease、soft pin hard pin、checksum、upsert、allocation、eviction、Master HA、OpLog 与恢复。"},
   {title:"Mooncake：与 LMCache 和推理引擎集成",url:"04-storage/implementations/mooncake/integrations.html",text:"LMCache、HiCache、vLLM、SGLang、原生 Store、Transfer Engine、PD 分离、布局兼容和部署边界。"},
   {title:"05 数据传输：搬得动、搬得快，还要搬得安全",url:"05-transfer/index.html",text:"buffer、注册、地址、segment、RDMA TCP、DMA、完成事件、取消、NUMA、NIC、PCIe 与带宽。"},
+  {title:"远端 KV 的搬运与就绪：什么时候值得搬，什么时候才能用",url:"05-transfer/transport-and-lifetime.html",text:"远端 KV 恢复 S H B 三个资源 五个时刻 定位 提交 搬运 发布 就绪 调度使用；对象粒度 控制面对象率；线速下界 有效带宽 流水填充排空；搬还是重算 盈亏点 TP 组；传输态压缩 CacheGen；TTFT 观测 六个时间戳 IO 完成不等于可执行。"},
   {title:"Mooncake Transfer Engine：字节移动的实现案例",url:"05-transfer/implementations/mooncake/transfer-engine.html",text:"register memory、open segment、allocateBatchID、submitTransfer、getTransferStatus、slice 切分 64 KiB、拓扑矩阵选网卡、endpoint 连接池 SIEVE、worker 轮询 CQ、slice 重试、batch、READ WRITE、QP CQ、GDR、拓扑、多 NIC、完成、零拷贝和安全释放。"},
   {title:"06 Serving 与性能：让整条链路满足服务目标",url:"06-serving/index.html",text:"端到端 SLO、TTFT、ITL、goodput、路由、并行、排队、负载、性能测量与成本。"},
   {title:"组件选型：在同一技术问题下比较实现",url:"06-serving/component-selection.html",text:"vLLM SGLang、LMCache HiCache、Mooncake Store TE 对照；同层替代与跨层组合，PD 分离、共享缓存和收益。"},

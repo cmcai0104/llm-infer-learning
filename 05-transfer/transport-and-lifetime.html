@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>远端 KV 的搬运与就绪：什么时候值得搬，什么时候才能用 · LLM Infer Infra</title>
+<link rel="stylesheet" href="../assets/site.css">
+<script defer src="../assets/search-index.js"></script>
+<script defer src="../assets/site.js"></script></head>
+<body data-root="..">
+<a class="skip" href="#content">跳到正文</a>
+<header class="topbar"><button id="nav-toggle" aria-controls="sidebar" aria-expanded="false">目录</button>
+<a class="brand" href="../index.html">LLM Infer Infra <span>学习资料库</span></a>
+<button id="search-open">搜索内容 <kbd>/</kbd></button></header>
+<aside id="sidebar"><nav aria-label="学习主题">
+<a href="../index.html">总目录</a>
+<details><summary>01 基础与设计图</summary>
+<a href="../01-foundations/index.html">01 基础与全景：先理解计算、资源和请求</a>
+<a href="../01-foundations/overview.html">全景导读：先把一次请求的整条链路想明白</a>
+<a href="../01-foundations/concepts.html">公共概念：推理、KV Cache、内存和性能指标</a>
+<a href="../01-foundations/attention-and-inference.html">推理基础：从 Transformer 到服务成本</a>
+<a href="../01-foundations/compute-and-memory.html">计算与显存：调度、GPU 优化与分布式基础</a>
+<a href="../01-foundations/design-atlas.html">设计图册：从请求执行到共享 KV 存储</a>
+<a href="../01-foundations/interactive.html">互动演示：容量、盈亏、命中折叠与超时</a>
+</details>
+<details><summary>02 推理运行时</summary>
+<a href="../02-runtime/index.html">02 推理运行时：把请求变成每一轮 GPU 工作</a>
+<a href="../02-runtime/inference-animations.html">推理过程动态图解：张量变化、连续批处理与 PagedAttention</a>
+<a href="../02-runtime/advanced-animations.html">推理机制动态图解（进阶）：并行、投机解码、PD、FlashAttention、调度</a>
+<a href="../02-runtime/implementations/vllm/overview.html">vLLM：请求怎样变成高效的 GPU 执行</a>
+<a href="../02-runtime/implementations/vllm/architecture.html">vLLM：知识地图与设计图</a>
+<a href="../02-runtime/implementations/vllm/request-walkthrough.html">vLLM：跟踪一条请求的源码与资源</a>
+<a href="../02-runtime/implementations/sglang/overview.html">SGLang：请求调度、前缀复用与分层缓存</a>
+<a href="../02-runtime/implementations/sglang/knowledge-map.html">SGLang：学习大纲与知识地图</a>
+<a href="../02-runtime/implementations/sglang/runtime.html">SGLang：架构、运行图与源码路线</a>
+</details>
+<details><summary>03 KV Cache 管理</summary>
+<a href="../03-kv-cache/index.html">03 KV Cache 管理：让正确的状态在正确的时间可用</a>
+<a href="../03-kv-cache/semantics-and-costs.html">KV Cache 原理：复用条件与容量推导</a>
+<a href="../03-kv-cache/capacity-and-reuse.html">KV Cache 基础：容量与性能模型</a>
+<a href="../03-kv-cache/block-manager.html">块管理器深入：BlockPool、前缀 hash 与淘汰顺序</a>
+<a href="../03-kv-cache/model-variants.html">复杂模型与 KV 存储：MLA、滑窗、混合状态、MoE 与量化</a>
+<a href="../03-kv-cache/implementations/vllm/integration.html">vLLM：外部 KV 接入（LMCache 与 Mooncake）</a>
+<a href="../03-kv-cache/implementations/sglang/prefix-cache.html">SGLang：KV 原理、分页与前缀复用</a>
+<a href="../03-kv-cache/implementations/sglang/tiered-cache.html">SGLang：HiCache 分层缓存与 PD 分离</a>
+<a href="../03-kv-cache/implementations/lmcache/overview.html">LMCache：把 KV 的保存、查找、加载和回收管起来</a>
+<a href="../03-kv-cache/implementations/lmcache/state-diagrams.html">LMCache：知识地图、架构与时序图</a>
+<a href="../03-kv-cache/implementations/lmcache/internals.html">LMCache：架构与源码主线</a>
+</details>
+<details><summary>04 分布式存储</summary>
+<a href="../04-storage/index.html">04 分布式存储：把可复用状态放进共享资源池</a>
+<a href="../04-storage/kv-cache-storage.html">KV Cache 存储详解：数据模型、协议、容量、性能与故障</a>
+<a href="../04-storage/implementations/mooncake/overview.html">Mooncake：KV 对象怎样共享、怎样安全地高速搬运</a>
+<a href="../04-storage/implementations/mooncake/architecture.html">Mooncake：知识地图与设计图</a>
+<a href="../04-storage/implementations/mooncake/internals.html">Mooncake：Store 内核与源码路线</a>
+<a href="../04-storage/implementations/mooncake/integrations.html">Mooncake：与 LMCache 和推理引擎集成</a>
+<a href="../04-storage/implementations/lmcache/backend-contracts.html">LMCache：存储后端契约与 Mooncake 接入</a>
+<a href="../04-storage/implementations/lmcache/mooncake-walkthrough.html">LMCache + Mooncake：从一次保存到下一次恢复</a>
+</details>
+<details open><summary>05 数据传输</summary>
+<a href="index.html">05 数据传输：搬得动、搬得快，还要搬得安全</a>
+<a href="transport-and-lifetime.html" aria-current="page">远端 KV 的搬运与就绪：什么时候值得搬，什么时候才能用</a>
+<a href="implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine：字节移动的实现案例</a>
+</details>
+<details><summary>06 Serving 与性能</summary>
+<a href="../06-serving/index.html">06 Serving 与性能：让整条链路满足服务目标</a>
+<a href="../06-serving/component-selection.html">组件选型：在同一技术问题下比较实现</a>
+<a href="../06-serving/framework-comparison.html">框架对比：vLLM 与 SGLang、LMCache 与 Mooncake</a>
+<a href="../06-serving/optimization-playbook.html">推理优化方法：从定位瓶颈到选择手段</a>
+<a href="../06-serving/large-scale-cluster.html">万卡集群的推理 Infra：挑战与常见做法</a>
+<a href="../06-serving/gpu-kernel-basics.html">GPU 与 kernel 基础：带宽、异步拷贝与性能分析</a>
+<a href="../06-serving/implementations/vllm/performance-and-parallelism.html">vLLM：性能、分布式与服务工程</a>
+<a href="../06-serving/implementations/lmcache/observability.html">LMCache：优化、可观测与生产设计</a>
+</details>
+<details><summary>07 实验与验证</summary>
+<a href="../07-practice/index.html">07 实验与验证：用证据回答系统问题</a>
+<a href="../07-practice/measurement-and-drills.html">实测与故障演练：测什么、怎么测、怎样记录</a>
+<a href="../07-practice/implementations/vllm/walkthrough.html">vLLM：运行步骤、源码作业与参考答案</a>
+<a href="../07-practice/implementations/vllm/experiments.html">vLLM：实验与项目</a>
+<a href="../07-practice/implementations/sglang/labs.html">SGLang：从单机基线到共享缓存与 PD</a>
+<a href="../07-practice/implementations/lmcache/labs.html">LMCache：实验、基准与验收</a>
+<a href="../07-practice/implementations/mooncake/labs.html">Mooncake：实验与性能诊断</a>
+</details>
+<details><summary>08 专家能力与面试</summary>
+<a href="../08-career/index.html">08 岗位、计划与面试：按能力组织成果</a>
+<a href="../08-career/expert-interview-guide.html">P7–P8 专家面试总纲：重点 KV Cache 存储</a>
+<a href="../08-career/expert-qa.html">P7–P8 KV Cache 存储深挖问答</a>
+<a href="../08-career/interview-and-design.html">基础面试与算例：能解释、能算账、能处理失败</a>
+<a href="../08-career/roles.html">岗位方向：什么必须熟练，什么可以后学</a>
+<a href="../08-career/study-plan.html">统一 28 天计划：基础只学一次，后面按岗位分流</a>
+<a href="../08-career/references.html">资料索引与版本基线</a>
+<a href="../08-career/coverage-and-review.html">资料结构与覆盖范围审阅</a>
+</details>
+<details><summary>专项题库与计划（按项目）</summary>
+<a href="../08-career/implementations/lmcache/questions.html">LMCache 专项：60 道面试题与参考回答</a>
+<a href="../08-career/implementations/lmcache/system-design.html">LMCache 专项：系统设计题与源码阅读</a>
+<a href="../08-career/implementations/lmcache/study-plan.html">LMCache 专项：28 天计划</a>
+<a href="../08-career/implementations/lmcache/index.html">LMCache 专项：学习指南目录</a>
+<a href="../08-career/implementations/mooncake/questions.html">Mooncake 专项：面试题与参考回答</a>
+<a href="../08-career/implementations/mooncake/system-design.html">Mooncake 专项：系统设计与毕业项目</a>
+<a href="../08-career/implementations/mooncake/study-plan.html">Mooncake 专项：28 天计划</a>
+<a href="../08-career/implementations/mooncake/index.html">Mooncake 专项：学习手册目录</a>
+<a href="../08-career/implementations/vllm/questions.html">vLLM 专项：60 道面试题与参考回答</a>
+<a href="../08-career/implementations/vllm/study-plan.html">vLLM 专项：28 天计划</a>
+<a href="../08-career/implementations/vllm/references.html">vLLM 专项：官方资料与版本说明</a>
+<a href="../08-career/implementations/sglang/questions.html">SGLang 专项：36 道面试题与系统设计</a>
+<a href="../08-career/implementations/sglang/study-plan.html">SGLang 专项：28 天计划</a>
+<a href="../08-career/implementations/sglang/assessment.html">SGLang 专项：参考资料与最终验收</a>
+</details>
+
+
+<a href="../tools/index.html">维护说明：怎样直接修改 HTML</a>
+</nav></aside>
+<main id="content"><div class="breadcrumbs">05 数据传输 · 专注 KV Cache 存储</div>
+<article>
+
+<section id="learner-content">
+<h1 id="transport-and-lifetime">远端 KV 的搬运与就绪：什么时候值得搬，什么时候才能用</h1>
+
+<p>一个请求命中了共享前缀，而这段前缀的 KV Cache 不在本机 GPU 上，只在远端的对象存储里。这时要回答两个不同的问题：<strong>值不值得搬</strong>——把字节搬过来的总代价是否低于在本地重新算一遍；以及<strong>什么时候才算能用</strong>——哪一个信号真正允许 GPU 上的注意力计算读这块显存。这两个问题常被合在一起讨论，于是出现“带宽明明够、首 token 时延却没降”的现象。首 token 时延（Time To First Token，TTFT）指从请求到达到生成第一个输出 token 的时间，下文统一用 TTFT 指代。</p>
+
+<p>本页沿着同一条数据流走一遍：远端对象 → 主机内存 → GPU 块，依次算字节、算对象数、算时间，再解释真实系统为什么偏离这些下界。具体某个框架的回收契约、返回码与源码位置不在这里重复，需要时看<a href="../04-storage/implementations/lmcache/mooncake-walkthrough.html#safe-reuse-design">联合链路页的回收交接设计</a>；远程直接内存访问（RDMA）侧的切片、选路与完成状态见<a href="implementations/mooncake/transfer-engine.html">Mooncake Transfer Engine 实现案例</a>。本页所有时间数字都是按明确给定的前提做的算术推导，<strong>没有 GPU 或网络实测</strong>；引用的论文与社区报告属于特定系统、特定版本上的研究与观测。</p>
+
+<h2 id="1-remote-kv-worth-moving">1. 先把资源和时刻命名</h2>
+
+<h3 id="1-1-three-resources">1.1 三个资源：S、H、B</h3>
+<p>一次远端恢复至少涉及三处内存，它们的持有者、单位和可复用条件都不同。为了后面能逐段记账，先固定名字：</p>
+<ul>
+<li><strong>S</strong>（Store object）：远端对象存储里的一个对象，由 key 标识。一个对象里可能装了很多 token、很多层。<strong>副本数、是否有带时限的读保护（租约）、失败后能否部分发布，都由具体存储协议决定，不是对象的天然属性</strong>；下文凡用到这类保护，都会写清是哪种协议前提。</li>
+<li><strong>H</strong>（host staging / resident）：本机主机内存里的暂存或已发布副本，既是网络传输的落点，也是后面设备拷贝的源。只有当网卡要<strong>直接</strong>读写 H 这个地址时，H 才必须是向网卡注册过（建立了地址映射与访问权限）的内存区；如果字节先落进另一块已注册缓冲、再由 CPU 复制到 H，那么 H 本身不必是注册区，但多出一次复制。</li>
+<li><strong>B</strong>（GPU blocks）：引擎为这个请求分配的目的 GPU 块集合，单位是“块”（页），块大小由引擎配置决定。注意力计算最终读的是 B。</li>
+</ul>
+<p>三者的释放条件要分开判断：某次等待超时只表示<strong>这次等待结束了</strong>，不表示底层操作已停止。H 要等仍可能读写它的传输与设备拷贝都结束，并解除后续使用者的持有，才能复用；B 同样要等所有可能访问它的设备操作结束，并解除所有使用者的持有。若 B 被多个请求共享，只结束当前请求还不够。S 的空间由存储侧按协议确认相关访问已结束或无法继续访问后回收。具体如何确认、超时后由谁继续持有资源，须按相应实现的契约核对。</p>
+
+<h3 id="1-2-five-moments">1.2 五个时刻：定位、提交、搬运、设备就绪、调度使用</h3>
+<p>正常路径按这个顺序走，每一步的“完成”含义都不一样：</p>
+<ul>
+<li><strong>对象定位</strong>：按 key 查询哪些对象存在、在哪里。查询返回只说明目录被查过，字节还没动。</li>
+<li><strong>提交</strong>：把“从哪个远端地址读、读多长、落到哪个本地地址”交给传输层。提交函数返回成功，只表示任务被接受。</li>
+<li><strong>字节搬运完成</strong>：传输层报告这次操作的字节移动结束，覆盖范围仅限这次操作声明的地址。</li>
+<li><strong>对象可读 / host 发布</strong>：上层确认所有必要片段都齐了，把 H 从暂存状态发布为可读。缺一个片段，前面所有“搬运完成”都不能让这段前缀可用。</li>
+<li><strong>设备就绪与调度使用</strong>：H 到 B 的拷贝在某个设备流上执行，完成由设备事件表达；而“B 里有正确数据”与“这个请求现在就有 GPU 执行机会”仍是两件事——能否进入本轮批次，由调度器的队列顺序、批大小、token 预算和分块预填充决定。</li>
+</ul>
+<p>这条链路上最常见的错误推理，是用前一个时刻的信号替代后一个时刻的证据。第 7 节会给出一组分段时延，说明代价可能几乎全部落在“字节已经到了主机内存之后”。</p>
+
+<h3 id="1-3-recover-vs-pd">1.3 恢复路径与 PD 搬运不是同一笔账</h3>
+<p>两种常见的跨机 KV 流动，字节账不同。<strong>恢复（S→H→B）</strong>：对象早已在远端，本机只需读入再送上 GPU，计两段——网络段与 H2D 段（host to device，主机内存到设备内存）。<strong>预填充与解码分离（PD disaggregation）里的新 KV 搬运</strong>：KV 刚在源侧 GPU 上算出来，要送到另一台机器；若走主机内存中转，源侧还要先做一次 D2H（device to host，设备内存到主机内存），于是是三段。段数多一段，第 4.3 节会看到它在流水模型里的代价也更大。</p>
+<p>还要分清两种常被混为一谈的“直连”。RDMA 指在已授权的内存区上直接做数据访问，减少远端 CPU 参与数据复制；它<strong>不自动等于网卡直接读写 GPU 显存</strong>。后者需要 GPUDirect RDMA 这类能力，依赖硬件、驱动、总线拓扑与设备侧可见性条件。同样，“零拷贝”必须说清省掉了哪一次复制：语言运行时对象层的复制、应用缓冲与传输暂存缓冲之间的复制、网络栈与远端 CPU 的复制、主机与设备之间的搬运及布局转换，是四个不同层次，省掉一层不代表另外三层消失。只要路径仍经主机内存中转，H2D 的字节就必须照算。</p>
+
+<h2 id="2-one-budget-table">2. 同一份字节，三种“块”</h2>
+
+<h3 id="2-1-s0-bytes">2.1 基准场景 S0</h3>
+<p>全页用同一个场景，便于交叉验算。<strong>S0</strong>：同构全注意力模型，80 层，8 个 KV 头，<code>head_dim</code> = 128，BF16（每元素 2 B），前缀长度 32,768 token；部署为张量并行 8 路（tensor parallel，简称 TP8，即把同一层的权重与 KV 头切到 8 个进程上，每个进程称一个 rank），按 KV 头均匀切分；假设无副本、无填充、不计元数据。</p>
+<p>每个 token 的 KV 字节数（K 与 V 各一份，所有层合计）：</p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mn>2</mn><mo>&#215;</mo><mn>80</mn><mo>&#215;</mo><mn>8</mn><mo>&#215;</mo><mn>128</mn><mo>&#215;</mo><mn>2</mn><mtext>&#160;B</mtext><mo>=</mo><mn>327680</mn><mtext>&#160;B/token</mtext></math>
+</div>
+<p>整段前缀：</p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mn>327680</mn><mtext>&#160;B/token</mtext><mo>&#215;</mo><mn>32768</mn><mtext>&#160;token</mtext><mo>=</mo><mn>10737418240</mn><mtext>&#160;B</mtext><mo>=</mo><mn>10</mn><mtext>&#160;GiB</mtext></math>
+</div>
+<p>在上述前提下每个 rank 承担 <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>10</mn><mtext>&#160;GiB</mtext><mo>&#247;</mo><mn>8</mn><mo>=</mo><mn>1.25</mn><mtext>&#160;GiB</mtext></math>，即 1,342,177,280 B。这是<strong>给定前缀长度下的确定容量</strong>，不是用平均序列长度估的期望值；做容量上界要用允许的最大前缀。</p>
+
+<h3 id="2-2-three-kinds-of-blocks">2.2 一张表看三层单位</h3>
+<p>同一份 1.25 GiB，在引擎、对象存储和传输层被切成完全不同的粒度。下表的 GPU 块 16 token、Store chunk 256 token、切片 64 KiB <strong>都是本页的教学取值</strong>，不是任何框架的默认实现；取它们只是为了让三层单位可以互相换算。</p>
+<div class="table-scroll"><table>
+<thead><tr><th>层</th><th>一个单位覆盖什么</th><th>单位字节</th><th>单 rank 数量</th><th>TP8 合计</th></tr></thead>
+<tbody>
+<tr><td>GPU 块（block = 16 token）</td><td>16 token × 80 层 × 本 rank 的 1 个 KV 头</td><td>655,360 B = 640 KiB</td><td>2,048</td><td>16,384</td></tr>
+<tr><td>Store 对象，布局甲（chunk = 256 token，按 rank 合并全部层）</td><td>256 token × 80 层 × 本 rank 的 1 个 KV 头</td><td>10,485,760 B = 10 MiB</td><td>128</td><td>1,024</td></tr>
+<tr><td>Store 对象，布局乙（chunk 仍为 256 token，再按层拆）</td><td>256 token × 1 层 × 本 rank 的 1 个 KV 头</td><td>131,072 B = 128 KiB</td><td>10,240</td><td>81,920</td></tr>
+<tr><td>传输切片（教学取 64 KiB）</td><td>一次操作里被独立投递的字节片段</td><td>65,536 B</td><td>20,480</td><td>163,840</td></tr>
+</tbody>
+</table></div>
+<p>这张表要带走的是：<strong>“块”在不同层不是同一个单位</strong>。布局甲的一个 10 MiB 对象正好覆盖 16 个 GPU 块（256 ÷ 16 = 16）；若传输层按 64 KiB 切片，同一个对象对应 160 片，而这些片怎样选路、是否真的分散到多张网卡，取决于实现与拓扑，不能由切片大小推出来。四行的字节总和都等于 1.25 GiB——换布局不改变要搬的字节数，改变的是要处理的对象数和片段数。</p>
+
+<h2 id="3-object-granularity">3. 对象粒度：字节没变，控制面的工作量变了</h2>
+
+<h3 id="3-1-two-layouts">3.1 两种布局的对象数</h3>
+<p>布局甲每 rank 128 个 10 MiB 对象，TP8 共 1,024 个；布局乙每 rank 10,240 个 128 KiB 对象，共 81,920 个。两者总字节完全相同，对象数差 80 倍。<strong>注意两种布局的 token 粒度是同一个值 256</strong>：布局乙切的是层，不是 token，所以它并不改变前缀能对齐到的 token 边界。</p>
+
+<h3 id="3-2-control-plane-rate">3.2 把对象数换成对象率</h3>
+<p>控制面（元数据查询、key 解析、任务登记、完成汇总）的工作量按对象计，不按字节计。设整个 TP8 组的元数据请求统一交给<strong>一个</strong>串行 worker，每个对象固定 20 μs，则它的服务能力上限是</p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mfrac><mn>1</mn><mrow><mn>20</mn><mo>&#160;</mo><mi>&#956;</mi><mtext>s/对象</mtext></mrow></mfrac><mo>=</mo><mn>50000</mn><mtext>&#160;对象/s</mtext></math>
+</div>
+<p>假设系统每秒确实要从远端恢复 10 次 S0 量级的数据，两种布局的对象率是：布局甲 <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>10</mn><mo>&#215;</mo><mn>1024</mn><mo>=</mo><mn>10240</mn></math> 对象/s，约为上限的 20.5%；布局乙 <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>10</mn><mo>&#215;</mo><mn>81920</mn><mo>=</mo><mn>819200</mn></math> 对象/s，是上限的 16.4 倍。换个角度看单次恢复的控制面串行下限：布局甲 <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>1024</mn><mo>&#215;</mo><mn>20</mn><mo>&#160;</mo><mi>&#956;</mi><mtext>s</mtext><mo>=</mo><mn>20.48</mn><mtext>&#160;ms</mtext></math>，布局乙 <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>81920</mn><mo>&#215;</mo><mn>20</mn><mo>&#160;</mo><mi>&#956;</mi><mtext>s</mtext><mo>=</mo><mn>1638.4</mn><mtext>&#160;ms</mtext></math>。第 4 节会看到同样这份数据的网络下界是百毫秒量级，所以在这组假设下布局乙<strong>先打满控制面，字节通道还没用满</strong>。</p>
+<p>批处理能摊薄每次远程调用的往返与系统调用开销：把 160 个对象打成一个批，调用次数降到 1/160。但它<strong>不消除每个对象自身的处理</strong>——key 解析、目录查找、地址登记、逐对象结果汇总仍按对象计。批处理改变的是“每批固定开销 ÷ 批内对象数”这一项，不是上面那 20 μs。这个 20 μs 本身是教学设定值，真实系统要实测，而且可能随并发升高而变化。</p>
+
+<h3 id="3-3-what-granularity-cannot-decide">3.3 粒度有四种，不要互相替代</h3>
+<p>讨论“块太小”“对象太大”之前，先把四种粒度分开，它们可以独立选择：</p>
+<ul>
+<li><strong>token 粒度</strong>：一个对象覆盖多少连续 token。它决定前缀能对齐到的边界，因此决定部分命中时可复用的最小范围。布局甲乙都取 256，<strong>按层拆不改善 token 对齐</strong>。</li>
+<li><strong>层粒度</strong>：一个对象覆盖多少层。它决定“能不能只拿到前几层就开始干活”。要把这件事变成真实收益，还需要引擎支持<strong>部分就绪与部分消费</strong>——即允许某些层的 KV 先到就先执行那几层；若引擎必须等全部层齐备，按层拆开只增加对象数，不产生流水价值。</li>
+<li><strong>发布粒度</strong>：存储协议以什么单位把数据从“写入中”变成“可读”。是否允许一个对象部分发布、失败后是否必须整对象重写，由协议决定，不能从对象大小推出。</li>
+<li><strong>传输重试粒度</strong>：传输层以什么单位重发。网络层面的丢包通常由传输协议自己重传，<strong>并不等于一个 Store 对象失败</strong>；只有当协议把这次操作判为失败并向上报告时，才涉及对象级的处理。</li>
+</ul>
+<p>所以粒度是一个权衡，而不是“越大越好”或“越小越好”：用对象率对比控制面上限，用字节量对比链路上限，再分别核对发布与重试语义，然后才能选，并且写明选的是哪一层的粒度。</p>
+
+<h2 id="4-bandwidth-and-topology">4. 带宽与拓扑：下界、速率口径、流水</h2>
+
+<h3 id="4-1-line-rate-bounds">4.1 线速下界，以及两种互斥的拓扑假设</h3>
+<p>先把链路速率换成字节速率。400 Gbit/s 裸线速（分母里的 8 是 <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>8</mn><mtext>&#160;bit/B</mtext></math>，<math xmlns="http://www.w3.org/1998/Math/MathML"><msup><mn>2</mn><mn>30</mn></msup></math> 是 <math xmlns="http://www.w3.org/1998/Math/MathML"><msup><mn>2</mn><mn>30</mn></msup><mtext>&#160;B/GiB</mtext></math>）：</p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mfrac><mrow><mn>400</mn><mo>&#215;</mo><msup><mn>10</mn><mn>9</mn></msup><mtext>&#160;bit/s</mtext></mrow><mrow><mn>8</mn><mtext>&#160;bit/B</mtext><mo>&#215;</mo><msup><mn>2</mn><mn>30</mn></msup><mtext>&#160;B/GiB</mtext></mrow></mfrac><mo>&#8776;</mo><mn>46.566</mn><mtext>&#160;GiB/s</mtext></math>
+</div>
+<p><strong>拓扑甲：整份 10 GiB 走一条共享的 400 Gbit/s 链路。</strong></p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mfrac><mrow><mn>10</mn><mtext>&#160;GiB</mtext></mrow><mrow><mn>46.566</mn><mtext>&#160;GiB/s</mtext></mrow></mfrac><mo>&#215;</mo><mn>1000</mn><mtext>&#160;ms/s</mtext><mo>&#8776;</mo><mn>214.748</mn><mtext>&#160;ms</mtext></math>
+</div>
+<p><strong>拓扑乙：每个 rank 有一条独立且无争用的 400 Gbit/s 网络路径</strong>，每 rank 搬 1.25 GiB：</p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mfrac><mrow><mn>1.25</mn><mtext>&#160;GiB</mtext></mrow><mrow><mn>46.566</mn><mtext>&#160;GiB/s</mtext></mrow></mfrac><mo>&#215;</mo><mn>1000</mn><mtext>&#160;ms/s</mtext><mo>&#8776;</mo><mn>26.844</mn><mtext>&#160;ms</mtext></math>
+</div>
+<p>甲与乙是互斥假设，214.748 ms 与 26.844 ms <strong>不能放进同一张预算表</strong>。两者都是理论下界，还没算协议开销、排队、内存访问和同步。写预算时先画拓扑，再决定用哪一行。</p>
+
+<h3 id="4-2-effective-bandwidth">4.2 两个速率口径，和有向的资源预算</h3>
+<p>“有效带宽”这个词同时被用在两个不同口径上，混用就会把同一笔开销算两次。本页区分：</p>
+<ul>
+<li><strong>稳态字节服务率</strong> <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>v</mi></math>：某一段在真正搬运字节时的持续速率，单位 GiB/s。它不含控制动作的时间。</li>
+<li><strong>全程有效吞吐</strong>：搬完 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>D</mi></math> 字节的总耗时 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>T</mi></math> 折算出的 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>D</mi><mo>/</mo><mi>T</mi></math>。它<strong>已经把控制开销包含在内</strong>，所以不能再叠加一次固定开销。</li>
+</ul>
+<p>只有在“控制开销与字节搬运完全不重叠”这个教学假设下，才能写成两项相加：</p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mi>T</mi><mo>=</mo><mi>n</mi><mi>&#945;</mi><mo>+</mo><mfrac><mi>D</mi><mi>v</mi></mfrac><mo>,</mo><mspace width="1em"/><mtext>全程有效吞吐</mtext><mo>=</mo><mfrac><mi>D</mi><mi>T</mi></mfrac></math>
+</div>
+<p>其中 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>n</mi></math> 是操作次数、<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>&#945;</mi></math> 是每次操作不随字节增长的那部分开销。真实系统里这两者常有部分重叠，重叠多少要实测；本页不假定某个重叠比例。这个模型解释了小对象为什么“带宽看着没打满”：字节项很小，时间几乎全在 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>n</mi><mi>&#945;</mi></math> 上，而这时 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>D</mi><mo>/</mo><mi>T</mi></math> 很低并不说明链路慢。</p>
+<p>更要紧的是<strong>谁和谁共享同一份容量</strong>。记账要带方向，因为高速串行总线一般是全双工的——两个方向各有自己的容量。这条恢复路径上的有向需求是：</p>
+<div class="table-scroll"><table>
+<thead><tr><th>资源</th><th>方向</th><th>本路径上的需求</th></tr></thead>
+<tbody>
+<tr><td>网卡所在链路</td><td>网络 → 主机内存（入站写）</td><td>网络段的全部字节</td></tr>
+<tr><td>主机内存子系统</td><td>写入 + 读出</td><td>同一份字节先被写进 H，再被读出去做 H2D，即两次访问</td></tr>
+<tr><td>GPU 所在链路</td><td>主机 → 设备</td><td>H2D 段的全部字节</td></tr>
+<tr><td>GPU 所在链路</td><td>设备 → 主机</td><td>本恢复路径不用；PD 搬运的 D2H 走这个方向</td></tr>
+</tbody>
+</table></div>
+<p>规则是：<strong>按资源实际共享的容量合并需求</strong>。全双工链路的两个方向分别记账，同一方向的需求才相加；若资源提供的是读写合计能力，例如某个内存控制器，则读写需求要一起核对。网卡的入站写与 GPU 的主机到设备传输可能占用相反方向，仅凭“挂在同一个交换节点下面”不能把两者加到一个单向容量上。主机内存那两次访问会形成压力，但折算成具体的 DRAM 流量还受缓存与平台实现影响。</p>
+<p>一个可以算的自检：若在 TP8 里为每个 rank 都假设 25 GiB/s 的 H2D，聚合需求是 <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>8</mn><mo>&#215;</mo><mn>25</mn><mo>=</mo><mn>200</mn><mtext>&#160;GiB/s</mtext></math>，折合 214.748 GB/s（十进制）。Mooncake 论文在分析某一特定模型与机型时，把主机到设备带宽这一参数取为 128 GB/s。两个数字摆在一起，说明“每 rank 各自独立的 25 GiB/s”这个假设必须对着真实平台的链路数、拓扑与内存能力核一遍；论文里的分析参数既不是普适上限，本页也没有在任何机器上实测过。</p>
+
+<h3 id="4-3-pipeline-fill-drain">4.3 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>max</mi></math> 是理想界：一个说清前提的流水模型</h3>
+<p>“网络和 H2D 可以重叠，所以总时间取两段的 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>max</mi></math>”这句话需要一组前提。本页用下面这个教学模型，<strong>五条假设都写出来</strong>：① 数据被切成 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>n</mi></math> 个等大流水块；② 每段的服务时间与字节数成线性，所以分块后每块在第 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>i</mi></math> 段耗时 <math xmlns="http://www.w3.org/1998/Math/MathML"><msub><mi>t</mi><mi>i</mi></msub><mo>/</mo><mi>n</mi></math>；③ 缓冲充足，上游不会因下游没取走而停顿；④ 各段之间没有共享资源争用（按 4.2 的有向预算核过）；⑤ 数据依赖允许按块发布与消费，下游拿到一块就能处理这一块。</p>
+<p>记各段时间之和为 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>S</mi></math>，最慢一段为 <math xmlns="http://www.w3.org/1998/Math/MathML"><msub><mi>t</mi><mi>max</mi></msub></math>（若有多段并列最慢，指定其中任一段为瓶颈段即可）。第一块要依次穿过全部段，用 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>S</mi><mo>/</mo><mi>n</mi></math>；此后每隔 <math xmlns="http://www.w3.org/1998/Math/MathML"><msub><mi>t</mi><mi>max</mi></msub><mo>/</mo><mi>n</mi></math> 出来一块，还剩 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>n</mi><mo>&#8722;</mo><mn>1</mn></math> 块：</p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><msub><mi>T</mi><mn>0</mn></msub><mo>(</mo><mi>n</mi><mo>)</mo><mo>=</mo><mfrac><mi>S</mi><mi>n</mi></mfrac><mo>+</mo><mfrac><mrow><mo>(</mo><mi>n</mi><mo>&#8722;</mo><mn>1</mn><mo>)</mo><msub><mi>t</mi><mi>max</mi></msub></mrow><mi>n</mi></mfrac><mo>=</mo><msub><mi>t</mi><mi>max</mi></msub><mo>+</mo><mfrac><mrow><mi>S</mi><mo>&#8722;</mo><msub><mi>t</mi><mi>max</mi></msub></mrow><mi>n</mi></mfrac></math>
+</div>
+<p>第二项就是填充与排空的代价：<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>n</mi><mo>=</mo><mn>1</mn></math> 时它等于其余各段之和，即退回串行；<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>n</mi></math> 很大时它趋于 0，<math xmlns="http://www.w3.org/1998/Math/MathML"><msub><mi>T</mi><mn>0</mn></msub></math> 才趋于 <math xmlns="http://www.w3.org/1998/Math/MathML"><msub><mi>t</mi><mi>max</mi></msub></math>。段数越多（例如 PD 路径的三段），分子 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>S</mi><mo>&#8722;</mo><msub><mi>t</mi><mi>max</mi></msub></math> 越大，同样块数下离 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>max</mi></math> 越远。</p>
+<p>如果再加一条假设——每块引入固定开销 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>&#945;</mi></math>、整段另有一次性开销 <math xmlns="http://www.w3.org/1998/Math/MathML"><msub><mi>c</mi><mn>0</mn></msub></math>，且这两者都<strong>完全不能</strong>与字节搬运重叠——才能写成相加形式：</p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mi>T</mi><mo>(</mo><mi>n</mi><mo>)</mo><mo>=</mo><msub><mi>t</mi><mi>max</mi></msub><mo>+</mo><mfrac><mrow><mi>S</mi><mo>&#8722;</mo><msub><mi>t</mi><mi>max</mi></msub></mrow><mi>n</mi></mfrac><mo>+</mo><msub><mi>c</mi><mn>0</mn></msub><mo>+</mo><mi>n</mi><mi>&#945;</mi></math>
+</div>
+<p>这里的 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>n</mi></math> 只能取可行的正整数。<strong>它也不是 Store 对象数，也不是传输切片数</strong>：一个流水块可以聚合多个对象，把搬运切得更细也不自动改变 key 的数量。把这三件事当成一个变量，是粒度讨论里最容易出的错。</p>
+
+<h2 id="5-load-or-recompute">5. 一个能复算的选择例：搬还是重算</h2>
+
+<h3 id="5-1-single-rank-example">5.1 单 rank 的两段账</h3>
+<p>把问题缩到一个可以隔离测量的对象上：S0 的<strong>一个 rank</strong>，payload 1.25 GiB。<strong>教学设定</strong>：网络稳态字节服务率 20 GiB/s，H2D 25 GiB/s，不可重叠的一次性开销 3 ms（目录查询、提交、事件同步等），到<strong>同一终点</strong>的全量重算 70 ms。都是假设值。</p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><msub><mi>t</mi><mtext>net</mtext></msub><mo>=</mo><mfrac><mrow><mn>1.25</mn><mtext>&#160;GiB</mtext></mrow><mrow><mn>20</mn><mtext>&#160;GiB/s</mtext></mrow></mfrac><mo>&#215;</mo><mn>1000</mn><mtext>&#160;ms/s</mtext><mo>=</mo><mn>62.5</mn><mtext>&#160;ms</mtext><mo>,</mo><mspace width="1em"/><msub><mi>t</mi><mtext>h2d</mtext></msub><mo>=</mo><mfrac><mrow><mn>1.25</mn><mtext>&#160;GiB</mtext></mrow><mrow><mn>25</mn><mtext>&#160;GiB/s</mtext></mrow></mfrac><mo>&#215;</mo><mn>1000</mn><mtext>&#160;ms/s</mtext><mo>=</mo><mn>50</mn><mtext>&#160;ms</mtext></math>
+</div>
+<p>整段下载完再整段上卡，即 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>n</mi><mo>=</mo><mn>1</mn></math>：<math xmlns="http://www.w3.org/1998/Math/MathML"><mn>62.5</mn><mo>+</mo><mn>50</mn><mo>+</mo><mn>3</mn><mo>=</mo><mn>115.5</mn><mtext>&#160;ms</mtext></math>。块数足够多、忽略每块开销的理想流水：<math xmlns="http://www.w3.org/1998/Math/MathML"><mn>62.5</mn><mo>+</mo><mn>3</mn><mo>=</mo><mn>65.5</mn><mtext>&#160;ms</mtext></math>。</p>
+<p>和 70 ms 重算相比：串行 115.5 ms 亏，理想流水 65.5 ms 赚。<strong>同一条链路、同一份字节，仅因为“是否真的重叠、分得够不够细”就跨过了盈亏线</strong>。所以比较时必须声明：三者终点相同，都终止于“B 可被注意力计算消费”，不是“H 已就绪”，也不是“提交函数已返回”；重叠是前提而不是默认能力。</p>
+<p>顺手核一下这组假设的自洽性：每 rank 20 GiB/s 折合约 171.8 Gbit/s 的有效速率，需要有一条能稳定提供这个速率的独立网络路径；在 400 Gbit/s 的链路上这意味着约 43% 的线速利用率。这只是说假设没有越过线速，不是可达性的证明。</p>
+
+<h3 id="5-2-chunk-count">5.2 要多细才真的赚</h3>
+<p>代入 4.3 的模型（两段，瓶颈是网络，<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>S</mi><mo>&#8722;</mo><msub><mi>t</mi><mi>max</mi></msub><mo>=</mo><mn>50</mn><mtext>&#160;ms</mtext></math>，先取 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>&#945;</mi><mo>=</mo><mn>0</mn></math>）：</p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mi>T</mi><mo>(</mo><mi>n</mi><mo>)</mo><mo>=</mo><mn>62.5</mn><mtext>&#160;ms</mtext><mo>+</mo><mfrac><mrow><mn>50</mn><mtext>&#160;ms</mtext></mrow><mi>n</mi></mfrac><mo>+</mo><mn>3</mn><mtext>&#160;ms</mtext></math>
+</div>
+<p>要不劣于 70 ms 重算，需要 <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>50</mn><mo>/</mo><mi>n</mi><mo>&#8804;</mo><mn>4.5</mn></math>，即 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>n</mi><mo>&#8805;</mo><mn>12</mn></math>（<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>n</mi><mo>=</mo><mn>12</mn></math> 给 69.67 ms，<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>n</mi><mo>=</mo><mn>11</mn></math> 给 70.05 ms）。只切成 8 块时 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>T</mi><mo>=</mo><mn>71.75</mn><mtext>&#160;ms</mtext></math>，仍然亏——<strong>“做了流水”和“流水已经足够细”是两件事</strong>。</p>
+<p>把每块开销加回来，在 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>&#945;</mi><mo>&gt;</mo><mn>0</mn></math> 时，<math xmlns="http://www.w3.org/1998/Math/MathML"><mfrac><mrow><mn>50</mn><mtext>&#160;ms</mtext></mrow><mi>n</mi></mfrac><mo>+</mo><mi>n</mi><mi>&#945;</mi></math> 在正实数范围内的最小值出现在 <math xmlns="http://www.w3.org/1998/Math/MathML"><msup><mi>n</mi><mo>&#8727;</mo></msup><mo>=</mo><msqrt><mfrac><mrow><mn>50</mn><mtext>&#160;ms</mtext></mrow><mi>&#945;</mi></mfrac></msqrt></math>，最小值为 <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>2</mn><msqrt><mrow><mn>50</mn><mtext>&#160;ms</mtext><mo>&#215;</mo><mi>&#945;</mi></mrow></msqrt></math>。<math xmlns="http://www.w3.org/1998/Math/MathML"><msup><mi>n</mi><mo>&#8727;</mo></msup></math> 只是一个<strong>连续放松的候选值</strong>；实际要检查其相邻的可行整数和边界，若系统还限定了最大块数或对齐粒度，也要计入约束。两个算例：</p>
+<ul>
+<li><math xmlns="http://www.w3.org/1998/Math/MathML"><mi>&#945;</mi><mo>=</mo><mn>0.05</mn><mtext>&#160;ms</mtext></math>：候选 <math xmlns="http://www.w3.org/1998/Math/MathML"><msup><mi>n</mi><mo>&#8727;</mo></msup><mo>&#8776;</mo><mn>31.6</mn></math>，取 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>n</mi><mo>=</mo><mn>32</mn></math> 得 <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>50</mn><mo>/</mo><mn>32</mn><mo>+</mo><mn>1.6</mn><mo>=</mo><mn>3.16</mn><mtext>&#160;ms</mtext></math>，总计约 68.7 ms，仍优于重算。</li>
+<li><math xmlns="http://www.w3.org/1998/Math/MathML"><mi>&#945;</mi><mo>=</mo><mn>0.2</mn><mtext>&#160;ms</mtext></math>：候选 <math xmlns="http://www.w3.org/1998/Math/MathML"><msup><mi>n</mi><mo>&#8727;</mo></msup><mo>&#8776;</mo><mn>15.8</mn></math>，取 16 得 <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>3.125</mn><mo>+</mo><mn>3.2</mn><mo>=</mo><mn>6.33</mn><mtext>&#160;ms</mtext></math>，总计约 71.8 ms，无论怎么调块数都赢不了重算。这是“足够大的每块开销会抹掉流水收益”的一个<strong>充分示例</strong>，不是临界值。</li>
+</ul>
+<p>在这个加法模型里临界条件可以直接解出来：可行要求 <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>2</mn><msqrt><mrow><mn>50</mn><mtext>&#160;ms</mtext><mo>&#215;</mo><mi>&#945;</mi></mrow></msqrt><mo>&#8804;</mo><mn>4.5</mn><mtext>&#160;ms</mtext></math>，即</p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mi>&#945;</mi><mo>&#8804;</mo><mfrac><msup><mrow><mo>(</mo><mn>4.5</mn><mtext>&#160;ms</mtext><mo>)</mo></mrow><mn>2</mn></msup><mrow><mn>4</mn><mo>&#215;</mo><mn>50</mn><mtext>&#160;ms</mtext></mrow></mfrac><mo>=</mo><mn>0.10125</mn><mtext>&#160;ms</mtext></math>
+</div>
+<p>这是连续放松下的必要条件；由于 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>n</mi></math> 必须取整数，恰好等于 0.10125 ms 时最近的整数（22 或 23）给出的值已经略超过 4.5 ms，所以整数约束下可接受的 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>&#945;</mi></math> 还要再小一点。这条结论只对“<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>&#945;</mi></math> 完全不可重叠且与块数成正比”的这个模型成立；换模型就要重新推。</p>
+
+<h3 id="5-3-tp-group">5.3 推广到 TP 组，以及这个数字不是什么</h3>
+<p>上面算的是一个 rank。TP 组要一起才能开始计算，所以组时间是</p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><msub><mi>T</mi><mtext>group</mtext></msub><mo>=</mo><munder><mi>max</mi><mi>r</mi></munder><msub><mi>T</mi><mi>r</mi></msub><mo>+</mo><msub><mi>t</mi><mtext>sync</mtext></msub></math>
+</div>
+<p>用 8 个 rank 的平均值代替最慢的那个，会系统性低估：只要有一个 rank 的路径被别的流量挤到 12 GiB/s，它的网络段就是 104.2 ms，整组的理想流水也退到 107.2 ms 以上，远过 70 ms 的盈亏线。<math xmlns="http://www.w3.org/1998/Math/MathML"><msub><mi>t</mi><mtext>sync</mtext></msub></math> 指各 rank 对齐到同一起跑点所需的时间，它具体由哪种同步原语实现、开销多大，取决于框架，本页不预设。恢复还要求各 rank 对<strong>同一段连续前缀</strong>都成功；某个 rank 少拿一个 chunk，可跳过的范围就按最小的那个折叠。</p>
+<p>三件事这些数字<strong>不是</strong>：不是完整的 TTFT——队列等待、剩余 token 的计算、布局转换、采样都在外面；不表示任何框架已经实现了理想分块流水；不能用命中率替代——命中率告诉你“有多少可以不算”，不告诉你“搬过来是否比算更快”。</p>
+
+<h2 id="6-compression-on-the-wire">6. 传输态压缩：省的是哪一段字节</h2>
+
+<h3 id="6-1-cachegen-mechanism">6.1 机制：不保留张量形状，编成比特流</h3>
+<p>CacheGen 处理的正是“把 KV 从别的机器取过来太慢”这个问题，思路是不保留运行时的张量形状，把 KV 编成更紧凑的比特流。按论文自述，它由三步编码加一层流式自适应组成：</p>
+<ul>
+<li><strong>锚点与差值编码</strong>：把上下文按若干连续 token 分组，组内第一个 token（锚点）独立压缩，其余 token 只记录相对锚点的差值。依据是论文观察到的 token 维局部性——同层同通道内邻近 token 的 K/V 取值更接近，差值的分布比原值更集中。选同一个锚点而不是逐对相邻差分，是为了让组内编解码可以并行。</li>
+<li><strong>按层差异化量化</strong>：论文观察到浅层的精度损失对输出质量影响更大，于是按层分组、越深的层用更粗的量化；锚点 token 保持较高精度，因为它影响整组差值的分布。</li>
+<li><strong>熵编码</strong>：对量化后的符号做无损编码，并按通道与层的组合分别统计概率分布，再用这些分布去编码。分布从哪些数据统计、复用范围多大，属于实现选择，本页不下“对所有 KV 都复用同一套固定分布”这类强断言。</li>
+<li><strong>按块自适应</strong>：上下文切成块，每块可编成多个压缩等级、可独立解码；运行时按实测吞吐为下一块选“能满足时延目标、损失最小”的等级，带宽太低时<strong>回退到直接传文本、让 GPU 重算这一块</strong>。</li>
+</ul>
+<p>解码侧在他们的实现里放在 GPU 上，并与下一块的传输重叠。这里有两条边界值得记住。第一，<strong>这类方法减小的是传输态字节</strong>：解码之后要被注意力计算读的仍然是运行时需要的数据类型与布局，恢复到相同运行态时 B 的占用不会变小。想减小运行态占用是另一类技术，既包括丢 token、改注意力结构，也包括直接对运行态 KV 做量化（代价是改变了运行态表示，和这里的“同运行态恢复”不是同一个比较）。第二，<strong>压缩是有损的</strong>，论文在其模型与数据集上报告了质量退化很小，但这属于那套配置下的结果；换模型、换任务都要重新验证，本页不给任何未实测的质量承诺。</p>
+
+<h3 id="6-2-same-start-same-end">6.2 同起点、同终点的成本账</h3>
+<p>比较必须从<strong>同一个决策时刻</strong>出发：此刻缓存路线手上已经有 S 里对应的对象，重算路线手上已经有 token。两条路线共同的前置阶段（请求到达、分词、调度决策本身）都不计入任何一方。另外，对照组也要配套：和“压缩对象”比较的那条未压缩路线，前提是 S 里存在对应的未压缩对象。</p>
+<p>沿用 5.1 的单 rank 参数，设线上压缩比 4，即网络字节从 1.25 GiB 降到 0.3125 GiB。3 ms 的一次性开销按“三条搬运路线共用”处理；重算那一侧的 70 ms 已按同终点口径给出，不再叠加这 3 ms。若编码不是离线完成而是在保存路径上在线做，那笔时间要记在生产侧，不出现在下表。</p>
+<p>两个解码成本采用如下口径：<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>d</mi></math> 是在 GPU 上解码、并在 B 中产出<strong>可被注意力计算消费的完整张量（含所需布局）</strong>所花的时间；<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>c</mi></math> 是在 CPU 上解码、并在 H 中产出完整张量（含 H2D 所需布局）所花的时间。表中未压缩路线也假设布局已兼容；若还要转换，须另计到同一终点的成本。</p>
+<div class="table-scroll"><table>
+<thead><tr><th>路线</th><th>网络字节 / 时间</th><th>H2D 字节 / 时间</th><th>额外成本</th><th>串行总时间（ms）</th></tr></thead>
+<tbody>
+<tr><td>未压缩对象</td><td>1.25 GiB / 62.5</td><td>1.25 GiB / 50</td><td>—</td><td>115.5</td></tr>
+<tr><td>压缩对象，GPU 解码</td><td>0.3125 GiB / 15.625</td><td>0.3125 GiB（比特流）/ 12.5</td><td><math xmlns="http://www.w3.org/1998/Math/MathML"><mi>d</mi></math>，并与同卡上的计算抢算力和显存带宽</td><td><math xmlns="http://www.w3.org/1998/Math/MathML"><mn>31.125</mn><mo>+</mo><mi>d</mi></math></td></tr>
+<tr><td>压缩对象，CPU 解码</td><td>0.3125 GiB / 15.625</td><td>1.25 GiB（完整张量）/ 50</td><td><math xmlns="http://www.w3.org/1998/Math/MathML"><mi>c</mi></math>，并需要完整大小的主机缓冲</td><td><math xmlns="http://www.w3.org/1998/Math/MathML"><mn>68.625</mn><mo>+</mo><mi>c</mi></math></td></tr>
+</tbody>
+</table></div>
+<p>把 70 ms 重算作为对照，赚钱条件就很清楚：GPU 解码路线要求 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>d</mi><mo>&lt;</mo><mn>38.875</mn><mtext>&#160;ms</mtext></math>，CPU 解码路线要求 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>c</mi><mo>&lt;</mo><mn>1.375</mn><mtext>&#160;ms</mtext></math>。GPU 解码还有一笔不在时间列里的账：它和同一张卡上的预填充计算竞争，在高并发下这部分竞争可能比 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>d</mi></math> 本身更要紧。<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>d</mi></math> 与 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>c</mi></math> 都是待测量，本页不给它们赋实测值。</p>
+
+<h3 id="6-3-counterexample">6.3 “压缩了，仍然不如重算”的完整反例</h3>
+<p>前提全部给定：单 rank payload 1.25 GiB；压缩比 4；网络 20 GiB/s；H2D 25 GiB/s；搬运路线共用的一次性开销 3 ms；同终点重算 70 ms；解码在 CPU 上，<strong>解码吞吐按输出字节计为 2 GiB/s</strong>（教学设定值），即产出完整的 1.25 GiB 需要 625 ms。则</p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mi>T</mi><mo>=</mo><mn>15.625</mn><mo>+</mo><mfrac><mrow><mn>1.25</mn><mtext>&#160;GiB</mtext></mrow><mrow><mn>2</mn><mtext>&#160;GiB/s</mtext></mrow></mfrac><mo>&#215;</mo><mn>1000</mn><mtext>&#160;ms/s</mtext><mo>+</mo><mn>50</mn><mo>+</mo><mn>3</mn><mo>=</mo><mn>693.625</mn><mtext>&#160;ms</mtext></math>
+</div>
+<p>网络字节确实省掉了四分之三（62.5 ms 降到 15.625 ms），但解码把 625 ms 加了回来；而且因为在 CPU 上还原成完整张量，H2D 的 50 ms 一分没省。要让这条路线不劣于重算，CPU 解码必须快到 1.375 ms 以内。结论的形式很重要：<strong>压缩降低的是线上字节，盈亏要看解码放在哪里、H2D 还剩多少字节、以及质量是否仍在可接受范围内</strong>。</p>
+
+<h2 id="7-observability">7. 观测：把时间切开，再归因</h2>
+
+<h3 id="7-1-six-timestamps">7.1 至少要分开的六个区间</h3>
+<p>一条恢复路径上，下面六段必须分别打点，否则无法区分“带宽不够”和“已经到了却没被用上”：</p>
+<div class="table-scroll"><table>
+<thead><tr><th>区间</th><th>测的是什么</th><th>变大时优先怀疑</th></tr></thead>
+<tbody>
+<tr><td>lookup / 目录查询</td><td>按 key 问“有没有、在哪里”的往返</td><td>元数据服务排队、对象数过多、调用未批量</td></tr>
+<tr><td>IO 排队</td><td>任务提交后到真正开始搬的等待</td><td>并发准入、队列深度、容量被其他流量占住</td></tr>
+<tr><td>IO 搬运</td><td>字节真正在链路上移动的时间</td><td>字节量、稳态服务率、同资源同方向的争用</td></tr>
+<tr><td>IO 完成 → host 发布</td><td>片段齐了之后把 H 标记为可读、登记索引</td><td>发布动作被挂在哪个线程、哪个检查点上</td></tr>
+<tr><td>发布 → H2D 完成</td><td>设备拷贝的提交与完成</td><td>H2D 服务率、流与事件依赖、与计算争用</td></tr>
+<tr><td>H2D 完成 → 被调度执行</td><td>这个请求真正进入某一轮批次</td><td>队列顺序、批大小、token 预算、分块预填充</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="7-2-readiness-vs-execution">7.2 “IO 完成”不等于“可以跑了”</h3>
+<p>第 4 段之所以单列，是因为它可以大到压倒前面所有段。SGLang 社区的一份 issue 报告了一个结构性原因：当分层缓存接了后端存储时，一个等待中请求的预取<strong>只有在调度器按先到先服务顺序扫到它时</strong>才被最终确认（插入主机侧索引、释放占用、清理在途记录）。于是“确认预取已完成”这个动作被绑在了请求在等待队列中的位置上——队列很深、当前几轮的 token 预算被队首吃光时，扫描根本到不了后面的请求。</p>
+<p>报告者给出的自测数据里，这个落差很明显：一次部署中存储 IO 本身约 91 ms，而调度器侧的确认滞后约 2.4 s；另一次运行的分位统计中，<strong>“IO 完成到确认就绪”这一段</strong>的 p50 为 261 ms、p99 为 22.16 s，而同一次运行里真正的存储 IO 这一段 p50 只有 26.7 ms。他们提出的修法是把确认从队列位置上解绑：在调度器已有的检查点主动扫描在途预取，对本地已就绪的操作直接调用原有的进度检查，并在并行组之间约定一致的处理集合与顺序。</p>
+<p>两处边界要一起记住。第一，<strong>这是报告者在其部署上的观测，本页没有复现，也没有证据表明相应修改已被合并</strong>。第二，更通用的一点：他们自己写明，这个改动只把确认时刻提前，<strong>不改变准入语义</strong>——能否进入预填充批次仍由等待队列顺序、批大小、token 预算和分块预填充决定。社区把确认后的状态叫作 “ready”，这是“预取结果已确认、该请求可以被考虑”的意思，<strong>不是“GPU 开始算了”</strong>。</p>
+<p>由此还能推出一条容易被跳过的因果关系：<strong>准入规则不变，并不意味着各段时长不变</strong>。假设确认提前了 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>&#916;</mi></math>，后面的设备拷贝也相应提前完成，但这个请求真正入批的时刻仍被 token 预算卡在原处——那么“H2D 完成 → 被调度”这一段就会<strong>增加</strong> <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>&#916;</mi></math>，总完成时间一点没变，只是等待从一段挪到了另一段。反过来，如果这个请求原先正是因为“还没确认”而错过了某一轮批次，那么提前确认能带来多少改善，取决于后续有没有合适的准入机会，也取决于其他请求的负载反馈——它们的排队状态也会因为这次改动而变化。所以不能用“规则没改”推出“区间不变”，也不能拿单一指标的变化去认定某一个原因。</p>
+
+<h3 id="7-3-experiment-design">7.3 一次能说明问题的实验怎么设计</h3>
+<p>要让分段数字支持结论，变量必须一次只动一个，其余固定：相同的到达过程、相同的队列与准入策略、相同的请求长度分布、相同的命中率、相同的时延目标。然后分别检验三类因素，并且<strong>把竞争解释一起列出来</strong>：</p>
+<ul>
+<li><strong>字节</strong>：改压缩比或改 payload，看 IO 搬运段怎样随字节变化。字节翻倍而该段几乎不变，与“该段以固定开销为主”一致，但也与“存在排队或争用把时间摊平”一致；要排除后者，需要同时记录并发度、同方向上的其他流量，以及单次操作的字节数与完成时刻。单看“时间没变”不足以排除链路因素。</li>
+<li><strong>对象率</strong>：固定总字节，只换对象粒度（如第 3 节的两种布局），看 lookup 段与 IO 排队段的变化。这是检验控制面能力的直接手段，前提是不要同时改了批量方式。</li>
+<li><strong>确认与准入</strong>：固定前两者，只改“IO 完成 → 发布 → 被调度”的确认路径，并按 7.2 的分析把各个时间戳分别记下来。若报告时间变好而 TTFT 不变，要先看等待是否只是挪到了后一段。</li>
+</ul>
+<p>报告时把传输 microbenchmark、对象读写吞吐和最终推理指标分开，并注明每个数字是否包含注册、建连、主机暂存和设备同步。还有一个容易被当成结论的平均量：<strong>“单请求字节 × 到达率”给出的是平均容量需求</strong>，它是一个必要预算（配不够就一定堆积），但不足以保证时延可忽略——突发、排队和尾部分布都在这个乘积之外。DistServe 论文就是用这个乘积来说明分离式部署的带宽预算，同时用排队模型分析时延，并且指出在不同放置方式下传输占比的结论会完全不同。</p>
+<p>没有 GPU 或高速网络环境时，仍然能做两件有价值的事：按本页方法复算字节与时间预算，以及在给定到达过程与准入策略下模拟排队。<strong>复算和模拟都不是实测</strong>，报告时要照此标注。</p>
+
+<h2 id="exercises">练习</h2>
+<p>三题的数值与前提都写在题干里，方法分别对应第 2–3 节、第 4–5 节和第 7 节。</p>
+
+<p><strong>题 1（跨粒度预算）</strong><br />
+场景与 S0 相同（80 层、8 KV 头、<code>head_dim</code> = 128、BF16、按头均匀 TP8、无副本/填充/元数据），但前缀长度改为 8,192 token。GPU 块取 16 token；Store chunk 取 256 token，布局甲为“按 rank 合并全部 80 层”，布局乙为“chunk 仍是 256 token，再按层拆”。元数据侧的设定是：<strong>整个 TP8 组的对象元数据统一交给一个串行 worker 处理，每个对象固定 20 μs</strong>。<br />
+(a) 算出总字节、单 rank 字节、单 rank 的 GPU 块数，以及两种布局下单 rank 与 TP8 合计的对象数；并验证两种布局的总字节相同。<br />
+(b) 若系统每秒要完成 20 次这样的恢复，两种布局各需要多少对象/s？与单 worker 的能力上限比较；再算出布局乙至少需要多少个同等能力的 worker，给出该 worker 组在均匀负载下的利用率与剩余能力，并说明这个数字能和不能支持什么结论。<br />
+(c) 算出两种布局下“单次恢复的控制面串行下限时间”，再算两个网络下界：整份数据走一条共享 400 Gbit/s 链路，以及每 rank 各有一条独立 400 Gbit/s 路径。指出布局乙在哪个环节先触顶，并说明为什么据此仍不能断言“布局甲总是更好”——回答时请按第 3.3 节的四种粒度分别讨论。</p>
+
+<p><strong>题 2（搬运与重算的选择）</strong><br />
+隔离一个 rank，payload 为题 1 的单 rank 份额。H2D 稳态服务率 25 GiB/s，不可重叠的一次性开销 3 ms，到相同终点的全量重算 18 ms。<br />
+(a) 网络稳态服务率为 20 GiB/s 时，分别算出 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>n</mi><mo>=</mo><mn>1</mn></math>（整段串行）与“块数足够多、忽略每块开销”两种情况的端到端时间，判断相对 18 ms 是赚是亏，并写出你采用的终点定义。<br />
+(b) 其他条件不变，求使“块数足够多的理想流水”恰好不劣于 18 ms 所需的最低网络稳态服务率（GiB/s），并换算成 Gbit/s，写出换算因子。<br />
+(c) 设网络稳态服务率也为 25 GiB/s，按第 4.3 节的模型写出 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>T</mi><mo>(</mo><mi>n</mi><mo>)</mo></math>（先取 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>&#945;</mi><mo>=</mo><mn>0</mn></math>），求满足 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>T</mi><mo>&#8804;</mo><mn>18</mn><mtext>&#160;ms</mtext></math> 的最小整数 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>n</mi></math>；说明两段耗时相等时瓶颈段怎么取，以及这个 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>n</mi></math> 和 Store 对象数、传输切片数是什么关系。<br />
+(d) 把 (a) 的结论推广到整个 TP8 组需要补充哪些条件？为什么不能用“命中率高”直接选择搬运？</p>
+
+<p><strong>题 3（观测归因）</strong><br />
+下面是一组<strong>为教学构造的合成分段数据</strong>，不是某次真实测量的单条记录。它把一个请求的生命周期切成六个<strong>首尾相接的区间</strong>（单位 ms）：lookup 13；IO 排队 0.4；IO 搬运 27；IO 完成→host 发布 3,700；发布→H2D 完成 45；H2D 完成→入批 1,200。题目没有给出 payload 字节数、并行规模和硬件参数，也不要从其他题目借用这些值。<br />
+(a) 算出六段之和与最大项。仅凭这些区间能否断定“网络带宽不足”？另外：要算出 IO 搬运段对应的稳态服务率，还必须知道什么量？本题是否提供了它？<br />
+(b) 若把发布确认从按队列顺序扫描改为在调度器检查点主动扫描，哪些时间戳和哪些区间<strong>可能</strong>发生变化？仅凭现有信息能否确定变化幅度与因果？请构造一个“各段时长变了、但总完成时间不变”的情形。<br />
+(c) 要把这六段的耗时归因到具体瓶颈，你还需要补采哪些观测证据？至少列四项，并说明每项用于检验什么解释；使用本页讲过的机制即可，不需要知道某个框架的内部代码分支。<br />
+(d) 没有 GPU 或高速网络环境时，这组观测里哪些结论仍可复算或模拟，哪些必须标为未验证？</p>
+</section>
+
+<section id="answers">
+<details><summary>参考解答（先独立做完再展开）</summary>
+
+<h3 id="ans-1">题 1</h3>
+<p><strong>(a)</strong> 每 token 仍是 <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>2</mn><mo>&#215;</mo><mn>80</mn><mo>&#215;</mo><mn>8</mn><mo>&#215;</mo><mn>128</mn><mo>&#215;</mo><mn>2</mn><mtext>&#160;B</mtext><mo>=</mo><mn>327680</mn><mtext>&#160;B</mtext></math>。总字节：</p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mn>327680</mn><mtext>&#160;B/token</mtext><mo>&#215;</mo><mn>8192</mn><mtext>&#160;token</mtext><mo>=</mo><mn>2684354560</mn><mtext>&#160;B</mtext><mo>=</mo><mn>2.5</mn><mtext>&#160;GiB</mtext></math>
+</div>
+<p>单 rank：</p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mn>2.5</mn><mtext>&#160;GiB</mtext><mo>&#247;</mo><mn>8</mn><mo>=</mo><mn>0.3125</mn><mtext>&#160;GiB</mtext><mo>=</mo><mn>320</mn><mtext>&#160;MiB</mtext><mo>=</mo><mn>335544320</mn><mtext>&#160;B</mtext></math>
+</div>
+<p>GPU 块：<math xmlns="http://www.w3.org/1998/Math/MathML"><mn>8192</mn><mo>&#247;</mo><mn>16</mn><mo>=</mo><mn>512</mn></math> 块/rank，每块 655,360 B = 640 KiB，核验 <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>512</mn><mo>&#215;</mo><mn>655360</mn><mo>=</mo><mn>335544320</mn><mtext>&#160;B</mtext></math>。</p>
+<p>chunk 数 <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>8192</mn><mo>&#247;</mo><mn>256</mn><mo>=</mo><mn>32</mn></math>。布局甲：每 rank 32 个 10 MiB 对象，TP8 合计 256 个。布局乙：每 rank <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>32</mn><mo>&#215;</mo><mn>80</mn><mo>=</mo><mn>2560</mn></math> 个 128 KiB 对象，TP8 合计 20,480 个。核验总字节：<math xmlns="http://www.w3.org/1998/Math/MathML"><mn>256</mn><mo>&#215;</mo><mn>10485760</mn><mo>=</mo><mn>2684354560</mn><mtext>&#160;B</mtext></math>，<math xmlns="http://www.w3.org/1998/Math/MathML"><mn>20480</mn><mo>&#215;</mo><mn>131072</mn><mo>=</mo><mn>2684354560</mn><mtext>&#160;B</mtext></math>，两者与 GPU 块侧完全一致。对象数差 80 倍，字节数一字不差——这是粒度讨论的起点。</p>
+<p><strong>(b)</strong> 单 worker 能力 <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>1</mn><mo>&#247;</mo><mn>20</mn><mo>&#160;</mo><mi>&#956;</mi><mtext>s</mtext><mo>=</mo><mn>50000</mn></math> 对象/s。布局甲 <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>20</mn><mo>&#215;</mo><mn>256</mn><mo>=</mo><mn>5120</mn></math> 对象/s，约为能力的 10.24%；布局乙 <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>20</mn><mo>&#215;</mo><mn>20480</mn><mo>=</mo><mn>409600</mn></math> 对象/s，是能力的 8.192 倍，单 worker 无法承受。</p>
+<p>所需 worker 数 <math xmlns="http://www.w3.org/1998/Math/MathML"><mo>&#8968;</mo><mn>8.192</mn><mo>&#8969;</mo><mo>=</mo><mn>9</mn></math>。九个 worker 的合计能力是 450,000 对象/s，利用率为</p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mfrac><mn>409600</mn><mrow><mn>9</mn><mo>&#215;</mo><mn>50000</mn></mrow></mfrac><mo>&#8776;</mo><mn>91.0222</mn><mtext>%</mtext></math>
+</div>
+<p>剩余能力 <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>450000</mn><mo>&#8722;</mo><mn>409600</mn><mo>=</mo><mn>40400</mn></math> 对象/s。这个“9”能支持的结论只有一条：<strong>在理想均分下，容量不低于需求的最小整数个 worker 是 9</strong>。它依赖三个必须写出来的假设——负载完全均分、worker 之间没有额外的协调或共享结构开销、每对象 20 μs 不随并发变化。它<strong>不能</strong>支持任何时延结论：排队时延还取决于到达过程与服务时间的分布，本题没有给这些信息，所以 9 既不是容量规划建议，也不是任何服务目标的保证。</p>
+<p><strong>(c)</strong> 控制面串行下限：布局甲 <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>256</mn><mo>&#215;</mo><mn>20</mn><mo>&#160;</mo><mi>&#956;</mi><mtext>s</mtext><mo>=</mo><mn>5.12</mn><mtext>&#160;ms</mtext></math>；布局乙 <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>20480</mn><mo>&#215;</mo><mn>20</mn><mo>&#160;</mo><mi>&#956;</mi><mtext>s</mtext><mo>=</mo><mn>409.6</mn><mtext>&#160;ms</mtext></math>。</p>
+<p>网络下界的分母是 <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>400</mn><mo>&#215;</mo><msup><mn>10</mn><mn>9</mn></msup><mtext>&#160;bit/s</mtext><mo>&#247;</mo><mn>8</mn><mtext>&#160;bit/B</mtext><mo>=</mo><mn>5</mn><mo>&#215;</mo><msup><mn>10</mn><mn>10</mn></msup><mtext>&#160;B/s</mtext></math>。共享单链路：</p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mfrac><mrow><mn>2684354560</mn><mtext>&#160;B</mtext></mrow><mrow><mn>5</mn><mo>&#215;</mo><msup><mn>10</mn><mn>10</mn></msup><mtext>&#160;B/s</mtext></mrow></mfrac><mo>&#215;</mo><mn>1000</mn><mtext>&#160;ms/s</mtext><mo>&#8776;</mo><mn>53.687</mn><mtext>&#160;ms</mtext></math>
+</div>
+<p>每 rank 独立路径：</p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mfrac><mrow><mn>335544320</mn><mtext>&#160;B</mtext></mrow><mrow><mn>5</mn><mo>&#215;</mo><msup><mn>10</mn><mn>10</mn></msup><mtext>&#160;B/s</mtext></mrow></mfrac><mo>&#215;</mo><mn>1000</mn><mtext>&#160;ms/s</mtext><mo>&#8776;</mo><mn>6.711</mn><mtext>&#160;ms</mtext></math>
+</div>
+<p>两个拓扑互斥，不能混用。比较：布局乙的控制面下限 409.6 ms 既远大于 53.687 ms 也远大于 6.711 ms，所以在这组假设下<strong>它先在控制面触顶，字节通道没被用满</strong>；布局甲的 5.12 ms 小于两个网络下界，控制面不是瓶颈。</p>
+<p>但这不足以断言布局甲总更好，按四种粒度分别看：</p>
+<ul>
+<li><strong>token 粒度</strong>：两种布局都是 256，所以前缀能对齐到的边界、部分命中时可复用的最小范围<strong>完全相同</strong>。按层拆不带来任何对齐上的好处，这是最容易被想错的一条。</li>
+<li><strong>层粒度</strong>：布局乙让“先拿到前几层就先干活”在存储侧成为可能，但要变成真实收益，必须引擎支持部分就绪与部分消费；若引擎要求全部层齐备，按层拆只增加对象数。</li>
+<li><strong>发布粒度</strong>：一个对象能否部分发布、失败后是否必须整对象重写，由存储协议决定，不能从 10 MiB 还是 128 KiB 推出来。</li>
+<li><strong>重试粒度</strong>：网络层的丢包一般由传输协议自己重传，<strong>不等于一个 Store 对象失败</strong>；只有协议把这次操作判为失败并上报，才涉及对象级处理。所以“小对象重传更便宜”不是自动成立的论证。</li>
+</ul>
+<p>另外，20 μs/对象与单 worker 都是教学设定；换批量接口或多 worker 之后对象率上限会变。正确的说法是“在给定的对象率需求与这套控制面假设下，按层拆到 128 KiB 会先打满控制面”。</p>
+
+<h3 id="ans-2">题 2</h3>
+<p><strong>(a)</strong> payload 0.3125 GiB：</p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><msub><mi>t</mi><mtext>net</mtext></msub><mo>=</mo><mfrac><mrow><mn>0.3125</mn><mtext>&#160;GiB</mtext></mrow><mrow><mn>20</mn><mtext>&#160;GiB/s</mtext></mrow></mfrac><mo>&#215;</mo><mn>1000</mn><mtext>&#160;ms/s</mtext><mo>=</mo><mn>15.625</mn><mtext>&#160;ms</mtext><mo>,</mo><mspace width="1em"/><msub><mi>t</mi><mtext>h2d</mtext></msub><mo>=</mo><mfrac><mrow><mn>0.3125</mn><mtext>&#160;GiB</mtext></mrow><mrow><mn>25</mn><mtext>&#160;GiB/s</mtext></mrow></mfrac><mo>&#215;</mo><mn>1000</mn><mtext>&#160;ms/s</mtext><mo>=</mo><mn>12.5</mn><mtext>&#160;ms</mtext></math>
+</div>
+<p><math xmlns="http://www.w3.org/1998/Math/MathML"><mi>n</mi><mo>=</mo><mn>1</mn></math>：<math xmlns="http://www.w3.org/1998/Math/MathML"><mn>15.625</mn><mo>+</mo><mn>12.5</mn><mo>+</mo><mn>3</mn><mo>=</mo><mn>31.125</mn><mtext>&#160;ms</mtext></math>；块数足够多且忽略每块开销：<math xmlns="http://www.w3.org/1998/Math/MathML"><mn>15.625</mn><mo>+</mo><mn>3</mn><mo>=</mo><mn>18.625</mn><mtext>&#160;ms</mtext></math>。相对 18 ms 重算：串行亏 13.125 ms，<strong>理想流水也亏 0.625 ms</strong>。这是本题的关键——连理想界都过不了线，就不必再争“实现有没有做好流水”。终点定义：三者都终止于“B 可被注意力计算消费”，即本次若确有设备工作，相应的设备完成事件已完成且结果为成功；不是“H 已就绪”，也不是“提交已返回”。</p>
+<p><strong>(b)</strong> 要 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>max</mi><mo>(</mo><msub><mi>t</mi><mtext>net</mtext></msub><mo>,</mo><mn>12.5</mn><mo>)</mo><mo>+</mo><mn>3</mn><mo>&#8804;</mo><mn>18</mn></math>。H2D 分支给 15.5 ms，已满足；约束落在网络段：<math xmlns="http://www.w3.org/1998/Math/MathML"><msub><mi>t</mi><mtext>net</mtext></msub><mo>&#8804;</mo><mn>15</mn><mtext>&#160;ms</mtext></math>，于是</p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><msub><mi>B</mi><mtext>net</mtext></msub><mo>&#8805;</mo><mfrac><mrow><mn>0.3125</mn><mtext>&#160;GiB</mtext></mrow><mrow><mn>15</mn><mtext>&#160;ms</mtext></mrow></mfrac><mo>&#215;</mo><mn>1000</mn><mtext>&#160;ms/s</mtext><mo>&#8776;</mo><mn>20.8333</mn><mtext>&#160;GiB/s</mtext></math>
+</div>
+<p>换算为位速率：</p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mfrac><mrow><mn>20.8333</mn><mtext>&#160;GiB/s</mtext><mo>&#215;</mo><msup><mn>2</mn><mn>30</mn></msup><mtext>&#160;B/GiB</mtext><mo>&#215;</mo><mn>8</mn><mtext>&#160;bit/B</mtext></mrow><mrow><msup><mn>10</mn><mn>9</mn></msup><mtext>&#160;bit/Gbit</mtext></mrow></mfrac><mo>&#8776;</mo><mn>178.96</mn><mtext>&#160;Gbit/s</mtext></math>
+</div>
+<p>在一条 400 Gbit/s 链路上，这要求约 44.7% 的线速利用率——一个需要实测确认的目标，不是自动达到的。</p>
+<p><strong>(c)</strong> 网络也是 25 GiB/s 时两段各 12.5 ms，<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>S</mi><mo>=</mo><mn>25</mn><mtext>&#160;ms</mtext></math>。两段相等时<strong>指定任一段为瓶颈段</strong>即可，<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>S</mi><mo>&#8722;</mo><msub><mi>t</mi><mi>max</mi></msub><mo>=</mo><mn>12.5</mn><mtext>&#160;ms</mtext></math>，结果与选哪一段无关：</p>
+<div>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mi>T</mi><mo>(</mo><mi>n</mi><mo>)</mo><mo>=</mo><mn>12.5</mn><mo>+</mo><mfrac><mn>12.5</mn><mi>n</mi></mfrac><mo>+</mo><mn>3</mn><mo>&#8804;</mo><mn>18</mn><mo>&#8658;</mo><mfrac><mn>12.5</mn><mi>n</mi></mfrac><mo>&#8804;</mo><mn>2.5</mn><mo>&#8658;</mo><mi>n</mi><mo>&#8805;</mo><mn>5</mn></math>
+</div>
+<p><math xmlns="http://www.w3.org/1998/Math/MathML"><mi>n</mi><mo>=</mo><mn>5</mn></math> 给 18.0 ms（恰好打平），<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>n</mi><mo>=</mo><mn>4</mn></math> 给 18.625 ms 仍亏。关于这个 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>n</mi></math>：它是<strong>流水分块数</strong>，与 Store 对象数、传输切片数都不是一回事——一个流水块可以聚合多个对象，也可能被传输层再切成多个片；把搬运切细不会改变 key 的数量。此外公式还忽略了两类成本：每块固定开销 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>n</mi><mi>&#945;</mi></math>（<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>&#945;</mi></math> 够大时根本打不平，且最优块数要在整数范围内比较），以及同资源同方向的争用（公式的前提是两段不争用，若实际共享同一方向的容量，<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>max</mi></math> 形式会向串行方向退化，退化多少取决于争用份额）。</p>
+<p><strong>(d)</strong> 推广到 TP8 需要补充：组时间取最慢 rank 加对齐时间，用平均值会系统性低估；“每 rank 20 GiB/s 网络、25 GiB/s H2D”必须对应一个按有向预算核过的真实拓扑（聚合 200 GiB/s 的 H2D 需求是否成立要看平台）；各 rank 必须对同一段连续前缀都成功，可跳过范围按最弱的 rank 折叠；对齐所需的同步由哪种机制实现、开销多大取决于框架，不能预设某种固定的集合通信；隔离实验排除掉的队列、元数据、布局转换与剩余计算要另计。</p>
+<p>不能用命中率选方案：命中率只回答“有多少 token 可以不重算”，不回答“把这些字节搬过来是否比算更快”。本题 (a) 就是反例——命中 100%，理想界仍然亏。</p>
+
+<h3 id="ans-3">题 3</h3>
+<p><strong>(a)</strong> 六段之和 <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>13</mn><mo>+</mo><mn>0.4</mn><mo>+</mo><mn>27</mn><mo>+</mo><mn>3700</mn><mo>+</mo><mn>45</mn><mo>+</mo><mn>1200</mn><mo>=</mo><mn>4985.4</mn><mtext>&#160;ms</mtext></math>。最大项是“IO 完成 → host 发布”的 3,700 ms（约 74.2%），次大项是“H2D 完成 → 入批”的 1,200 ms（约 24.1%）。</p>
+<p>不能断定网络带宽不足：字节真正在链路上移动只有 27 ms，约占 0.54%；IO 排队 0.4 ms 说明提交后几乎立刻开始搬。若只把这 27 ms 压到零并保持其他区间长度不变，静态算术上的总时长只降 27 ms。真实改动还可能改变就绪时刻与后续准入机会，因此这不是系统改善的无条件上界；现有记录只表明两个最大区间发生在字节到达本机之后。</p>
+<p>要算 IO 搬运段的稳态服务率，必须知道<strong>这一段实际搬运了多少字节</strong>（以及这些字节是否就是这一段全部的传输量）。本题没有给 payload，也不允许从题 1、题 2 借用——那两题的 0.3125 GiB 属于另一个场景的参数。所以这一段只能说“用了 27 ms”，不能折算成任何带宽数值，更不能据此判断链路快慢。</p>
+<p><strong>(b)</strong> 改动直接针对<strong>“发布确认”这个时间戳</strong>。若前三段保持不变，且发布确实提前了 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>&#916;</mi></math>，则“IO 完成 → host 发布”这一段缩短 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>&#916;</mi></math>。六段首尾相接，这个终点也是下一段的起点；后续时间戳可能跟着移动，各段时长要分别判断。检查点频率与执行开销尚未知，所以主动扫描本身不保证提前多少，也不能直接保证所有请求都会提前。</p>
+<p>“总完成时间不变”的情形：设发布提前 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>&#916;</mi><mo>=</mo><mn>3000</mn><mtext>&#160;ms</mtext></math>，设备拷贝本身仍需 45 ms 且资源空闲，于是 H2D 完成也提前 3,000 ms；但这个请求真正入批的时刻被每轮 token 预算卡在原处不变。那么“IO 完成 → 发布”变成 700 ms，“发布 → H2D 完成”仍是 45 ms，“H2D 完成 → 入批”从 1,200 ms 变成 4,200 ms，六段之和仍是 4,985.4 ms——<strong>等待只是从一段挪到了另一段</strong>。</p>
+<p>仅凭现有信息<strong>无法</strong>确定变化幅度与因果：题目没有给 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>&#916;</mi></math>、没有给队列深度与每轮预算的时间序列、也没有给其他请求的情况。如果这个请求原先正是因为“尚未确认”而错过了某一轮准入，那么提前确认可能让它赶上更早的一批，改善多少取决于后续的准入机会；而且其他请求的排队状态也会因此变化，反过来影响这一个。所以“准入规则没改”不能推出“某段时长不变”，单看总时长变没变也不能认定原因。</p>
+<p><strong>(c)</strong> 可接受的证据与它们各自排除的解释（任选四项以上）：</p>
+<ul>
+<li><strong>这一段实际搬运的字节数与覆盖范围</strong>：用来把 27 ms 折算成服务率，判断它是接近字节下界还是以固定开销为主；没有这个量，(a) 里的带宽判断根本无法展开。</li>
+<li><strong>对象数与粒度布局，以及 lookup/IO 是否批量提交</strong>：用来判断 13 ms 的 lookup 是一次往返还是很多次累加，以及控制面是否接近能力上限（对应第 3 节的对象率）。</li>
+<li><strong>每次操作的返回结果与覆盖范围</strong>：用来区分“整段成功一次搬完”“分成多次且其中一些被重做”这两种完全不同的时间构成。</li>
+<li><strong>等待队列深度与每轮 token 预算的时间序列</strong>：用来判断 3,700 ms 是否因为扫描迟迟到不了这个请求，以及 1,200 ms 是否由准入约束解释；这也是 (b) 里两种情形的区分依据。</li>
+<li><strong>六段各自的起止时间戳；若实际采用 TP，再记录各 rank 的分布</strong>：用来判断是单个 rank 拖慢还是全组同时变慢，以及等待是否只是在相邻段之间转移。本题没有预设并行规模。</li>
+<li><strong>同一资源同一方向上的争用情况</strong>：用来判断“发布 → H2D 完成”的 45 ms 是否因为同方向上还有其他流量在占容量；按第 4.2 节，要核的是真正共享的那段容量，而不是“挂在同一个节点下面”。</li>
+</ul>
+<p><strong>(d)</strong> 仍可复算或模拟的：给定前缀长度与模型形状时的字节预算与各层粒度换算；给定对象数与每对象处理成本时的控制面能力上限；给定字节数与服务率时的传输时间下界（本题缺字节，所以这一条要先补数据）；在给定到达过程、服务时间分布与准入策略下模拟排队与等待分布。必须标为未验证的：真实平台上的稳态服务率与每块固定开销；设备事件与流完成的实际时序；确认路径改动后的真实效果；以及“这组数字在某个具体系统上会按同样比例出现”这类推广——本题数据是为教学构造的，不是实测记录。</p>
+</details>
+</section>
+
+<section id="source-evidence">
+<h2 id="sources">来源与适用边界</h2>
+<p>本页的机制叙述来自下列公开材料，算例与公式是按文中给定前提做的算术推导。<strong>没有源码全量核对，没有 GPU、总线或网络实测，也没有真实读者的学习效果数据。</strong>凡标注为教学设定的参数（GPU 块 16 token、Store chunk 256 token、两种层布局、64 KiB 切片、20 μs/对象、各段服务率、一次性开销、重算时间、压缩比与解码吞吐）都不是任何实现的默认值或实测值。</p>
+<div class="table-scroll"><table>
+<thead><tr><th>来源</th><th>本页用它说明什么</th><th>适用边界</th></tr></thead>
+<tbody>
+<tr><td><a href="https://arxiv.org/pdf/2310.07240">CacheGen（SIGCOMM 2024）</a></td><td>传输态压缩的机制：锚点与差值编码、按层差异化量化、熵编码、按块自适应与回退重算、解码放在 GPU 并与传输重叠</td><td>其效果与质量结论属于论文自身的模型、数据集与硬件平台；本页不引用其效果倍数，也不声称任何代码基线集成了该路径</td></tr>
+<tr><td><a href="https://www.usenix.org/system/files/fast25-qin.pdf">Mooncake（FAST 2025）</a></td><td>远端 KV 复用需要把加载带宽与计算能力放在一起比较；其分析中给出的主机到设备带宽参数，用作第 4.2 节聚合自检的对照</td><td>门槛与参数对应特定模型与机型，不是普遍的最低网速或普适上限；本页未复现其测量</td></tr>
+<tr><td><a href="https://www.usenix.org/system/files/osdi24-zhong-yinmin.pdf">DistServe（OSDI 2024）</a></td><td>分离式部署的带宽预算按“单请求字节 × 到达率”估算，并用排队模型分析时延；传输占比的结论随放置方式变化</td><td>平均容量预算是必要条件，不足以保证时延可忽略；具体占比只在其各自拓扑下成立</td></tr>
+<tr><td><a href="https://github.com/sgl-project/sglang/issues/32724">SGLang issue #32724</a></td><td>“IO 完成”与“确认就绪”“进入批次”是不同时刻；确认动作若绑在队列扫描位置上会产生与字节无关的长等待</td><td>报告者在其部署上的观测，本页未复现；所提修改是否已被合并未经核实；社区术语 “ready” 指预取结果已确认，不是 GPU 开始计算</td></tr>
+<tr><td>本库 <a href="implementations/mooncake/transfer-engine.html">Transfer Engine 实现案例</a></td><td>传输层的切片、选路与“提交、片段完成、任务完成、上层对象可读”四个时刻的区别</td><td>属于该实现的学习版本；本页把切片大小当教学取值，不据此断言任何默认行为或均匀多网卡分摊</td></tr>
+</tbody>
+</table></div>
+
+<h2 id="open-questions">可测的未知参数</h2>
+<p>本页多处把一个量留成待测，因为它决定结论方向而不能靠推导得到：</p>
+<ul>
+<li><strong>每块固定开销 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>&#945;</mi></math> 与它和字节搬运的重叠程度</strong>。测法是固定字节与服务率、只扫块数，看总时间随块数的走势；第 4.2 节的相加形式只在“完全不重叠”时成立，重叠程度本身就是要测的东西。</li>
+<li><strong>各段的稳态字节服务率，以及同资源同方向争用下的退化</strong>。要分别在隔离和并发两种条件下测，并按第 4.2 节的有向预算记录是谁和谁共享容量。</li>
+<li><strong>控制面的每对象成本在不同批量方式与并发下的变化</strong>。20 μs 是教学值；真实值决定第 3 节的粒度结论是否仍然成立。</li>
+<li><strong>解码成本 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>d</mi></math> 与 <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>c</mi></math>（按产出可消费张量计），以及 GPU 解码对同卡计算的挤占</strong>。它们直接决定第 6.2 节的盈亏方向。质量侧需要在目标模型与任务上重测，不能沿用他人配置的结论。</li>
+<li><strong>确认提前之后，等待在相邻区间之间如何重新分布</strong>。要同时记录各区间的起止时间戳、队列深度与每轮预算，并观察其他请求的排队变化；只看总时长无法归因。</li>
+</ul>
+</section>
+
+</article>
+<footer><a href="../index.html">返回总目录</a>
+<p>公式与示例不等于实测；实现行为请核对版本与适用条件。</p></footer></main>
+<aside class="toc"><strong>本页目录</strong><a class="level-2" href="#1-remote-kv-worth-moving">1. 先把资源和时刻命名</a><a class="level-3" href="#1-1-three-resources">1.1 三个资源：S、H、B</a><a class="level-3" href="#1-2-five-moments">1.2 五个时刻：定位、提交、搬运、设备就绪、调度使用</a><a class="level-3" href="#1-3-recover-vs-pd">1.3 恢复路径与 PD 搬运不是同一笔账</a><a class="level-2" href="#2-one-budget-table">2. 同一份字节，三种“块”</a><a class="level-3" href="#2-1-s0-bytes">2.1 基准场景 S0</a><a class="level-3" href="#2-2-three-kinds-of-blocks">2.2 一张表看三层单位</a><a class="level-2" href="#3-object-granularity">3. 对象粒度：字节没变，控制面的工作量变了</a><a class="level-3" href="#3-1-two-layouts">3.1 两种布局的对象数</a><a class="level-3" href="#3-2-control-plane-rate">3.2 把对象数换成对象率</a><a class="level-3" href="#3-3-what-granularity-cannot-decide">3.3 粒度有四种，不要互相替代</a><a class="level-2" href="#4-bandwidth-and-topology">4. 带宽与拓扑：下界、速率口径、流水</a><a class="level-3" href="#4-1-line-rate-bounds">4.1 线速下界，以及两种互斥的拓扑假设</a><a class="level-3" href="#4-2-effective-bandwidth">4.2 两个速率口径，和有向的资源预算</a><a class="level-3" href="#4-3-pipeline-fill-drain">4.3 max 是理想界：一个说清前提的流水模型</a><a class="level-2" href="#5-load-or-recompute">5. 一个能复算的选择例：搬还是重算</a><a class="level-3" href="#5-1-single-rank-example">5.1 单 rank 的两段账</a><a class="level-3" href="#5-2-chunk-count">5.2 要多细才真的赚</a><a class="level-3" href="#5-3-tp-group">5.3 推广到 TP 组，以及这个数字不是什么</a><a class="level-2" href="#6-compression-on-the-wire">6. 传输态压缩：省的是哪一段字节</a><a class="level-3" href="#6-1-cachegen-mechanism">6.1 机制：不保留张量形状，编成比特流</a><a class="level-3" href="#6-2-same-start-same-end">6.2 同起点、同终点的成本账</a><a class="level-3" href="#6-3-counterexample">6.3 “压缩了，仍然不如重算”的完整反例</a><a class="level-2" href="#7-observability">7. 观测：把时间切开，再归因</a><a class="level-3" href="#7-1-six-timestamps">7.1 至少要分开的六个区间</a><a class="level-3" href="#7-2-readiness-vs-execution">7.2 “IO 完成”不等于“可以跑了”</a><a class="level-3" href="#7-3-experiment-design">7.3 一次能说明问题的实验怎么设计</a><a class="level-2" href="#exercises">练习</a><a class="level-3" href="#ans-1">题 1</a><a class="level-3" href="#ans-2">题 2</a><a class="level-3" href="#ans-3">题 3</a><a class="level-2" href="#sources">来源与适用边界</a><a class="level-2" href="#open-questions">可测的未知参数</a></aside>
+<dialog id="search-dialog"><div class="search-heading"><label for="search-input">搜索全部学习资料</label>
+<button id="search-close" aria-label="关闭搜索">关闭</button></div>
+<input id="search-input" type="search" placeholder="例如：租约、P7、取消、Mooncake" autocomplete="off">
+<p id="search-status" role="status">输入主题、术语或问题</p><ol id="search-results"></ol></dialog>
+</body></html>
